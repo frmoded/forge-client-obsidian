@@ -1,8 +1,9 @@
 // 2026-11-17-2003 - the "build the scale" widgets redesigned as EXERCISES that look like the Scales hub player. Five files, generated from TWO templates and the player's blocks (scripts/dev/make-scale-exercises.mjs):
-//   FULL (levels, New exercise, Random, selects): scale_build_modes_and_minor, scale_build_other_scales, scale_ear_build_the_scale; SIMPLE (2026-11-18-0930: no levels, no New exercise, no Random, the twelve home-note chips are the chooser, one rule of
+//   FULL (levels, New exercise, Random, selects): scale_build_modes_and_minor, scale_build_other_scales, scale_ear_build_the_scale; SIMPLE (2026-11-18-0930: no levels, no New exercise, no Random, the twelve tonic slots of the shelf are the chooser, one rule of
 //   3 wrong taps): scale_build_major, scale_build_natural_minor, pinned in src/scale-build-simple.test.ts. Pinned here: the three shared blocks (scale core, piano voice, scale view = strip and staff) are byte-identical with scale_player.html in ALL FIVE;
 //   the exercise core and everything but the config block and the title are identical WITHIN each group (3 files / 2 files); the generator reproduces all five files; the FULL files' state machine; the staff spells every scale on all twelve tonics exactly
-//   as the player does and never shows an answer early; the words ("Exercise", never test, quiz, game or question); the FULL files' DOM flows with real clicks (their level, Random and select driving; the SIMPLE files' chip driving is in the other test).
+//   as the player does and never shows an answer early; the words ("Exercise", never test, quiz, game or question); the FULL files' DOM flows with real clicks (their level, Random and select driving; the SIMPLE files' slot driving is in the other test).
+//   2026-11-19-0938: every file has a SHELF of twelve tonic slots under the build area (a completed build fills its slot with a mini score): pinned in src/scale-shelf.test.ts; here only that the FULL files' selects, Random and levels keep working with it.
 // How TALL each file is (no vertical scroll at 800 and 360 px, every scale and tonic, every state) is measured in real Chrome: scripts/dev/measure-scale-exercises.mjs.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -262,6 +263,18 @@ test('choosing: a tonic or a scale starts a fresh exercise (the score stays), Ne
   for (let i = 0; i < 20; i++) { p.click(p.doc.getElementById('random')); assert.ok(p.x.SCALES.includes(p.doc.getElementById('scale').value)); }
   p.level('medium'); p.finish(); assert.equal(p.text('counter'), 'Medium: score 1 of 3 exercises', 'three exercises had a first tap (the one on C Ionian, the one on A Dorian, this one); one was built');
   p.click(p.doc.getElementById('reset')); assert.equal(p.text('counter'), 'Medium: score 0 of 0 exercises'); assert.equal(p.text('sr'), 'Score cleared.');
+});
+
+test('the shelf and the selects (the FULL files): a tonic chosen in the select marks its slot, a slot tap sets the select, a scale change renames the twelve slots (the tonic as THAT scale spells it), Random and a level change keep the slot of the tonic on screen marked; the build rules (wrong taps per level) are the same as with the select', () => {
+  for (const [f] of FULL) {
+    const p = open(f); const slots = (): any[] => [...p.doc.querySelectorAll('#shelf .slot')]; const cur = (): number[] => slots().map((s: any, i: number) => (s.classList.contains('current') ? i : -1)).filter((i) => i >= 0);
+    same(slots().length, 12); same(cur(), [0], `${f}: the first tonic is on screen at the start`);
+    p.sel('tonic', '7'); same(cur(), [7]); p.click(slots()[3]); assert.equal(p.doc.getElementById('tonic').value, '3'); same(cur(), [3]); assert.match(p.text('prompt'), new RegExp(`^Exercise: build ${p.x.tonicName(3, p.doc.getElementById('scale').value)} `));
+    for (const id of p.x.SCALES) { p.sel('scale', id); same(slots().map((s: any) => s.querySelector('.nm').textContent), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((t) => p.x.tonicName(t, id)), `${f} ${id}: the slots say the tonics of this scale`); same(cur(), [3], 'a scale change keeps the tonic'); }
+    p.level('hard'); same(cur(), [3]); p.click(slots()[5]); assert.match(p.text('hint'), /1 wrong tap left/, 'a slot tap starts at the level chosen'); p.level('easy'); p.click(slots()[5]); assert.match(p.text('hint'), /5 wrong taps left/);
+    for (let i = 0; i < 6; i++) { p.click(p.doc.getElementById('random')); same(cur(), [+p.doc.getElementById('tonic').value]); }
+    p.click(p.doc.getElementById('again')); same(cur(), [+p.doc.getElementById('tonic').value]);
+  }
 });
 
 test('keyboard (all five: the source; the FULL major page: the keys): a key answers Enter and Space; the keys are buttons with names; no vertical padding or fixed height on the page, no storage, no network, no Forge words', () => {

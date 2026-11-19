@@ -57,8 +57,20 @@
   .letter.sounding { background: #9DD9B5; }
   .letter.tonic { border-color: var(--accent); }
   .completed { min-height: 18px; margin: 3px 0 0; font-size: 12px; color: var(--muted); }
-  .home { min-width: 26px; text-align: center; background: #fff; border: 1px solid #DDDDD2; border-radius: 4px; color: var(--muted); font-size: 12px; line-height: 20px; padding: 0 5px; }
-  .home.done { background: #BFE6CD; border-color: var(--ink); color: var(--ink); font-weight: 600; }
+  /* The SHELF (2026-11-19-0938): twelve slots, one per tonic OF THE SCALE CHOSEN, UNDER the build area, in a FIXED grid: 4 columns x 3 rows, 3 columns x 4 rows below 420 px (CSS only, no JavaScript layout). Every slot has the same fixed height whether it is empty or holds a mini score (room for a name of two lines: "G sharp diminished (half-whole)"), so the page keeps one height in every state. An unbuilt slot is a quiet dashed outline with the tonic's name; a completed one is a white card with the scale's mini score and its name under it; the tonic being built has its border in the accent colour. Nothing changes when the pointer rests on a slot. */
+  #shelf { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; margin: 3px 0 0; }
+  @media (max-width: 419px) { #shelf { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  .slot { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 0; height: 70px; padding: 2px 3px; text-align: center; background: transparent; border: 1px dashed #C9C9BE; border-radius: 6px; color: var(--muted); }
+  .slot .nm { font-size: 14px; line-height: 18px; }
+  .slot .mini { display: none; flex: 0 0 auto; width: 100%; height: 36px; }
+  .slot.done { justify-content: flex-start; padding-top: 4px; background: #fff; border: 1px solid var(--axis); color: var(--ink); }
+  .slot.done .mini { display: block; }
+  .slot.done .nm { font-size: 11px; line-height: 13px; font-weight: 600; }
+  .slot.current { border-color: var(--accent); border-style: solid; }
+  .slot .mini .staffline, .slot .mini .ledger { vector-effect: non-scaling-stroke; }
+  .slot .mini .head { stroke-width: 2.4; }
+  .slot .mini .head.tonic { stroke-width: 3.2; }
+  .slot .mini .acc { font-size: 18px; }
   #prompt { min-height: 36px; margin: 3px 0 0; color: var(--ink); font-size: 13px; }
   #hint { color: var(--ink); font-size: 12px; }
   .score { display: flex; align-items: center; gap: 10px; margin: 3px 0 0; min-height: 22px; font-size: 12px; }
@@ -78,11 +90,12 @@
 <svg id="staff" role="img" aria-label="Treble staff"></svg>
 <div class="row chips" id="chips" role="list" aria-label="The steps of the scale in half steps"></div>
 <div class="letters" id="letters" role="list" aria-label="The notes of the scale"></div>
-<div id="completed" class="completed"></div>
-<div class="row chips" id="homes" role="list" aria-label="Home notes completed"></div>
 <div class="row"><button type="button" id="play" disabled>Play</button><button type="button" id="again">New exercise</button><span id="hint"></span></div>
 <div class="score"><span id="counter"></span><button id="reset" class="linkbtn" type="button">Reset</button></div>
 <div id="board" aria-label="Score of each level"></div>
+<div id="completed" class="completed"></div>
+<span id="shelf-name" class="sr">Tonics of the chosen scale: tap one to build it. A completed one shows the score of its scale.</span>
+<div id="shelf" role="group" aria-labelledby="shelf-name"></div>
 <span id="sr" class="sr" role="status" aria-live="polite"></span>
 </div>
 <!-- caption BEGIN -->
@@ -91,7 +104,7 @@
   .fig-cap .t { font-size: 15px; line-height: 19px; font-weight: 600; color: #2B2B2B; }
   .fig-cap .l { font-size: 12px; line-height: 17px; margin-top: 2px; color: #555555; }
 </style>
-<div class="fig-cap"><div class="t">Exercise</div><div class="l">Choose a home note and tap the keys of the scale; the staff fills in as you find the notes. Easy, medium and hard allow 5, 3 or 1 wrong taps. At the end you see the whole scale and can press Play</div></div>
+<div class="fig-cap"><div class="t">Exercise</div><div class="l">Choose a tonic and tap the keys of the scale; the staff fills in as you find the notes. Easy, medium and hard allow 5, 3 or 1 wrong taps. At the end you see the whole scale and can press Play</div></div>
 <!-- caption END -->
 <script>
 (function () {
@@ -99,7 +112,7 @@
   // ==== config BEGIN (2026-11-17-2003): the scales this exercise offers: the ONLY lines that differ between the scale exercise files (and the <title>); a test pins everything else identical ====
   var SCALES = ["ionian", "dorian", "phrygian", "lydian", "mixolydian", "aeolian", "locrian", "natural_minor", "harmonic_minor", "melodic_minor"];
   // ==== config END ====================================================================================================================
-  // 2026-11-17-2003 - the SCALE EXERCISE: build a scale on the piano, with the staff filling in beside it. Choose a tonic (and, when the page offers more than one scale, a scale) or press Random; the tonic is marked; tap the other notes of the scale on the keys, in any order, up to the octave. Each right key lights and puts its note on the treble staff with the scale's proper spelling (one letter per degree for the seven-note scales); a wrong key is marked and puts nothing on the staff. Easy / Medium / Hard allow 5 / 3 / 1 wrong taps. When the exercise ends (built, or out of wrong taps) the whole scale is on the staff (the notes you missed dashed), the letters and the whole and half steps appear (they are the answer, so only now) and Play plays the scale up.
+  // 2026-11-17-2003 - the SCALE EXERCISE: build a scale on the piano, with the staff filling in beside it. Choose a tonic (and, when the page offers more than one scale, a scale) or press Random; the tonic is marked; tap the other notes of the scale on the keys, in any order, up to the octave. Each right key lights and puts its note on the treble staff with the scale's proper spelling (one letter per degree for the seven-note scales); a wrong key is marked and puts nothing on the staff. Easy / Medium / Hard allow 5 / 3 / 1 wrong taps. 2026-11-19-0938 - the SHELF under the build area: twelve slots, one per tonic OF THE SCALE CHOSEN, in a fixed CSS grid (the room is reserved from the start, so the page has ONE height); tapping a slot starts that tonic (as the tonic select does); a COMPLETED build (all notes found within the level's wrong taps) fills its slot with a MINI SCORE of the scale (drawn by the same `drawStaff` as the main staff: see drawMini) and the name under it ("A Dorian"); a failed build leaves its slot empty and tappable; the completions of every scale are kept in memory (the shelf swaps with the scale), until Reset or reload. When the exercise ends (built, or out of wrong taps) the whole scale is on the staff (the notes you missed dashed), the letters and the whole and half steps appear (they are the answer, so only now) and Play plays the scale up.
   // It looks like the Scales hub player (scale_player.html) and shares its blocks, byte for byte (pinned by a test): the scale core, the piano voice and the scale view (strip and staff). Memory only: the sandboxed page has no storage.
   // ---- pure functions (no DOM; the node harness exports them) ------------------------------------------------------------------------------------------
   var BASE = 60, LOW = 60, HIGH = 84, A4_HZ = 440, STEP_SECONDS = 0.45, NOTE_LEN = 0.7;                 // the strip is C4..C6; a scale sits on the tonic's pitch class in the octave from C4 (so the staff and the strip agree)
@@ -266,7 +279,7 @@
   function exBuilt(scores, level) { return exBump(scores, level, 1, 0); }
   function exCounterText(scores, level) { var c = scores[level]; return exLevelName(level) + ": score " + c.score + " of " + c.tried + (c.tried === 1 ? " exercise" : " exercises"); }
   function exBoardText(scores) { return EX_LEVELS.map(function (l) { return exLevelName(l) + " " + scores[l].score + "/" + scores[l].tried; }); }
-  // 2026-11-19-0850 - the COMPLETED count: which (scale, home note) pairs have been built within the level's wrong taps, at any level. Memory only (a reload resets it, like the score). A pair stays completed when it is failed later; the count is per file (N = the scales this file offers x 12 home notes).
+  // 2026-11-19-0850 - the COMPLETED count: which (scale, tonic) pairs have been built within the level's wrong taps, at any level. Memory only (a reload resets it, like the score). A pair stays completed when it is failed later; the count is per file (N = the scales this file offers x 12 tonics).
   function exPairKey(tonic, scaleId) { return scaleId + ":" + tonic; }
   function exCompletedAdd(done, tonic, scaleId) { var o = {}, k; for (k in done) o[k] = true; if (SCALES.indexOf(scaleId) >= 0 && tonic >= 0 && tonic <= 11 && Math.floor(tonic) === tonic) o[exPairKey(tonic, scaleId)] = true; return o; }
   function exCompletedCount(done) { var n = 0, k; for (k in done) if (done[k]) n++; return n; }
@@ -276,8 +289,10 @@
   function exCompletedText(done, scales) {
     var n = exCompletedCount(done), total = exTotal(scales);
     if (n >= total) return total === 12 ? "All twelve built." : "All " + total + " built.";
-    return "Completed " + n + " of " + total + (scales.length > 1 ? " (" + scales.length + " scales, 12 home notes each)" : "");
+    return "Completed " + n + " of " + total + (scales.length > 1 ? " (" + scales.length + " scales, 12 tonics each)" : "");
   }
+  // What a slot's mini score shows: the scale up from the tonic with its octave note, spelled by the shared core (the notes the main staff shows at the end of a build), and their midis. Pure.
+  function exMiniScore(tonic, scaleId) { return { notes: exWithOctave(spellScale(tonic, scaleId, "up")), midis: scaleMidis(tonic, scaleId, "up", BASE) }; }
   // ==== exercise core END ==========================================================================================================================
   // ==== piano voice BEGIN (2026-11-16-1001) ======================================================================================================
   // The SAME block is in every gadget that plays the piano (a test walks the vault and pins them identical; each gadget is one self-contained file, so it is copied) and in piano_voice_lab.html, where it can be tried with other numbers.
@@ -380,7 +395,7 @@
   if (typeof document === "undefined") {           // node test harness
     module.exports = { LOW: LOW, HIGH: HIGH, BASE: BASE, STEP_SECONDS: STEP_SECONDS, SCALES: SCALES, SC_SCALES: SC_SCALES, scaleNotes: scaleNotes, spellScale: spellScale, scaleTitle: scaleTitle, scaleWords: scaleWords, tonicName: tonicName, recipeOf: recipeOf, noteName: noteName, noteWords: noteWords, scScale: scScale, exWithOctave: exWithOctave, scaleMidis: scaleMidis,
       EX_LEVELS: EX_LEVELS, EX_DEFAULT_LEVEL: EX_DEFAULT_LEVEL, exAttempts: exAttempts, exStart: exStart, exTargets: exTargets, exTap: exTap, exRemaining: exRemaining, exStaffNotes: exStaffNotes, exRandom: exRandom, exTitle: exTitle, exPrompt: exPrompt, exHint: exHint, exAnnounce: exAnnounce, exKeyName: exKeyName, exPlayPlan: exPlayPlan,
-      exEmptyScores: exEmptyScores, exPairKey: exPairKey, exCompletedAdd: exCompletedAdd, exCompletedCount: exCompletedCount, exTotal: exTotal, exAllDone: exAllDone, exHomesDone: exHomesDone, exCompletedText: exCompletedText, exTried: exTried, exBuilt: exBuilt, exCounterText: exCounterText, exBoardText: exBoardText, midiToHz: midiToHz, isBlack: isBlack, pianoVoice: pianoVoice, pianoBus: pianoBus, PIANO_OSC_PER_NOTE: PIANO_OSC_PER_NOTE };
+      exEmptyScores: exEmptyScores, exPairKey: exPairKey, exCompletedAdd: exCompletedAdd, exCompletedCount: exCompletedCount, exTotal: exTotal, exAllDone: exAllDone, exHomesDone: exHomesDone, exCompletedText: exCompletedText, exMiniScore: exMiniScore, exTried: exTried, exBuilt: exBuilt, exCounterText: exCounterText, exBoardText: exBoardText, midiToHz: midiToHz, isBlack: isBlack, pianoVoice: pianoVoice, pianoBus: pianoBus, PIANO_OSC_PER_NOTE: PIANO_OSC_PER_NOTE };
     return;
   }
   // ---- the page ---------------------------------------------------------------------------------------------------------------------------------------
@@ -443,6 +458,18 @@
     g.addEventListener("keydown", function (e) { if (e.altKey || e.ctrlKey || e.metaKey) return; if (e.key === "Enter" || e.key === " ") { e.preventDefault(); tap(mm); } });
   });
   function mark(mm, ch) { var g = keys[mm], r = g.firstChild, black = isBlack(mm); var t = el("text", { "class": "mark", x: +r.getAttribute("x") + +r.getAttribute("width") / 2, y: PAD + (black ? 26 : 48), "text-anchor": "middle" }, g); t.textContent = ch; }
+  // The MINI SCORE of a slot: the shared `drawStaff` (the scale view block above) pointed at the slot's own svg, with the staff given more width for its eight notes (only the width, the room left and right and the top and bottom lines of the staff differ: the notes, accidentals, clef and ledger lines are the main staff's, scaled down by the svg's viewBox) and no sounding note. WHAT to draw comes from exMiniScore (the shared core's spelling): nothing is spelled or drawn here.
+  var MINI_ST = { width: 236, left: 44, right: 4, top: 13, bottom: -4 };
+  function drawMini(svg, tonic, scaleId) {
+    var mini = exMiniScore(tonic, scaleId), notes = mini.notes, midis = mini.midis, keep = { staff: staff, ST: ST, sounding: soundingIndex }, geometry = {}, k;
+    for (k in ST) geometry[k] = ST[k]; for (k in MINI_ST) geometry[k] = MINI_ST[k];
+    geometry.height = (geometry.top - geometry.bottom + 1) * geometry.half;
+    svg.setAttribute("viewBox", "0 0 " + geometry.width + " " + geometry.height);
+    staff = svg; ST = geometry; soundingIndex = -1;
+    try { drawStaff(notes, midis); } finally { staff = keep.staff; ST = keep.ST; soundingIndex = keep.sounding; }
+    svg.removeAttribute("aria-label");
+  }
+  var slots = [];
   function render(announce) {
     var building = state.phase === "building", done = !building;
     for (var i = 0; i < 12; i++) $("tonic").options[i].textContent = tonicName(i, scaleId);
@@ -466,7 +493,14 @@
     EX_LEVELS.forEach(function (l) { $("level-" + l).setAttribute("aria-pressed", l === level ? "true" : "false"); });
     $("counter").textContent = exCounterText(scores, level);
     $("completed").textContent = exCompletedText(completed, SCALES);
-    exHomesDone(completed, SCALES[0]).forEach(function (d, t) { if (homeChips[t]) homeChips[t].setAttribute("class", "home" + (d ? " done" : "")); });
+    exHomesDone(completed, scaleId).forEach(function (d, t) {
+      var c = slots[t], cur = state.tonic === t && state.scale === scaleId, made = d ? scaleId + ":" + t : "";
+      c.b.setAttribute("class", "slot" + (d ? " done" : "") + (cur ? " current" : ""));
+      c.nm.textContent = d ? scaleTitle(t, scaleId) : tonicName(t, scaleId);
+      c.sr.textContent = scaleWords(t, scaleId) + (d ? ", completed: " + exMiniScore(t, scaleId).notes.map(noteWords).join(", ") : "");
+      if (c.made !== made) { while (c.svg.firstChild) c.svg.removeChild(c.svg.firstChild); if (d) drawMini(c.svg, t, scaleId); c.made = made; }          // drawn once per (scale, tonic)
+      if (cur) c.b.setAttribute("aria-current", "true"); else c.b.removeAttribute("aria-current");
+    });
     var board = $("board"), parts = exBoardText(scores); board.textContent = "";
     parts.forEach(function (p, idx) { var n = document.createElement(EX_LEVELS[idx] === level ? "b" : "span"); n.textContent = p; board.appendChild(n); if (idx < parts.length - 1) board.appendChild(document.createTextNode(" · ")); });
     board.setAttribute("aria-label", "Score of each level: " + parts.join(", "));
@@ -500,9 +534,13 @@
     b.addEventListener("click", function () { if (l === level) return; level = l; fresh(); });         // a new level starts a fresh exercise; each level keeps its own score
     $("levels").appendChild(b);
   });
-  // the twelve home notes of a single-scale file, as quiet chips that fill in when completed (not buttons, nothing happens when the pointer rests on them)
-  var homeChips = [];
-  if (SCALES.length === 1) for (var ht = 0; ht < 12; ht++) { var hc = document.createElement("span"); hc.className = "home"; hc.setAttribute("role", "listitem"); hc.textContent = tonicName(ht, SCALES[0]); $("homes").appendChild(hc); homeChips.push(hc); } else $("homes").style.display = "none";
+  // the shelf: the twelve tonics of the scale chosen. A tap on a slot starts that tonic (as the select does); the slots are made ONCE and the render only changes their class, texts and mini scores. A slot names itself through a hidden text (aria-labelledby): no aria-label, no title.
+  for (var ht = 0; ht < 12; ht++) (function (t) {
+    var b = document.createElement("button"); b.type = "button"; b.className = "slot"; b.setAttribute("aria-labelledby", "slot-name-" + t);
+    var svg = el("svg", { "class": "mini", "aria-hidden": "true" }, b), nm = document.createElement("span"), sr = document.createElement("span");
+    nm.className = "nm"; nm.setAttribute("aria-hidden", "true"); sr.className = "sr"; sr.id = "slot-name-" + t; b.appendChild(nm); b.appendChild(sr);
+    b.addEventListener("click", function () { tonic = t; fresh(); }); $("shelf").appendChild(b); slots.push({ b: b, svg: svg, nm: nm, sr: sr, made: "" });
+  })(ht);
   fresh(false);
 })();
 </script>

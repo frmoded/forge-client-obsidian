@@ -37,7 +37,7 @@ Exercise: pick a home note or press Random, choose a mode or a minor scale from 
 
 ```html-embed
 scales/resources/html/scale_build_modes_and_minor.html
-523
+781
 ```
 
 <div style="

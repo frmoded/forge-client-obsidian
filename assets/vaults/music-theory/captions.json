@@ -37,23 +37,23 @@
   },
   "scales/resources/html/scale_build_major.html": {
     "title": "Exercise",
-    "line": "Choose a home note and tap the keys of the scale; the staff fills in as you find the notes. At the end you see the whole scale and can press Play"
+    "line": "Choose a tonic and tap the keys of the scale; the staff fills in as you find the notes. At the end you see the whole scale and can press Play"
   },
   "scales/resources/html/scale_build_modes_and_minor.html": {
     "title": "Exercise",
-    "line": "Choose a home note and tap the keys of the scale; the staff fills in as you find the notes. Easy, medium and hard allow 5, 3 or 1 wrong taps. At the end you see the whole scale and can press Play"
+    "line": "Choose a tonic and tap the keys of the scale; the staff fills in as you find the notes. Easy, medium and hard allow 5, 3 or 1 wrong taps. At the end you see the whole scale and can press Play"
   },
   "scales/resources/html/scale_build_natural_minor.html": {
     "title": "Exercise",
-    "line": "Choose a home note and tap the keys of the scale; the staff fills in as you find the notes. At the end you see the whole scale and can press Play"
+    "line": "Choose a tonic and tap the keys of the scale; the staff fills in as you find the notes. At the end you see the whole scale and can press Play"
   },
   "scales/resources/html/scale_build_other_scales.html": {
     "title": "Exercise",
-    "line": "Choose a home note and tap the keys of the scale; the staff fills in as you find the notes. Easy, medium and hard allow 5, 3 or 1 wrong taps. At the end you see the whole scale and can press Play"
+    "line": "Choose a tonic and tap the keys of the scale; the staff fills in as you find the notes. Easy, medium and hard allow 5, 3 or 1 wrong taps. At the end you see the whole scale and can press Play"
   },
   "scales/resources/html/scale_ear_build_the_scale.html": {
     "title": "Exercise",
-    "line": "Choose a home note and tap the keys of the scale; the staff fills in as you find the notes. Easy, medium and hard allow 5, 3 or 1 wrong taps. At the end you see the whole scale and can press Play. Any scale of this chapter can come up"
+    "line": "Choose a tonic and tap the keys of the scale; the staff fills in as you find the notes. Easy, medium and hard allow 5, 3 or 1 wrong taps. At the end you see the whole scale and can press Play. Any scale of this chapter can come up"
   },
   "scales/resources/html/scale_ear_name_the_scale.html": {
     "title": "Ear exercise",
@@ -61,7 +61,7 @@
   },
   "scales/resources/html/scale_player.html": {
     "title": "Scale player",
-    "line": "Pick a home note and a scale, press Play, and see and hear it on the keys and the staff"
+    "line": "Pick a tonic and a scale, press Play, and see and hear it on the keys and the staff"
   },
   "scales/resources/images/c_major_scale.svg": {
     "title": "C major",

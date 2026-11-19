@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // 2026-11-17-2003 - build the five SCALE EXERCISE widgets (the "build the scale" gadgets redesigned to look like the Scales hub player) from ONE template and the blocks of scale_player.html, so the blocks are byte-identical by construction:
 //   scripts/dev/templates/scale-exercise.template.html  +  the player's `scale core`, `piano voice` and `scale view` blocks  ->  scale_build_modes_and_minor / _other_scales and scale_ear_build_the_scale (.html)   (levels, New exercise, Random, tonic and scale selects)
-//   scripts/dev/templates/scale-exercise-simple.template.html  + the same three blocks                               ->  scale_build_major / _natural_minor (.html)                                          (2026-11-18-0930, the SIMPLE variant: no levels, no New exercise, no Random; the twelve home-note chips are the chooser; one rule: 3 wrong taps)
+//   scripts/dev/templates/scale-exercise-simple.template.html  + the same three blocks                               ->  scale_build_major / _natural_minor (.html)                                          (2026-11-18-0930, the SIMPLE variant: no levels, no New exercise, no Random; the twelve tonic slots are the chooser; one rule: 3 wrong taps)
+// 2026-11-19-0938: both templates carry the SHELF (twelve slots, one per tonic, a completed build fills its slot with a mini score drawn by the shared drawStaff); src/scale-shelf.test.ts pins it.
 // Within a group the files differ only by their `config` block (the scales they offer) and their <title>; src/scale-build-exercise.test.ts and src/scale-build-simple.test.ts pin that and the three shared blocks (byte-identical with scale_player.html in all five).
 //   node scripts/dev/make-scale-exercises.mjs [--vault ~/projects/music-theory] [--also <another vault root, e.g. assets/vaults/music-theory>]...
 import fs from 'node:fs';

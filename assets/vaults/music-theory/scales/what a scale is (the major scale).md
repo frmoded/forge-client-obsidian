@@ -1,6 +1,4 @@
-Intervals gave you distances; a scale lines a few of them up in a fixed order and turns them into a sound.
-
-A scale is a recipe of steps from a home note, the **tonic**. Change the home note and the recipe stays. That's the whole idea.
+A scale is a recipe of steps that starts on a home note, the **tonic**, the lowest note of the scale. Intervals gave you distances; a scale lines a few of them up in a fixed order and turns them into a sound. Change the tonic and the recipe stays. That's the whole idea.
 
 ## Major
 
@@ -8,11 +6,11 @@ Major is the one everybody knows, the "do re mi" scale. Whole, whole, half, whol
 
 W and H look like code? They're not: [[interval notation and jargon]] explains them.
 
-Build it from C and you never touch a black key. W to D, W to E, H to F, W to G, W to A, W to B, H to C: C D E F G A B C.
+Build it from C and you never touch a black key: W to D, W to E, H to F, and so forth, and you land on C D E F G A B C.
 
 ![[scales/resources/images/c_major_scale.svg]]
 
-Now start on G, same recipe: W to A, W to B, H to C, W to D, W to E, W to F♯, H back to G. The white keys fail you at the seventh step: F is a whole step under G, and the recipe wants a half. So you take the black key and spell it F♯, not G♭, because a scale uses each letter once and G is already home. [[scales jargon]] has the rule.
+Now start on G with the same recipe. Everything fits until the seventh note: the recipe wants a half step below G, and the white key F is a whole step away. So a black key joins the scale, and it's spelled F♯, not G♭, because a scale uses each letter once and G is already home. [[scales jargon]] has the rule. Different tonic, same skeleton, one sharp.
 
 ![[scales/resources/images/g_major_scale.svg]]
 
@@ -40,7 +38,7 @@ To see any scale, use the player on [[Scales]].
 
 ```html-embed
 scales/resources/html/scale_build_major.html
-454
+643
 ```
 
 Natural minor is next: [[natural minor scale]].

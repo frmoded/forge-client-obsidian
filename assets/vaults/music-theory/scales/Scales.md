@@ -14,7 +14,7 @@ Try it: pick a home note and a scale, press Play, and hear the recipe.
 
 ```html-embed
 scales/resources/html/scale_player.html
-441
+424
 ```
 
 **Practice:**

@@ -4,7 +4,7 @@ You get a home note and a scale name, or press Random, and you find the notes on
 
 ```html-embed
 scales/resources/html/scale_ear_build_the_scale.html
-523
+798
 ```
 
 You are done when you can build any scale of this chapter from any note.

@@ -1,11 +1,14 @@
-// 2026-11-18-0930 - the two SIMPLE scale build exercises (scale_build_major, scale_build_natural_minor: no levels, no New exercise, no Random; the twelve home-note chips at the top are the chooser; one rule of 3 wrong taps) in real headless Chrome, in the SHIPPED mount:
-// a blob: URL inside <iframe sandbox="allow-scripts">, at 800 px and at 360 px wide. (scripts/dev/measure-scale-exercises.mjs drives selects and levels and cannot drive these two.) Measured, with REAL mouse clicks on the chips and the keys
+// 2026-11-18-0930 - the two SIMPLE scale build exercises (scale_build_major, scale_build_natural_minor: no levels, no New exercise, no Random; the twelve tonic slots of the SHELF are the chooser; one rule of 3 wrong taps) in real headless Chrome, in the SHIPPED mount:
+// a blob: URL inside <iframe sandbox="allow-scripts">, at 800 px and at 360 px wide. (scripts/dev/measure-scale-exercises.mjs drives selects and levels and cannot drive these two.) Measured, with REAL mouse clicks on the slots and the keys
 // (DevTools Input.dispatchMouseEvent at the real box of each one):
-//   - the CONTENT HEIGHT (the body's own height) in EVERY state: fresh ("Pick a home note."), and for each of the 12 home notes: started, 3 wrong taps (failed, not counted), started again (a failed key is retried), one found, built (completed, chip filled),
-//     started again (the chip of a completed key restarts it, keeps its fill), failed again (still completed), and after Reset; that it is ONE height, that the page does not scroll vertically when the iframe is exactly that tall (checked in every state), and not horizontally;
-//   - the chooser's behaviour in the real page (first open starts nothing and the keys ignore taps; a chip starts at once; the third wrong tap ends it; the count and the fills; "All twelve built."; Reset);
+//   - the CONTENT HEIGHT (the body's own height) in EVERY state: fresh ("Pick a tonic (home note)."), and for each of the 12 tonics: started, 3 wrong taps (failed, not counted), started again (a failed key is retried), one found, built (completed, slot filled),
+//     started again (the slot of a completed key restarts it, keeps its fill), failed again (still completed), and after Reset; that it is ONE height, that the page does not scroll vertically when the iframe is exactly that tall (checked in every state), and not horizontally;
+//   - the SHELF (2026-11-19-0938; verdicts named `<file><width>_shelf_...`): twelve slots in every state; the grid is 4 columns x 3 rows at 800 px and 3 x 4 at 360 px (real layout: the slots' boxes); every slot has the same size; nothing of a slot's name or mini score runs out of its box;
+//     the number of filled slots equals the number of completions in every state (0 ... 12), a failed build leaves its slot empty, a completed slot keeps its mini score while it is built again or another key is built; the mini score of a filled slot has the eight heads of the
+//     scale, the five staff lines, the clef and the two red tonic heads, and its name says the scale; ONE height with the shelf empty, six and twelve filled; Reset empties the shelf; real clicks on all twelve slots fill all twelve; shots with the shelf empty / six filled / twelve filled;
+//   - the chooser's behaviour in the real page (first open starts nothing and the keys ignore taps; a slot starts at once; the third wrong tap ends it; the count and the fills; "All twelve built."; Reset);
 //   - a real Play through the real Web Audio graph (the pitch of every note, completed and failed builds);
-//   - that a real pointer RESTING over every chip, key, Play and Reset changes nothing (the page's screenshot and its DOM are the same while the pointer rests on each one and after, in a fresh, a half-built, a completed and a failed state);
+//   - that a real pointer RESTING over every slot, key, Play and Reset changes nothing (the page's screenshot and its DOM are the same while the pointer rests on each one and after, in a fresh, a half-built, a completed and a failed state);
 //   - shots of the four states (light and dark = the same page: no gadget has a dark theme).
 // Reports the content height per file and width and the EMBED HEIGHT (the larger of the two widths) of each file.
 //   node scripts/dev/measure-scale-build-simple.mjs [--vault ~/projects/music-theory] [--out <dir>] [--only <file fragment>]        exit 0 = every verdict true
@@ -43,7 +46,7 @@ async function mount(file, width) {
   const press = async (sel) => { const c = await centre(sel); await page.click(c.x, c.y); await sleep(110); };            // a REAL mouse click at the real box
   return {
     page, probe, press, centre,
-    height: () => probe('Math.ceil(document.body.getBoundingClientRect().height)'),
+    height: () => probe('Math.ceil(document.body.getBoundingClientRect().bottom)'),
     hOverflow: () => probe('document.documentElement.scrollWidth - document.documentElement.clientWidth'),
     setHeight: (h) => page.ev(`document.getElementById('f').style.height = '${h}px'`),
     vScroll: () => probe('document.documentElement.scrollHeight - document.documentElement.clientHeight'),
@@ -56,8 +59,8 @@ async function mount(file, width) {
 const FILES = [
   { file: 'scales/resources/html/scale_build_major.html', scale: 'major', steps: [2, 2, 1, 2, 2, 2, 1] },
   { file: 'scales/resources/html/scale_build_natural_minor.html', scale: 'natural_minor', steps: [2, 1, 2, 2, 1, 2, 2] },
-];
-const verdict = {}, numbers = { heights: {}, embed: {}, states: {} };
+];       // f.scale names the scale in a completed slot: "G major", "G natural minor" 
+const verdict = {}, numbers = { heights: {}, embed: {}, states: {}, shelfHeights: {}, shelfGrid: {} };
 const midisOf = (steps, tonic) => { const out = [60 + tonic]; for (const s of steps) out.push(out[out.length - 1] + s); return out; };
 const wrongKeysOf = (ms) => { const out = []; for (let k = ms[0] + 1; k < ms[ms.length - 1]; k++) if (!ms.includes(k)) out.push(k); return out; };
 const hashOf = `(function(){ var h = 7, t = document.documentElement.outerHTML; for (var i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) | 0; return t.length + ':' + h; })()`;
@@ -68,26 +71,42 @@ for (const f of FILES.filter((x) => !only || x.file.includes(only))) {
   for (const width of [800, 360]) {
     const tag = `${name}${width}`;
     // ---- 1. the sweep: every state of every home note, real clicks, at the page's own height
-    const g = await mount(f.file, width); const hs = new Set(); let states = 0, hScrolls = 0, vScrolls = 0;
-    const sample = async (label) => { const h = await g.height(); hs.add(h); states++; if ((await g.hOverflow()) > 0) { hScrolls++; console.log(`${tag}: horizontal scroll in ${label}`); } if ((await g.vScroll()) > 0) { vScrolls++; console.log(`${tag}: vertical scroll in ${label}`); } return h; };
+    const g = await mount(f.file, width); const hs = new Set(); let states = 0, hScrolls = 0, vScrolls = 0, completedN = 0, shelfBad = 0; const byFill = {};
+    const slot = (t) => `#shelf .slot:nth-child(${t + 1})`;
+    // the shelf in the current state: [slot count, filled slots, slots whose mini score is not what its state says (filled: the scale's heads, five lines, a clef, two tonic heads; empty: nothing drawn)]
+    const shelfNow = () => g.probe(`(function () { var s = document.querySelectorAll('#shelf > .slot'), filled = 0, bad = 0; s.forEach(function (e) { var v = e.querySelector('svg'), n = v.querySelectorAll('.head').length; if (e.classList.contains('done')) { filled++; if (n !== ${f.steps.length + 1} || v.querySelectorAll('.staffline').length !== 5 || v.querySelectorAll('path').length !== 1 || v.querySelectorAll('.head.tonic').length !== 2) bad++; } else if (v.children.length) bad++; }); return s.length + ':' + filled + ':' + bad; })()`);
+    const sample = async (label) => {
+      const h = await g.height(); hs.add(h); states++; (byFill[completedN] ??= new Set()).add(h);
+      if ((await g.hOverflow()) > 0) { hScrolls++; console.log(`${tag}: horizontal scroll in ${label}`); } if ((await g.vScroll()) > 0) { vScrolls++; console.log(`${tag}: vertical scroll in ${label}`); }
+      const sh = await shelfNow(); if (sh !== `12:${completedN}:0`) { shelfBad++; console.log(`${tag}: the shelf says ${sh} in ${label}, expected 12:${completedN}:0`); }
+      return h;
+    };
     verdict[`${tag}_loadsWithoutErrors`] = (await g.errs()).length === 0;
     const h0 = await g.height(); hs.add(h0);
     await g.setHeight(h0);                                                                // from here the iframe is exactly as tall as its content: any vertical scroll shows in vScroll
     verdict[`${tag}_noVerticalScrollAtItsOwnHeight`] = (await g.vScroll()) <= 0;
-    verdict[`${tag}_freshSaysPickAHomeNote`] = (await g.text('prompt')) === 'Pick a home note.' && (await g.count('.key.tonic, .key.lit')) === 0 && (await g.probe(`document.getElementById('play').disabled`)) === true && (await g.count('#homes button.home')) === 12 && (await g.text('completed')) === 'Completed 0 of 12';
+    verdict[`${tag}_freshSaysPickATonic`] = (await g.text('prompt')) === 'Pick a tonic (home note).' && (await g.count('.key.tonic, .key.lit')) === 0 && (await g.probe(`document.getElementById('play').disabled`)) === true && (await g.count('#shelf button.slot')) === 12 && (await g.text('completed')) === 'Completed 0 of 12';
+    // the shelf's real layout: 4 x 3 at 800 px, 3 x 4 at 360 px; twelve slots of one size, nothing running out of its box
+    const geo = await g.probe(`(function () { var r = [].map.call(document.querySelectorAll('#shelf > .slot'), function (e) { var b = e.getBoundingClientRect(), n = e.querySelector('.nm').getBoundingClientRect(); return { x: Math.round(b.left), y: Math.round(b.top), w: Math.round(b.width * 10), h: Math.round(b.height * 10), nmBottom: n.bottom, bottom: b.bottom, nmRight: n.right, right: b.right, nmLeft: n.left, left: b.left }; }); return { rowCount: new Set(r.map(function (q) { return q.y; })).size, colCount: new Set(r.map(function (q) { return q.x; })).size, sizes: new Set(r.map(function (q) { return q.w + 'x' + q.h; })).size, boxes: r.length, nmInside: r.every(function (q) { return q.nmBottom <= q.bottom + 0.5 && q.nmRight <= q.right + 0.5 && q.nmLeft >= q.left - 0.5; }), tracks: getComputedStyle(document.getElementById('shelf')).gridTemplateColumns.split(' ').length, w: r[0] && r[0].w / 10, h: r[0] && r[0].h / 10 }; })()`);
+    numbers.shelfGrid[tag] = geo;
+    verdict[`${tag}_shelf_gridIs${width === 800 ? '4x3' : '3x4'}`] = geo.boxes === 12 && geo.tracks === (width === 800 ? 4 : 3) && geo.colCount === (width === 800 ? 4 : 3) && geo.rowCount === (width === 800 ? 3 : 4);
+    verdict[`${tag}_shelf_twelveSlotsOfOneSize`] = geo.sizes === 1;
+    verdict[`${tag}_shelf_emptySlotNameInsideItsBox`] = geo.nmInside === true;
+    await g.shot(`${tag}-shelf-0-empty`, h0);
     await g.press('.key[data-midi="64"]'); verdict[`${tag}_freshKeyTapIgnored`] = (await g.count('.key.lit, .key.wrong, #staff .head')) === 0 && (await g.hz()).length === 0;
     await sample('fresh');
-    let completedN = 0, ok = { chipStarts: true, thirdWrongEnds: true, notCounted: true, retry: true, built: true, fillKept: true, restart: true };
+    let ok = { slotStarts: true, thirdWrongEnds: true, notCounted: true, retry: true, built: true, fillKept: true, restart: true, failedLeavesEmpty: true, miniKeptWhileBuilt: true, miniOfTheScale: true, survives: true };
     for (let t = 0; t < 12; t++) {
-      const ms = midisOf(f.steps, t), targets = ms.slice(1, -1), wrongs = wrongKeysOf(ms).slice(0, 3); const chip = `#homes .home:nth-child(${t + 1})`;
-      // a new key: the chip starts it at once
+      const ms = midisOf(f.steps, t), targets = ms.slice(1, -1), wrongs = wrongKeysOf(ms).slice(0, 3); const chip = slot(t);
+      // a new key: its slot starts it at once
       await g.press(chip); await sample(`t${t}_started`);
-      ok.chipStarts &&= (await g.probe(`document.querySelector('.home.current') && [].indexOf.call(document.querySelectorAll('#homes .home'), document.querySelector('.home.current'))`)) === t && (await g.count('.key.tonic')) === 1 && (await g.probe(`document.querySelector('.key.tonic').getAttribute('data-midi')`)) === String(ms[0]) && (await g.text('wrongs')) === 'Wrong taps: 0 of 3' && (await g.text('prompt')).startsWith('Exercise: build ') && (await g.count('#staff .head')) === 1;
+      ok.slotStarts &&= (await g.probe(`document.querySelector('.slot.current') && [].indexOf.call(document.querySelectorAll('#shelf .slot'), document.querySelector('.slot.current'))`)) === t && (await g.count('.key.tonic')) === 1 && (await g.probe(`document.querySelector('.key.tonic').getAttribute('data-midi')`)) === String(ms[0]) && (await g.text('wrongs')) === 'Wrong taps: 0 of 3' && (await g.text('prompt')).startsWith('Exercise: build ') && (await g.count('#staff .head')) === 1;
       // the third wrong tap ends it as failed: the answer is shown, the key is not counted
       for (const [i, k] of wrongs.entries()) { await g.press(`.key[data-midi="${k}"]`); if (i === 1) { ok.thirdWrongEnds &&= (await g.text('wrongs')) === 'Wrong taps: 2 of 3' && (await g.probe(`document.getElementById('play').disabled`)) === true; await sample(`t${t}_twoWrong`); } }
       await sample(`t${t}_gaveUp`);
       ok.thirdWrongEnds &&= (await g.text('wrongs')) === 'Wrong taps: 3 of 3' && (await g.text('prompt')).startsWith('Exercise over') && (await g.count('#staff .head')) === ms.length && (await g.count('#staff .head.ghost')) === targets.length && (await g.count('.key.reveal')) === targets.length && (await g.count('#letters .letter')) === ms.length - 1 && (await g.count('#chips .chip')) === ms.length - 1 && (await g.probe(`document.getElementById('play').disabled`)) === false;
-      ok.notCounted &&= (await g.text('completed')) === `Completed ${completedN} of 12` && (await g.count(`#homes .home.done`)) === completedN;
+      ok.notCounted &&= (await g.text('completed')) === `Completed ${completedN} of 12` && (await g.count(`#shelf .slot.done`)) === completedN;
+      ok.failedLeavesEmpty &&= (await g.probe(`(function () { var e = document.querySelector(${JSON.stringify(chip)}); return !e.classList.contains('done') && e.querySelector('svg').children.length === 0; })()`)) === true;       // a failed build leaves its slot empty (and tappable: the next press starts it)
       await g.press(`.key[data-midi="${targets[0]}"]`); ok.thirdWrongEnds &&= (await g.count('#staff .head')) === ms.length && (await g.count('.key.lit:not(.tonic)')) === 0;       // a key after the end is ignored
       // a failed key is retried by tapping its chip: a fresh build; one found; then all found within the wrong taps
       await g.press(chip); ok.retry &&= (await g.text('wrongs')) === 'Wrong taps: 0 of 3' && (await g.count('#staff .head')) === 1 && (await g.count('.key.wrong, .key.reveal')) === 0 && (await g.text('prompt')).startsWith('Exercise: build ');
@@ -95,32 +114,41 @@ for (const f of FILES.filter((x) => !only || x.file.includes(only))) {
       await g.press(wrongs.length ? `.key[data-midi="${wrongs[0]}"]` : chip);                      // one wrong tap on the way (the build still completes within 3)
       await g.press(`.key[data-midi="${targets[0]}"]`); await sample(`t${t}_oneFound`);
       for (const m of targets.slice(1)) await g.press(`.key[data-midi="${m}"]`);
-      await sample(`t${t}_built`); completedN++;
+      completedN++; await sample(`t${t}_built`);
+      ok.miniOfTheScale &&= (await g.probe(`(function () { var e = document.querySelector(${JSON.stringify(chip)}), v = e.querySelector('svg'); return e.classList.contains('done') && v.querySelectorAll('.head').length === ${ms.length} && /${f.scale === 'major' ? 'major' : 'natural minor'}$/.test(e.querySelector('.nm').textContent); })()`)) === true;
+      if (completedN === 6) await g.shot(`${tag}-shelf-6-six`, h0); if (completedN === 12) await g.shot(`${tag}-shelf-12-twelve`, h0);
       ok.built &&= (await g.text('completed')) === (completedN === 12 ? 'All twelve built.' : `Completed ${completedN} of 12`) && (await g.probe(`document.querySelector(${JSON.stringify(chip)}).classList.contains('done')`)) === true && (await g.text('prompt')).startsWith('Exercise done') && (await g.count('#staff .head')) === ms.length && (await g.count('#staff .head.ghost')) === 0 && (await g.probe(`document.getElementById('play').disabled`)) === false;
       // the chip of a completed key restarts it and keeps its fill; failing it again does not uncount it
       await g.press(chip); await sample(`t${t}_restart`);
       ok.restart &&= (await g.count('#staff .head')) === 1 && (await g.text('wrongs')) === 'Wrong taps: 0 of 3' && (await g.text('prompt')).startsWith('Exercise: build ');
       ok.fillKept &&= (await g.probe(`document.querySelector(${JSON.stringify(chip)}).classList.contains('done') && document.querySelector(${JSON.stringify(chip)}).classList.contains('current')`)) === true;
+      ok.miniKeptWhileBuilt &&= (await g.count(`${chip} svg .head`)) === ms.length;                   // the completed slot keeps its mini score while its key is built again
       for (const k of wrongs) await g.press(`.key[data-midi="${k}"]`);
       await sample(`t${t}_failedAgain`);
       ok.fillKept &&= (await g.probe(`document.querySelector(${JSON.stringify(chip)}).classList.contains('done')`)) === true && (await g.text('completed')) === (completedN === 12 ? 'All twelve built.' : `Completed ${completedN} of 12`);
+      for (let u = 0; u < t; u++) ok.survives &&= (await g.count(`${slot(u)}.done svg .head`)) === ms.length;      // every slot filled before this key is still filled, with its mini score, while this one was built and failed
     }
     for (const [k, v] of Object.entries(ok)) verdict[`${tag}_real_${k}`] = v;
-    verdict[`${tag}_allTwelveBuilt`] = (await g.text('completed')) === 'All twelve built.' && (await g.count('#homes .home.done')) === 12;
-    await g.press('#reset'); await sample('afterReset');
-    verdict[`${tag}_resetClearsCountAndBuild`] = (await g.text('prompt')) === 'Pick a home note.' && (await g.text('completed')) === 'Completed 0 of 12' && (await g.count('#homes .home.done, #homes .home.current')) === 0 && (await g.count('#staff .head')) === 0 && (await g.count('.key.tonic, .key.lit, .key.wrong')) === 0 && (await g.probe(`document.getElementById('play').disabled`)) === true;
+    verdict[`${tag}_allTwelveBuilt`] = (await g.text('completed')) === 'All twelve built.' && (await g.count('#shelf .slot.done')) === 12;
+    verdict[`${tag}_shelf_twelveRealClicksFillTwelveMiniScores`] = (await g.count('#shelf .slot.done svg .head')) === 12 * (f.steps.length + 1) && (await g.count('#shelf .slot.done svg .staffline')) === 12 * 5;
+    await g.press('#reset'); completedN = 0; await sample('afterReset');
+    verdict[`${tag}_shelf_resetEmptiesTheShelf`] = (await g.count('#shelf .slot.done')) === 0 && (await g.count('#shelf .slot svg *')) === 0 && (await g.count('#shelf > .slot')) === 12;
+    verdict[`${tag}_resetClearsCountAndBuild`] = (await g.text('prompt')) === 'Pick a tonic (home note).' && (await g.text('completed')) === 'Completed 0 of 12' && (await g.count('#shelf .slot.done, #shelf .slot.current')) === 0 && (await g.count('#staff .head')) === 0 && (await g.count('.key.tonic, .key.lit, .key.wrong')) === 0 && (await g.probe(`document.getElementById('play').disabled`)) === true;
     verdict[`${tag}_noHorizontalScrollInAnyState`] = hScrolls === 0; verdict[`${tag}_noVerticalScrollInAnyStateAtItsOwnHeight`] = vScrolls === 0; numbers.states[`${tag}`] = states; numbers.heights[name][width] = [...hs];
     verdict[`${tag}_oneHeightInEveryState`] = hs.size === 1;
+    numbers.shelfHeights[tag] = Object.fromEntries(Object.entries(byFill).map(([n, v]) => [n, [...v]]));
+    verdict[`${tag}_shelf_oneHeightWithTheShelfEmptySixAndTwelveFilled`] = [0, 6, 12].every((n) => byFill[n] && byFill[n].size === 1) && new Set([...byFill[0], ...byFill[6], ...byFill[12]]).size === 1;
+    verdict[`${tag}_shelf_theShelfWasRightInEveryState`] = shelfBad === 0;                        // twelve slots, as many filled as completions, every mini score what its state says
     verdict[`${tag}_noErrorsAfterTheSweep`] = (await g.errs()).length === 0;
     g.page.close();
 
     // ---- 2. a real Play (completed and failed builds), the pitches through the real Web Audio graph
     const r = await mount(f.file, width); const embed = Math.max(...hs, h0); await r.setHeight(embed);
     const ms = midisOf(f.steps, 0), targets = ms.slice(1, -1), wrongs = wrongKeysOf(ms).slice(0, 3);
-    await r.press('#homes .home:nth-child(1)');
+    await r.press('#shelf .slot:nth-child(1)');
     await r.clearHz(); await r.press('#play'); await sleep(400); verdict[`${tag}_realPlayOffWhileBuilding`] = (await r.hz()).length === 0;
     for (const how of ['completed', 'failed']) {
-      if (how === 'completed') for (const m of targets) await r.press(`.key[data-midi="${m}"]`); else { await r.press('#homes .home:nth-child(1)'); for (const k of wrongs) await r.press(`.key[data-midi="${k}"]`); }
+      if (how === 'completed') for (const m of targets) await r.press(`.key[data-midi="${m}"]`); else { await r.press('#shelf .slot:nth-child(1)'); for (const k of wrongs) await r.press(`.key[data-midi="${k}"]`); }
       await sleep(300); await r.clearHz(); await r.press('#play'); await sleep(Math.round((ms.length * 0.45 + 1) * 1000));
       const hz = await r.hz(); const per = hz.length / ms.length;
       verdict[`${tag}_realPlay_${how}_soundsEveryNote`] = Number.isInteger(per) && per >= 1 && per <= 40 && hz.filter((_, i) => i % per === 0).map(pitchOf).join() === ms.join();
@@ -133,15 +161,15 @@ for (const f of FILES.filter((x) => !only || x.file.includes(only))) {
     const shotNow = async () => (await r.page.send('Page.captureScreenshot', { format: 'png', clip: { x: 0, y: 0, width, height: embed, scale: 1 } })).data;
     const setups = {
       fresh: async () => { await r.press('#reset'); },
-      halfBuilt: async () => { await r.press('#homes .home:nth-child(3)'); await r.press(`.key[data-midi="${midisOf(f.steps, 2)[2]}"]`); await r.press(`.key[data-midi="${wrongKeysOf(midisOf(f.steps, 2))[0]}"]`); },
-      completed: async () => { await r.press('#homes .home:nth-child(5)'); for (const m of midisOf(f.steps, 4).slice(1, -1)) await r.press(`.key[data-midi="${m}"]`); },
-      failed: async () => { await r.press('#homes .home:nth-child(8)'); for (const k of wrongKeysOf(midisOf(f.steps, 7)).slice(0, 3)) await r.press(`.key[data-midi="${k}"]`); },
+      halfBuilt: async () => { await r.press('#shelf .slot:nth-child(3)'); await r.press(`.key[data-midi="${midisOf(f.steps, 2)[2]}"]`); await r.press(`.key[data-midi="${wrongKeysOf(midisOf(f.steps, 2))[0]}"]`); },
+      completed: async () => { await r.press('#shelf .slot:nth-child(5)'); for (const m of midisOf(f.steps, 4).slice(1, -1)) await r.press(`.key[data-midi="${m}"]`); },
+      failed: async () => { await r.press('#shelf .slot:nth-child(8)'); for (const k of wrongKeysOf(midisOf(f.steps, 7)).slice(0, 3)) await r.press(`.key[data-midi="${k}"]`); },
     };
     let rest = true, restUnstable = 0, moved = 0;
     for (const [state, setup] of Object.entries(setups)) {
       await setup(); await park(); const a = await shotNow(); await sleep(250); const a2 = await shotNow(); if (a !== a2) { restUnstable++; continue; }
       const dom0 = await r.probe(hashOf);
-      const pts = await r.probe(`(function(){ var out = []; document.querySelectorAll('#homes .home, .key, #play, #reset').forEach(function (e) { var b = e.getBoundingClientRect(); if (b.width > 2 && b.height > 2) out.push({ x: Math.round(b.left + b.width / 2), y: Math.round(b.top + b.height / 2) }); }); return out; })()`);
+      const pts = await r.probe(`(function(){ var out = []; document.querySelectorAll('#shelf .slot, .key, #play, #reset').forEach(function (e) { var b = e.getBoundingClientRect(); if (b.width > 2 && b.height > 2) out.push({ x: Math.round(b.left + b.width / 2), y: Math.round(b.top + b.height / 2) }); }); return out; })()`);
       for (const p of pts) { await r.page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: p.x, y: p.y }); await sleep(70); const now = await shotNow(); moved++; if (now !== a) rest = false; if ((await r.probe(hashOf)) !== dom0) rest = false; }
       await park(); if ((await shotNow()) !== a || (await r.probe(hashOf)) !== dom0) rest = false;
       await r.shot(`${tag}-${state}`, embed);

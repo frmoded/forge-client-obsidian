@@ -37,7 +37,7 @@ Exercise: pick a home note or press Random, choose one of these scales, and find
 
 ```html-embed
 scales/resources/html/scale_build_other_scales.html
-523
+781
 ```
 
 <div style="
