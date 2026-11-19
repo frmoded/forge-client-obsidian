@@ -9,7 +9,7 @@ import { Window } from 'happy-dom';
 import { createDescriptionController, type DescriptionPorts } from './description-apply.ts';
 import { newArrangementNote, readArrangementNote, arrangementRecipeSteps } from './arrangement-core.ts';
 import { newCompositionNote, readCompositionNote, type CompositionParams } from './composition-core.ts';
-import { describe } from './phrase-describe-core.ts';
+import { linesOfParams } from './sentence-list-core.ts';
 import { extractDescription } from './v2-note-core.ts';
 
 const win: any = new Window({ url: 'http://localhost/' });
@@ -63,25 +63,27 @@ test('ARRANGEMENT: a free sentence the grammar rejects calls the service ONCE on
   assert.deepEqual(r.writes, [], 'a preview writes nothing');
   assert.deepEqual(r.buttons(), ['apply-preview', 'cancel-preview']);
   const parsed = { kind: 'arrangement' as const, tracks: PLAN_ARR.tracks };
-  assert.equal(r.el.querySelector('.forge-chat-suggestion-description')!.textContent, describe(parsed));
+  assert.equal(r.el.querySelector('.forge-chat-suggestion-description')!.textContent, linesOfParams(parsed, 'arrangement').join(' '), '2026-11-19-0970 (the list model): the preview is the canonical LINES that would be added (an arrangement\'s closing "Together." is not one)');
   assert.equal(r.el.querySelector('.forge-chat-suggestion-recipe')!.textContent, arrangementRecipeSteps(parsed).join('\n'));
   assert.match(r.el.querySelector('.forge-chat-suggestion-description')!.textContent!, /Play \[\[phrase_001\]\] on the \[\[rock\]\] kit\./);
   assert.equal(r.field().value, FREE_ARR, 'the box keeps the text');
 });
 
-test('ARRANGEMENT: applying the preview writes the note once (the arrangement the preview showed) and the box shows the CANONICAL sentence', async () => {
+const parsedArr = { kind: 'arrangement' as const, tracks: PLAN_ARR.tracks };
+test('ARRANGEMENT: applying the preview writes the note once (the arrangement the preview showed) and the Description is the list of canonical sentences', async () => {
   const r = rig({ path: ARR, note: ARR_NOTE(), service: async () => OK(PLAN_ARR) });
   await r.ready();
   r.type(FREE_ARR); await r.enter(); await r.click('apply-preview');
   assert.deepEqual(r.writes, [ARR]);
   const read = readArrangementNote(r.store.get(ARR)!);
   assert.ok(read.ok); assert.deepEqual(read.value.tracks, PLAN_ARR.tracks);
-  assert.equal(r.field().value, extractDescription(r.store.get(ARR)!));
+  assert.equal(r.field().value, '', '2026-11-19-0970 (the list model): the prompt line is for the NEXT sentence; the list is in the note and the dialog');
+  assert.equal(extractDescription(r.store.get(ARR)!), linesOfParams(parsedArr, 'arrangement').map((l, i) => `${i + 1}. ${l}`).join('\n'), 'the Description is the list of the canonical sentences (the service\'s plan took the place of the sentence about the rock kit and was added after it)');
   assert.notEqual(r.field().value, FREE_ARR);
   assert.match(r.strip(), /^✓ Applied \(/, '2026-11-13-1214: the dialog says what was applied, the strip has nothing');
 });
 
-test('COMPOSITION: the same path - one request (family, phrases, arrangements, compositions, the note being planned), a preview, one write, the canonical sentence in the box', async () => {
+test('COMPOSITION: the same path - one request (family, phrases, arrangements, compositions, the note being planned), a preview, one write, the plan appended to the list', async () => {
   const r = rig({ path: COMP, note: COMP_NOTE(), service: async () => OK(PLAN_COMP) });
   await r.ready();
   r.type(FREE_COMP); await r.enter();
@@ -89,12 +91,13 @@ test('COMPOSITION: the same path - one request (family, phrases, arrangements, c
   assert.deepEqual(r.asked[0], { sentence: FREE_COMP, bars: [], phrases: ['phrase_001', 'phrase_002', 'phrase_003'], family: 'composition', arrangements: ['arr_001'], compositions: ['song_1', 'song_2'], note: 'compositions/song_1' });
   assert.deepEqual(r.writes, []);
   assert.deepEqual(r.buttons(), ['apply-preview', 'cancel-preview']);
-  assert.equal(r.el.querySelector('.forge-chat-suggestion-description')!.textContent, describe(PLAN_COMP as CompositionParams));
+  assert.equal(r.el.querySelector('.forge-chat-suggestion-description')!.textContent, 'Then play [[phrase_001]]. Then play [[arr_001]] for 4 bars. Repeat that once more.', '2026-11-19-0970 (the list model): the plan is APPENDED to the note\'s section, so its first line is "Then play"');
   await r.click('apply-preview');
   assert.deepEqual(r.writes, [COMP]);
   const read = readCompositionNote(r.store.get(COMP)!);
-  assert.ok(read.ok); assert.deepEqual(read.value.sections, PLAN_COMP.sections);
-  assert.equal(r.field().value, extractDescription(r.store.get(COMP)!));
+  assert.ok(read.ok); assert.deepEqual(read.value.sections, [...COMP_START.sections, ...PLAN_COMP.sections]);
+  assert.equal(r.field().value, '');
+  assert.equal(extractDescription(r.store.get(COMP)!), '1. Play [[phrase_003]].\n2. Then play [[phrase_001]].\n3. Then play [[arr_001]] for 4 bars.\n4. Repeat that once more.');
 });
 
 test('Cancel writes nothing, the text stays, and no second request was made (arrangement and composition)', async () => {
@@ -198,7 +201,7 @@ test('LOOP THROUGH THE VAULT: song_2 plays song_1, so a plan that makes song_1 p
 test('the strip\'s explicit Ask button is offered for a rejected arrangement and composition Description (not only a phrase), and asks the same way', async () => {
   const r = rig({ path: ARR, note: ARR_NOTE(), service: async () => OK(PLAN_ARR) });
   const pane = r.el;
-  r.store.set(ARR, r.store.get(ARR)!.replace(extractDescription(r.store.get(ARR)!), 'Play [[phrase_003]] on the [[rock]] kit'));   // a hand edit the grammar rejects
+  r.store.set(ARR, r.store.get(ARR)!.replace(extractDescription(r.store.get(ARR)!), 'Play [[phrase_003]] on the [[nobody_here]] kit.'));   // a hand edit the grammar rejects (2026-11-19-0970: a list reads "Together." as implied, so the rejected line names a kit the vault does not have)
   await r.ctl.inspect(ARR); r.ctl.syncBars(); await r.flush();
   const stripButtons = (): string[] => [...r.el.querySelectorAll('.forge-description-button')].map((b) => b.getAttribute('data-action') ?? '');     // a HAND edit has no box: its outcome stays in the strip at the top (2026-11-13-1214)
   assert.deepEqual(stripButtons(), ['revert', 'ask']);

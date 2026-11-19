@@ -8,6 +8,7 @@ import { barsOfPayload, producePhrase, readPhraseNote, type PhraseScoreDeps } fr
 import { callNote, extractPhraseJsonBlock, handEditRefusalOf, isCustomNote, keepRecipeSource, pyStr, renderSourceChainNote, type SourceChainParts } from './phrase-notes-core.ts';
 import { produceCustomScore, type CustomDeps } from './custom-note-core.ts';
 import { describe } from './phrase-describe-core.ts';
+import { extractDescription } from './v2-note-core.ts';
 import { RHYTHM_CHANNELS, type RhythmData } from './rhythm-edit-core.ts';
 import { computeScore, type ScoreOutcome } from './rhythm-score-core.ts';
 import { KIT_NAME_PATTERN, kitPath, readKitNote, type KitParams } from './kit-core.ts';
@@ -57,6 +58,8 @@ export function formatArrangementJson(p: ArrangementParams): string {
 }
 
 const link = (name: string): string => `[[${name}]]`;
+/** 2026-11-19-0970: a Description that is a numbered LIST (the list model) is kept as it is when the derived parts are made again from the json (Refresh note links); anything else is the grammar's paragraph again, as before. */
+export const listDescriptionOf = (text: string): string | undefined => { const d = extractDescription(text); return /^\s*1[.)]\s/.test(d) ? d : undefined; };
 /** Every note this arrangement reads, once each, in the order the Recipe names them: each track's phrase, then its kit. */
 export const arrangementLinks = (p: ArrangementParams): string[] => [...new Set(p.tracks.flatMap((t) => [t.phrase, t.kit]))];
 const bpmWords = (t: { from: number; to: number }): string => { const f = (n: number): string => (Number.isInteger(n) ? String(n) : n.toFixed(1)); return t.from === t.to ? `${f(t.from)} bpm` : `${f(t.from)} to ${f(t.to)} bpm`; };
@@ -97,9 +100,10 @@ export function arrangementPython(p: ArrangementParams): string {
   ].join('\n');
 }
 /** The parts of an arrangement note (2026-10-30-1050, M15b): the `# Description` is the grammar's sentence for the tracks (`describe`), the frontmatter `description` stays the words with wikilinks for the graph, Recipe and Python derive as before. */
-export const arrangementParts = (name: string, p: ArrangementParams): SourceChainParts => ({ description: arrangementDescription(name, p), links: arrangementLinks(p), sentence: describe(p), recipe: arrangementRecipeSteps(p), python: arrangementPython(p) });
+export const arrangementParts = (name: string, p: ArrangementParams, sentence?: string): SourceChainParts => ({ description: arrangementDescription(name, p), links: arrangementLinks(p), sentence: sentence ?? describe(p), recipe: arrangementRecipeSteps(p), python: arrangementPython(p) });
 /** The arrangement note with its source chain written (the one renderer phrases use too); the text from the fence on is kept byte for byte. */
-export const renderArrangementNote = (text: string, name: string, p: ArrangementParams, fenceStart: number): string => renderSourceChainNote(text, arrangementParts(name, p), fenceStart);
+/** `sentence` (2026-11-19-0970): the text of the `# Description` when it is not the grammar's one-paragraph `describe` (the LIST of canonical sentences of sentence-list-core.ts). */
+export const renderArrangementNote = (text: string, name: string, p: ArrangementParams, fenceStart: number, sentence?: string): string => renderSourceChainNote(text, arrangementParts(name, p, sentence), fenceStart);
 
 export function newArrangementNote(name: string, p: ArrangementParams): string {
   const fence = ['```json', formatArrangementJson(p), '```', ''].join('\n');
@@ -124,7 +128,7 @@ export function refreshArrangementNoteText(text: string, name: string): { ok: tr
   if (block.ok === false) return { ok: false, message: block.message };
   const lost = handEditRefusalOf(text, false);
   if (lost !== null) return { ok: false, message: lost };
-  const next = keepRecipeSource(text, renderArrangementNote(text, name, read.value, block.fenceStart));
+  const next = keepRecipeSource(text, renderArrangementNote(text, name, read.value, block.fenceStart, listDescriptionOf(text)));
   return { ok: true, text: next, changed: next !== text };
 }
 
@@ -141,13 +145,13 @@ export function setTrackSetting(p: ArrangementParams, index: number, patch: { mu
 }
 
 /** The controls' write: the note with ITS json replaced by `p` and the derived parts (Description, links, Recipe, Python) made again by the same builders New arrangement uses, so a changed note is the note New arrangement would have made for the changed arrangement. The person's own frontmatter lines stay. Idempotent. */
-export function applyArrangementWrite(text: string, name: string, p: ArrangementParams, applyingDescription = false): { ok: true; text: string; changed: boolean } | { ok: false; message: string } {
+export function applyArrangementWrite(text: string, name: string, p: ArrangementParams, applyingDescription = false, sentence?: string): { ok: true; text: string; changed: boolean } | { ok: false; message: string } {
   const block = extractPhraseJsonBlock(text);
   if (block.ok === false) return { ok: false, message: block.message };
   const lost = handEditRefusalOf(text, true);
   if (!applyingDescription && lost !== null) return { ok: false, message: lost };         // 2026-10-31-1120: a control's write: "Not saved: ...", as a phrase's and a composition's
   const withJson = text.slice(0, block.contentStart) + formatArrangementJson(p) + text.slice(block.contentEnd);
-  const next = renderArrangementNote(withJson, name, p, block.fenceStart);
+  const next = renderArrangementNote(withJson, name, p, block.fenceStart, sentence);
   return { ok: true, text: next, changed: next !== text };
 }
 

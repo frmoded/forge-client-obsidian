@@ -2743,6 +2743,8 @@ button.forge-phrase-source { cursor: pointer; background: none; border: none; bo
   color: var(--text-normal); font: inherit; font-size: var(--font-ui-small, 13px); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;
 }
 .forge-prompt-box .forge-composer-menuitem:focus-visible  { outline: none; background: var(--background-modifier-hover); }
+/* 2026-11-19-0970: "Undo last sentence" / "Redo" with nothing to undo or redo: shown (never hidden) in the muted colour and inert; no hover rule, no red */
+.forge-prompt-box .forge-composer-menuitem[aria-disabled="true"] { color: var(--text-faint); cursor: default; }
 .forge-prompt-box-conflict { font-size: var(--font-ui-smaller); color: var(--text-muted); }
 .forge-composer-error { flex: 0 0 auto; padding: 0 6px; font-size: var(--font-ui-smaller); color: var(--text-muted); }
 .forge-composer-error::before { content: "!"; content: "!" / ""; display: inline-flex; align-items: center; justify-content: center; width: 1.25em; height: 1.25em; margin-right: 0.5em; border: 1px solid var(--text-muted); border-radius: 50%; color: var(--text-muted); font-size: 0.85em; font-weight: 600; line-height: 1; vertical-align: 0.05em; }

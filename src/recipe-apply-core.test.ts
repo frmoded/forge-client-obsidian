@@ -13,6 +13,7 @@ import { RECIPE_EDITED_BY_HAND, RECIPE_SOURCE_KEY, asRecipeSourced, descriptionE
 import { computeFacetStates, FacetState } from './facet-state-core.ts';
 import { sourceLayerStatusOf } from './source-layer-status-of-body-core.ts';
 import { facetHashSync } from './facet-sync-hash-core.ts';
+import { withoutDescription } from './test-support/sentence-list-fixtures.ts';
 import { extractDescription, extractRecipeSection, getFrontmatterField } from './v2-note-core.ts';
 
 const VAULT = { bars: ['bar_007', 'bar_008'], phrases: ['phrase_001', 'phrase_003', 'phrase_009'], arrangements: ['arr_001'], compositions: ['comp_001'], kits: ['rock', 'latin'] };
@@ -100,7 +101,8 @@ test('a Recipe that says the same thing in other words writes the canonical note
   assert.equal(st.unchanged, true); assert.equal(st.change, 'no change in the music');
   const done = applyRecipeText(reordered, 'arr_001', 'arrangement', VAULT, st.recipe);
   assert.ok(done.ok);
-  if (done.ok) assert.equal(done.text, asRecipeSourced(arr), 'the Recipe is written canonically again; the music is the same');
+  // 2026-11-19-0970 (the list model): the Description a Recipe edit derives is the numbered LIST of the canonical sentences; everything else is byte for byte the note the controls make
+  if (done.ok) { assert.equal(withoutDescription(done.text), withoutDescription(asRecipeSourced(arr)), 'the Recipe is written canonically again; the music is the same'); assert.match(extractDescription(done.text), /^1\. Play \[\[phrase_001\]\] on the \[\[rock\]\] kit\.\n2\. /); }
 });
 
 test('a track\'s order in an arrangement IS the music (the first track\'s tempo rules them all): swapping two "Play" steps is a change, said so', () => {
@@ -124,7 +126,8 @@ test('a COMPOSITION\'s Recipe: a section\'s length edited (8 -> 6 bars) is appli
   const read = readCompositionNote(done.text);
   assert.ok(read.ok);
   if (read.ok) assert.deepEqual(read.value.sections, [{ source: 'phrases/phrase_001', length: 6 }, { source: 'phrases/phrase_003', length: 4 }]);
-  assert.equal(done.text, asRecipeSourced(newCompositionNote('comp_001', { kind: 'composition', sections: [{ source: 'phrases/phrase_001', length: 6 }, { source: 'phrases/phrase_003', length: 4 }] })));
+  assert.equal(withoutDescription(done.text), withoutDescription(asRecipeSourced(newCompositionNote('comp_001', { kind: 'composition', sections: [{ source: 'phrases/phrase_001', length: 6 }, { source: 'phrases/phrase_003', length: 4 }] }))));      // 2026-11-19-0970: but for the Description, which is the list now
+  assert.equal(extractDescription(done.text), '1. Play [[phrase_001]] for 6 bars.\n2. Then play [[phrase_003]] for 4 bars.');
 });
 
 test('a Recipe of another KIND is refused in one sentence: this note is a phrase, the Recipe describes an arrangement', () => {

@@ -14,7 +14,7 @@ export { FORGE_COMPOSITION_KEY } from './composition-nav-core.ts';
 import { composeMismatchSentence } from './engine-refusal-core.ts';
 import { EMPTY_SOURCE, isEmptyNote } from './empty-note-core.ts';
 import { computeScore, type ScoreOutcome } from './rhythm-score-core.ts';
-import { produceArrangement, type ArrangementDeps } from './arrangement-core.ts';
+import { listDescriptionOf, produceArrangement, type ArrangementDeps } from './arrangement-core.ts';
 import type { RhythmData } from './rhythm-edit-core.ts';
 
 export const COMPOSITION_FOLDER = 'compositions';
@@ -96,9 +96,10 @@ export function expandSections(p: CompositionParams): ExpandedSection[] {
   return out;
 }
 
-export const compositionParts = (name: string, p: CompositionParams): SourceChainParts => ({ description: compositionDescription(name, p), links: compositionLinks(p), sentence: describe(p), recipe: compositionRecipeSteps(p), python: compositionPython(p) });
+export const compositionParts = (name: string, p: CompositionParams, sentence?: string): SourceChainParts => ({ description: compositionDescription(name, p), links: compositionLinks(p), sentence: sentence ?? describe(p), recipe: compositionRecipeSteps(p), python: compositionPython(p) });
 /** The composition note with its source chain written (the one renderer every note uses); the text from the fence on is kept byte for byte. */
-export const renderCompositionNote = (text: string, name: string, p: CompositionParams, fenceStart: number): string => renderSourceChainNote(text, compositionParts(name, p), fenceStart);
+/** `sentence` (2026-11-19-0970): the text of the `# Description` when it is the LIST of canonical sentences (sentence-list-core.ts) and not the grammar's one-paragraph `describe`. */
+export const renderCompositionNote = (text: string, name: string, p: CompositionParams, fenceStart: number, sentence?: string): string => renderSourceChainNote(text, compositionParts(name, p, sentence), fenceStart);
 
 export function newCompositionNote(name: string, p: CompositionParams, extraFront: string[] = []): string {
   const fence = ['```json', formatCompositionJson(p), '```', ''].join('\n');
@@ -123,18 +124,18 @@ export function refreshCompositionNoteText(text: string, name: string): { ok: tr
   if (read.ok === false) return { ok: false, message: read.message };
   const lost = handEditRefusalOf(text, false);
   if (lost !== null) return { ok: false, message: lost };
-  const next = keepRecipeSource(text, renderCompositionNote(text, name, read.value, block.fenceStart));
+  const next = keepRecipeSource(text, renderCompositionNote(text, name, read.value, block.fenceStart, listDescriptionOf(text)));
   return { ok: true, text: next, changed: next !== text };
 }
 
 /** The controls' write: the note with ITS json replaced by `p` and the derived parts made again by the same builders New composition uses. */
-export function applyCompositionWrite(text: string, name: string, p: CompositionParams, applyingDescription = false): { ok: true; text: string; changed: boolean } | { ok: false; message: string } {
+export function applyCompositionWrite(text: string, name: string, p: CompositionParams, applyingDescription = false, sentence?: string): { ok: true; text: string; changed: boolean } | { ok: false; message: string } {
   const block = extractPhraseJsonBlock(text);
   if (block.ok === false) return { ok: false, message: block.message };
   const lost = handEditRefusalOf(text, true);
   if (!applyingDescription && lost !== null) return { ok: false, message: lost };         // the sentence of M15b, unchanged: "Not saved: the Description was edited by hand; ..."
   const withJson = text.slice(0, block.contentStart) + formatCompositionJson(p) + text.slice(block.contentEnd);
-  const next = renderCompositionNote(withJson, name, p, block.fenceStart);
+  const next = renderCompositionNote(withJson, name, p, block.fenceStart, sentence);
   return { ok: true, text: next, changed: next !== text };
 }
 

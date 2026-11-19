@@ -42,7 +42,16 @@ export interface PromptBoxPorts {
   /** MUSIC_COMPOSER_AUTO_APPLY: a sentence the grammar reads exactly skips the preview. Default off. */
   autoApply?(): boolean;
   /** The "+" menu: the four New actions and "Insert a link to a note" (the tab says what is in it). */
-  menu?: { items: readonly ComposerMenuItem[]; run(id: string): void; pickNote?(): Promise<string | null> };
+  menu?: {
+    items: readonly ComposerMenuItem[]; run(id: string): void; pickNote?(): Promise<string | null>;
+    /** 2026-11-19-0970: asked at EVERY open of the menu: false = the item is shown DISABLED (aria-disabled, never hidden: "Undo last sentence" when there is nothing to undo) and does nothing when chosen. Absent = every item is enabled. */
+    enabled?(id: string): boolean;
+    /** 2026-11-19-0970: items AFTER "Insert a link to a note" (a list note's "Undo last sentence" and "Redo"); the New actions stay first and the link stays where it was. */
+    trailing?: readonly ComposerMenuItem[];
+  };
+  /** 2026-11-19-0970 (the list model): Cmd/Ctrl+Z in an EMPTY text area, and Shift+Cmd/Ctrl+Z (redo). Absent = the key is the browser's own (a phrase, a bar). */
+  undo?(): void | Promise<void>;
+  redo?(): void | Promise<void>;
   /** The sentences sent from this note (per note, kept in memory by the controller), oldest first. */
   history?: { get(): readonly string[]; set(next: readonly string[]): void };
 }
@@ -175,10 +184,29 @@ export function mountPromptBox(parent: HTMLElement, ports: PromptBoxPorts, initi
     dispatch({ type: 'enter' });
   };
 
+  async function runUndo(which: 'undo' | 'redo'): Promise<void> {
+    try { await (which === 'undo' ? ports.undo : ports.redo)?.(); }
+    catch (e) { console.error(`[forge-composer] ${which} threw`, e); if (!disposed) { note = `${which === 'undo' ? 'Undo' : 'Redo'} failed: ${(e as Error)?.message ?? e}`; paint(); } }
+  }
+
   // ---- the field -------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  // 2026-11-19-0970: where the host turns Cmd/Ctrl+Z into the field's own undo BEFORE the page sees a key (an application menu's Undo): the same list undo in an EMPTY field, once (a keydown that was just taken is not done twice)
+  let tookKeyAt = -1e9;
+  text.addEventListener('beforeinput', (e) => {
+    const kind = (e as InputEvent).inputType;
+    if ((kind !== 'historyUndo' && kind !== 'historyRedo') || text.value !== '' || isWorking(c) || remote !== null) return;
+    const which = kind === 'historyUndo' ? 'undo' : 'redo';
+    if ((which === 'undo' ? ports.undo : ports.redo) === undefined) return;
+    e.preventDefault();
+    if (Date.now() - tookKeyAt < 400) return;
+    void runUndo(which);
+  });
   text.addEventListener('input', () => { note = null; walking = -1; s = typed(s, text.value); dispatch({ type: 'type', text: text.value }); });
   text.addEventListener('keydown', (e) => {
     const k = e as KeyboardEvent;
+    if ((k.metaKey || k.ctrlKey) && !k.altKey && (k.key === 'z' || k.key === 'Z') && text.value === '' && !isWorking(c) && remote === null && (k.shiftKey ? ports.redo : ports.undo) !== undefined) {   // 2026-11-19-0970: in an EMPTY composer the key undoes (or, with Shift, redoes) the last SENTENCE of the note; with text in the field it is the browser's own text undo
+      e.preventDefault(); tookKeyAt = Date.now(); void runUndo(k.shiftKey ? 'redo' : 'undo'); return;
+    }
     if (k.key === 'Enter') {
       if (k.shiftKey || k.isComposing || k.keyCode === 229) return;       // Shift+Enter: the browser's own new line; an IME composition: Enter only confirms it
       if (k.altKey || k.ctrlKey || k.metaKey) return;
@@ -202,14 +230,17 @@ export function mountPromptBox(parent: HTMLElement, ports: PromptBoxPorts, initi
   // ---- the "+" menu -------------------------------------------------------------------------------------------------------------------------------------------------------------------
   let menuOpen = false;
   const items: HTMLButtonElement[] = [];
-  const setMenu = (open: boolean): void => { menuOpen = open; menu.hidden = !open; plus.setAttribute('aria-expanded', open ? 'true' : 'false'); };
+  const refreshMenu = (): void => { for (const b of items) { const off = spec?.enabled?.(b.getAttribute('data-id') ?? '') === false; b.setAttribute('aria-disabled', off ? 'true' : 'false'); b.classList.toggle('is-disabled', off); } };
+  const setMenu = (open: boolean): void => { if (open) refreshMenu(); menuOpen = open; menu.hidden = !open; plus.setAttribute('aria-expanded', open ? 'true' : 'false'); };
   const spec = ports.menu;
   if (spec) {
-    const all: ComposerMenuItem[] = [...spec.items, ...(spec.pickNote ? [{ id: LINK_ID, label: 'Insert a link to a note' }] : [])];
+    const all: ComposerMenuItem[] = [...spec.items, ...(spec.pickNote ? [{ id: LINK_ID, label: 'Insert a link to a note' }] : []), ...(spec.trailing ?? [])];
     for (const it of all) {
       const b = doc.createElement('button'); b.type = 'button'; b.className = 'forge-composer-menuitem'; b.setAttribute('role', 'menuitem'); b.textContent = it.label; b.setAttribute('data-id', it.id);
+      b.setAttribute('aria-disabled', 'false');
       b.addEventListener('click', (e) => {
         e.stopPropagation(); setMenu(false);
+        if (b.getAttribute('aria-disabled') === 'true') { try { text.focus(); } catch { /* hidden */ } return; }          // a disabled item is a menu item that does nothing (it stays focusable: the arrow keys walk through it)
         if (it.id === LINK_ID) { void (async () => { const link = await spec.pickNote?.(); if (link) insertAtCaret(`[[${link}]]`); try { text.focus(); } catch { /* hidden */ } })(); return; }
         spec.run(it.id);
       });

@@ -8,8 +8,10 @@ import { facetHashSync } from './facet-sync-hash-core.ts';
 import { extractDescription, extractPythonSection, extractRecipeSection } from './v2-note-core.ts';
 import { parseFrontmatter } from './rhythm-edit-core.ts';
 import { applyPhraseWrite, readPhraseNote } from './phrase-core.ts';
-import { applyArrangementWrite, readArrangementNote } from './arrangement-core.ts';
-import { applyCompositionWrite, readCompositionNote } from './composition-core.ts';
+import { linesOfParams, parseList, replayGrammar, type ListStop } from './sentence-list-core.ts';
+import { writeListNote } from './sentence-list-note-core.ts';
+import { readArrangementNote } from './arrangement-core.ts';
+import { readCompositionNote } from './composition-core.ts';
 import { wrongKindSentence, type Family } from './note-family-core.ts';
 import { recipeEdit } from './recipe-apply-core.ts';
 import { bothEditedMessage, editedFacetsOf, pythonCommentsOf, pythonEdit, type Facet } from './python-apply-core.ts';
@@ -27,7 +29,8 @@ export type DescriptionState =
   | { kind: 'synced' }
   | { kind: 'both-edited'; message: string; facets: Facet[] }
   | { kind: 'rejected'; sentence: string; error: GrammarError; message: string }
-  | { kind: 'apply'; sentence: string; params: GrammarParams; change: string; unchanged: boolean }
+  /** 2026-11-19-0970: for an arrangement and a composition `sentence` is the Description's text (a numbered list, or a legacy paragraph), `params` what its READABLE lines say, `list` the lines (the readable ones canonical, the rest as written) and `stop` where an unreadable line stopped the replay. */
+  | { kind: 'apply'; sentence: string; params: GrammarParams; change: string; unchanged: boolean; list?: string[]; stop?: ListStop }
   | { kind: 'recipe-rejected'; recipe: string; error: GrammarError; message: string }
   | { kind: 'recipe-apply'; recipe: string; params: GrammarParams; change: string; unchanged: boolean }
   | { kind: 'python-apply'; python: string; params: GrammarParams; change: string; unchanged: boolean }
@@ -87,6 +90,7 @@ export function descriptionState(text: string, family: Family, vault: GrammarVau
     return { kind: 'synced' };
   }
   const sentence = extractDescription(text);
+  if (family !== 'phrase') { const listed = listState(text, sentence, family, vault); if (listed !== null) return listed; }
   const res = parse(sentence, vault);
   if (res.ok === false) return { kind: 'rejected', sentence, error: res.error, message: rejectionMessage(res.error) };
   const wrong = wrongKindSentence(family, res.params.kind, 'the sentence');
@@ -98,19 +102,41 @@ export function descriptionState(text: string, family: Family, vault: GrammarVau
   return { kind: 'apply', sentence, params: res.params, change: changeSummary(prev, res.params), unchanged: sameParams(prev, res.params) };
 }
 
+/**
+ * 2026-11-19-0970 (the list model): what the Description of an arrangement or a composition says when it is a LIST (or a legacy paragraph, split on the way): the lines are replayed through the grammar, one prefix at a time. The readable
+ * lines before the first unreadable one are an `apply` (the unreadable line is kept and named in `stop`); when NO line can be read it is `rejected`, as a Description the grammar cannot read always was (nothing is written, the note keeps
+ * what it shows). An empty Description is left to the grammar's own refusal (null).
+ */
+function listState(text: string, sentence: string, family: 'arrangement' | 'composition', vault: GrammarVault): DescriptionState | null {
+  const parsed = parseList(sentence, family, vault);
+  if (parsed.list.length === 0) return null;
+  const rp = replayGrammar(parsed.list, family, { vault });
+  if (rp.params === null) {
+    const error = { message: rp.stop?.message ?? 'it could not be read', line: rp.stop?.line ?? 1, column: rp.stop?.column ?? 1 };
+    return { kind: 'rejected', sentence, error, message: rejectionMessage(error) };
+  }
+  const prev = cacheParams(text, family);
+  return { kind: 'apply', sentence, params: rp.params, change: changeSummary(prev, rp.params), unchanged: sameParams(prev, rp.params), list: rp.list, ...(rp.stop !== null ? { stop: rp.stop } : {}) };
+}
+
 type Written = { ok: true; text: string } | { ok: false; message: string };
 /** The note with `params` as its json and every derived part made again, by the SAME writers the controls use (the hand-edit refusal lifted: the Description is the input). */
 export function writeFromParams(text: string, name: string, family: Family, params: GrammarParams): Written {
   if (family === 'phrase') return applyPhraseWrite(text, params as Parameters<typeof applyPhraseWrite>[1], name, true);
-  const w = family === 'arrangement' ? applyArrangementWrite(text, name, params as Parameters<typeof applyArrangementWrite>[2], true) : applyCompositionWrite(text, name, params as Parameters<typeof applyCompositionWrite>[2], true);
-  return w.ok === false ? { ok: false, message: w.message } : { ok: true, text: w.text };
+  return writeListNote(text, name, family, { params, list: linesOfParams(params, family) });     // 2026-11-19-0970: the Description of an arrangement and a composition is the list of canonical sentences, whoever writes it
 }
 
 /** "Update from Description": the new text, or why not. Decided on the text it is GIVEN (inside the atomic write), against the sentence that was planned: a Description that changed since is not written (the newer edit is evaluated by its own turn). */
-export function applyDescriptionText(text: string, name: string, family: Family, vault: GrammarVault, planned: string, prefer?: 'description'): { ok: true; text: string; change: string } | { ok: false; message: string; stale: boolean } {
+export function applyDescriptionText(text: string, name: string, family: Family, vault: GrammarVault, planned: string, prefer?: 'description', limit?: number): { ok: true; text: string; change: string } | { ok: false; message: string; stale: boolean } {
   const st = descriptionState(text, family, vault, prefer);
   if (st.kind !== 'apply') return { ok: false, message: st.kind === 'rejected' || st.kind === 'both-edited' ? st.message : 'There is nothing to update: the Description matches the note.', stale: true };
   if (st.sentence !== planned) return { ok: false, message: 'The Description changed again; the newer sentence is being read.', stale: true };
+  if (family !== 'phrase' && st.list !== undefined) {                                                  // 2026-11-19-0970: the whole list is written in ONE go; `limit` (the loop check cut the list there) lines at most are applied, every line is kept
+    const rp = replayGrammar(st.list, family, { vault, ...(limit !== undefined ? { maxApplied: limit } : {}) });
+    if (rp.params === null) return { ok: false, message: 'There is nothing to update: no line of the Description can be read.', stale: false };
+    const w = writeListNote(text, name, family, rp);
+    return w.ok === false ? { ok: false, message: w.message, stale: false } : { ok: true, text: w.text, change: st.change };
+  }
   const w = writeFromParams(text, name, family, st.params);
   return w.ok === false ? { ok: false, message: w.message, stale: false } : { ok: true, text: w.text, change: st.change };
 }

@@ -10,6 +10,8 @@ export interface Proposal {
   description: string;
   /** Who understood the sentence: the grammar (free, instant, exact) or the sentence service. */
   via: 'grammar' | 'service';
+  /** 2026-11-19-0970 (the list model): the earlier sentence of the note's list that this one REPLACES (same kit, same volume target), in plain text. Absent = it replaces nothing. */
+  replaces?: string;
 }
 export type ComposerState =
   | { phase: 'idle'; text: string; seq: number }
@@ -94,6 +96,11 @@ export function step(s: ComposerState, ev: ComposerEvent): { state: ComposerStat
 
 // ---- the words ------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 export const PREVIEW_HINT = 'Press Enter to apply, Esc to discard';
+/** 2026-11-19-0970: the "+" menu's two list items (words and ids; the menu shows them disabled, never hidden, when there is nothing to undo or redo). */
+export const UNDO_LABEL = 'Undo last sentence';
+export const REDO_LABEL = 'Redo';
+export const UNDO_ID = '__undo__';
+export const REDO_ID = '__redo__';
 export const WORKING_TEXT = 'Working... Esc cancels';
 export const COMPOSER_LABELS = {
   region: 'Composer', field: 'Describe the next step in a sentence', send: 'Send, Enter', plus: 'More actions', menu: 'More actions', sr: 'Composer status',
@@ -104,7 +111,7 @@ export function errorLine(s: ComposerState): string { return s.phase === 'error'
 export function announcement(s: ComposerState): string {
   switch (s.phase) {
     case 'working': return 'Working. Press Escape to cancel.';
-    case 'previewing': return `Preview: ${s.proposal.description.replace(/\.\s*$/, '')}. ${PREVIEW_HINT}.`;
+    case 'previewing': return `Preview: ${s.proposal.description.replace(/\.\s*$/, '')}. ${s.proposal.replaces ? `This replaces: ${s.proposal.replaces.replace(/\.\s*$/, '')}. ` : ''}${PREVIEW_HINT}.`;
     case 'applying': return 'Applying.';
     case 'error': return s.message;
     default: return '';
