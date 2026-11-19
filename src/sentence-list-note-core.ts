@@ -8,8 +8,9 @@ import type { GrammarParams, GrammarVault } from './phrase-grammar-core.ts';
 import { applyArrangementWrite, type ArrangementParams } from './arrangement-core.ts';
 import { applyCompositionWrite, type CompositionParams } from './composition-core.ts';
 import { extractPhraseJsonBlock, renderSourceChainNote } from './phrase-notes-core.ts';
+import { applyPhraseWrite, phraseWriteRefusal, type PhraseParams } from './phrase-core.ts';
 import { extractDescription } from './v2-note-core.ts';
-import { parseList, render, type ListKind, type ParsedList } from './sentence-list-core.ts';
+import { listAfterParams, parseList, render, type ListKind, type ParsedList } from './sentence-list-core.ts';
 
 /** The list a note's Description section holds (a numbered list, a legacy paragraph split into its sentences, or one legacy line). Reads only. */
 export function listOfNote(text: string, kind: ListKind, vault: GrammarVault): ParsedList {
@@ -32,6 +33,18 @@ export function writeListNote(text: string, name: string, kind: ListKind, replay
   }
   const w = kind === 'arrangement' ? applyArrangementWrite(text, name, replay.params as ArrangementParams, true, sentence)
     : kind === 'composition' ? applyCompositionWrite(text, name, replay.params as CompositionParams, true, sentence)
-      : { ok: false as const, message: 'A phrase is not written from a list yet.' };
+      : applyPhraseWrite(text, replay.params as PhraseParams, name, true, sentence);       // 2026-11-19-0980 (stage 2): a phrase is written from its list too
   return w.ok === false ? { ok: false, message: w.message } : { ok: true, text: w.text };
+}
+
+/**
+ * 2026-11-19-0980 (stage 2) - the STRIP's write: a slider, a picker or "Edit this bar" wrote `params`. The note is made again from the LIST, not from one sentence: the lines are edited in the smallest way that makes their replay say `params`
+ * (listAfterParams: a Bars or Tempo slider writes or replaces a modifier line, a source or a style rewrites the head, a fork is a fork line) and the whole note is written in one go, idempotently. A legacy paragraph is split on the way (a strip write is
+ * a recompute). Every refusal of a control write holds as it did (a Description, Recipe or Python edited by hand is never overwritten: `Not saved: ...`). `vault` is what the sentences may name.
+ */
+export function writePhraseStrip(text: string, name: string, params: PhraseParams, vault: GrammarVault): { ok: true; text: string } | { ok: false; message: string } {
+  const refusal = phraseWriteRefusal(text, name, false);
+  if (refusal !== null) return { ok: false, message: refusal };
+  const lines = listAfterParams(listOfNote(text, 'phrase', vault).list, params, 'phrase', { vault });
+  return applyPhraseWrite(text, params, name, false, render(lines, eolOf(text)));
 }

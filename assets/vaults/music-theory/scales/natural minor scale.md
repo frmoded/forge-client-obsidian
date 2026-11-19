@@ -14,7 +14,7 @@ Same recipe, different tonic: W to D, H to E♭, W to F, and so forth. That give
 
 ## Same notes as major
 
-A minor and C major use exactly the same seven notes. C major sits a minor third, three half steps, above A. Change the home note and you change the mood without moving a single key.
+A minor and C major use exactly the same seven notes. C major sits a minor third, three half steps, above A. Change the tonic and you change the mood without moving a single key.
 
 ## Time to work
 

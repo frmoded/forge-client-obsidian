@@ -2,7 +2,7 @@
 // (shift-click extends a range from the anchor, ctrl/cmd-click toggles one bar, a drag across bars is a range, Esc clears); a plain click is NOT a selection gesture: it stays the pin. What the menu does with a selection is WRITE A SENTENCE:
 //
 //   New phrase from these bars -> a new phrase note   "Take [[phrase_006]]. Keep bars 3 to 5."        (a link to the source, never a frozen copy)
-//   Copy / Delete / Move left / Move right -> the Description of a transform phrase gets the step    "... Delete bars 3 to 5." (previewed in the prompt box; nothing is applied until Apply)
+//   Copy / Delete / Move left / Move right -> the step is APPENDED as the next line of a transform phrase's list    "Delete bars 3 to 5."   (2026-11-19-0980: it was a preview in the prompt box; a phrase's Description is a list now, the line is added at once, in one write, and Cmd/Ctrl+Z takes it back)
 //
 // A phrase that is not a transform (an extend, a morph, a mix), or a transform with edited bars (forks are numbered by the bars it has NOW), cannot take the step into its own Description without changing what it is: the step is then the
 // first sentence of a NEW transform phrase of it ("Take [[phrase_006]]. Delete bars 3 to 5."), made like "New phrase from these bars". The words of the steps are bar-structure-core.ts (one table).
@@ -87,7 +87,7 @@ export function disabledReason(action: SelectionAction, s: BarSelection, total: 
 }
 
 export type ActionPlan =
-  /** The phrase is a transform with no edited bars: its Description with the step added (after its other structure steps, before any Thin out / Double up), for the prompt box to PREVIEW. */
+  /** The phrase is a transform with no edited bars and no Thin out or Double up yet: the step is APPENDED to its list (`sentence`; `text` is the whole Description the list says now, for a reader that wants it). 2026-11-19-0980: a step is never re-sorted before a density step: a phrase that has one makes a new phrase instead. */
   | { kind: 'preview'; text: string; sentence: string; step: StructureOp }
   /** A new transform phrase of this one, made now: `sentence` is its Description. */
   | { kind: 'new-phrase'; params: TransformPhrase; sentence: string; step: StructureOp; because: string }
@@ -104,12 +104,11 @@ export function planAction(action: SelectionAction, selection: BarSelection, cur
   const step = actionStep(action, selection);
   const ofThis = (ops: TransformOp[]): TransformPhrase => ({ kind: 'transform', source: `phrases/${self}`, ops });
   const forked = current !== null && current.kind === 'transform' && current.overrides !== undefined && Object.keys(current.overrides).length > 0;
-  if (action !== 'new-phrase' && current !== null && current.kind === 'transform' && !forked) {
-    const structure = current.ops.filter(isStructureOp);
-    const density = current.ops.filter((o) => !isStructureOp(o));
-    const ops: TransformOp[] = [...structure, step, ...density];
+  const dense = current !== null && current.kind === 'transform' && current.ops.some((o) => !isStructureOp(o));            // a structure step comes before every Thin out and Double up: the list is never re-sorted
+  if (action !== 'new-phrase' && current !== null && current.kind === 'transform' && !forked && !dense) {
+    const ops: TransformOp[] = [...current.ops, step];
     const next: TransformPhrase = { ...current, ops };
-    // the new step is inserted after the steps there already are, so its bar numbers are those of the Score on screen (a Thin out or Double up does not change which bars there are)
+    // the new step comes after the steps there already are, so its bar numbers are those of the Score on screen
     const valid = validatePhrase(next);
     if (valid.ok === false) return { kind: 'refused', message: valid.message };
     return { kind: 'preview', text: describe(valid.value), sentence: describe(ofThis([step])).replace(/^Take \[\[[^\]]+\]\]\. /, ''), step };
@@ -117,6 +116,6 @@ export function planAction(action: SelectionAction, selection: BarSelection, cur
   const params = ofThis([step]);
   const valid = validatePhrase(params);
   if (valid.ok === false) return { kind: 'refused', message: valid.message };
-  const because = action === 'new-phrase' ? 'new phrase' : current !== null && current.kind === 'transform' ? 'this phrase has bars you edited, so its numbers are fixed: the change is made as a new phrase of it' : 'this phrase is not a transform: the change is made as a new phrase of it';
+  const because = action === 'new-phrase' ? 'new phrase' : current !== null && current.kind === 'transform' ? (forked ? 'this phrase has bars you edited, so its numbers are fixed: the change is made as a new phrase of it' : 'this phrase has a Thin out or a Double up, and a step that changes which bars there are comes before them: the change is made as a new phrase of it') : 'this phrase is not a transform: the change is made as a new phrase of it';
   return { kind: 'new-phrase', params, sentence: describe(valid.value), step, because };
 }

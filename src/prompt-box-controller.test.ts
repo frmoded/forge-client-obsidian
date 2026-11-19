@@ -11,6 +11,7 @@ import { createDescriptionController, type DescriptionPorts } from './descriptio
 import { PHRASE_DEFAULTS, noteContentFor, type PhraseParams } from './phrase-core.ts';
 import { isCustomNote } from './phrase-notes-core.ts';
 import { dialogEntries, dialogLast } from './test-support/dialog-view.ts';
+import { asListNote } from './test-support/phrase-list-fixtures.ts';
 import { extractDescription } from './v2-note-core.ts';
 
 const win: any = new Window({ url: 'http://localhost/' });
@@ -48,7 +49,7 @@ test('a score tab gets the box, LAST in the tab and under the Score; it shows ex
   const r = rig(); const el = r.pane();
   await r.ctl.inspect(PATH); await r.flush();
   assert.ok(r.box(el), 'the box is there');
-  assert.equal(r.field(el).value, extractDescription(r.store.get(PATH)!));
+  assert.equal(r.field(el).value, ''); // 2026-11-19-0980 (deliberate): a phrase's Description is a list; the composer shows nothing of it (it showed exactly the Description facet)
   // 2026-11-13-1214 (rewritten: it said "the box is the last thing in the tab", the 1203 overlay): the tab's content is a flex column, the body (the Score first) scrolls on its own, the panel (dialog, then the box LAST) is its sibling below
   assert.equal(el.lastElementChild!.className, 'forge-chat-panel', 'the panel is the last thing in the tab');
   assert.equal(r.box(el)!.parentElement, el.lastElementChild, 'the box is inside the panel');
@@ -88,8 +89,8 @@ test('typing a new sentence and applying (Enter) updates the note by ONE write t
   assert.ok(el.querySelector('.forge-prompt-box.is-previewing'));
   await r.enter(el);
   assert.deepEqual(r.writes, [PATH], 'one write');
-  assert.equal(r.store.get(PATH), noteContentFor('phrase_001', { ...MIX, weight: 0.35 }));
-  assert.equal(r.field(el).value, VOTE_35, 'the canonical sentence');
+  assert.equal(r.store.get(PATH), asListNote(noteContentFor('phrase_001', { ...MIX, weight: 0.35 }), 'phrase_001')); // 2026-11-19-0980 (deliberate): a phrase's Description is a list; the composer shows nothing of it: the note a write leaves is the list note
+  assert.equal(r.field(el).value, '', 'the composer is empty after an apply (it showed the canonical sentence)');
   assert.equal(el.querySelector('.forge-prompt-box.is-edited'), null);
   assert.deepEqual(r.lines.filter((l: string) => !l.startsWith('[forge-promptbox]')), ['[forge-description] applied phrase_001 (weight 0.5 -> 0.35)']);
   assert.deepEqual(r.lines.filter((l: string) => l.startsWith('[forge-promptbox]')).map((l: string) => l.replace(/ text=\d+ chars/, ' text=N chars')), [                       // 2026-11-13-1211: every decision of Apply is a line
@@ -112,23 +113,21 @@ test('a sentence that does not parse writes NOTHING: the strip at the top says t
   assert.deepEqual([...el.querySelectorAll('.forge-description-button')].map((b) => b.getAttribute('data-action')), [], 'no Revert (nothing was written) and no Ask (not set up)');
   assert.deepEqual(r.asked, []);
   r.type(el, VOTE_35); await r.send(el);
-  assert.equal(r.store.get(PATH), noteContentFor('phrase_001', { ...MIX, weight: 0.35 }), 'the fixed sentence applies');
+  assert.equal(r.store.get(PATH), asListNote(noteContentFor('phrase_001', { ...MIX, weight: 0.35 }), 'phrase_001'), 'the fixed sentence applies'); // 2026-11-19-0980 (deliberate): a phrase's Description is a list; the composer shows nothing of it
   assert.equal(r.strip(el), '', 'and the strip clears');
 });
 
-test('a control writing the Description updates the box AT ONCE (before the debounce), with no overwrite of unapplied typing: the choice (keep / use) is offered instead', async () => {
+test('a control writing the Description leaves the composer alone (2026-11-19-0980: it used to update the box AT ONCE and offer a keep / use choice over unapplied typing): the prompt line shows nothing of the Description, so there is nothing to conflict with', async () => {
   const r = rig(); const el = r.pane();
   await r.ctl.inspect(PATH); await r.flush();
   r.store.set(PATH, noteContentFor('phrase_001', { ...MIX, weight: 0.35 }));                      // what a control writes
   r.ctl.modified(PATH); await r.flush();
-  assert.equal(r.field(el).value, VOTE_35, 'the box follows the control');
+  assert.equal(r.field(el).value, '', 'the composer shows nothing of what the control wrote');
   r.type(el, 'my own sentence, not applied');
   r.store.set(PATH, noteContentFor('phrase_001', { ...MIX, weight: 0.2 }));                       // the controls move again
   r.ctl.modified(PATH); await r.flush();
   assert.equal(r.field(el).value, 'my own sentence, not applied', 'unapplied typing is never overwritten');
-  assert.ok(el.querySelector('.forge-prompt-box-conflict') && (el.querySelector('.forge-prompt-box-conflict') as HTMLElement).style.display !== 'none', 'the choice is shown');
-  (el.querySelector('[data-choice="use"]') as HTMLElement).click();
-  assert.equal(r.field(el).value, 'Mix [[bar_007]] and [[bar_008]], 20 percent [[bar_007]], as a vote.');
+  const conflict = el.querySelector('.forge-prompt-box-conflict') as HTMLElement | null; assert.ok(conflict === null || conflict.style.display === 'none', 'no keep / use choice: the typing is not about the Description');
 });
 
 test('a hand edit of the Description in the text view refreshes the box the same way', async () => {
@@ -136,7 +135,7 @@ test('a hand edit of the Description in the text view refreshes the box the same
   await r.ctl.inspect(PATH); await r.flush();
   r.store.set(PATH, r.store.get(PATH)!.replace(extractDescription(r.store.get(PATH)!), 'Mix [[bar_007]] and [[bar_008]], 90 percent [[bar_007]], as a vote.'));
   r.ctl.modified(PATH); await r.flush();
-  assert.equal(r.field(el).value, 'Mix [[bar_007]] and [[bar_008]], 90 percent [[bar_007]], as a vote.');
+  assert.equal(r.field(el).value, ''); // 2026-11-19-0980 (deliberate): a phrase's Description is a list; the composer shows nothing of it
 });
 
 test('a note whose Recipe was edited by hand too is not overwritten by an apply from the box: the strip says so, nothing is written', async () => {

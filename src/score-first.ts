@@ -537,9 +537,9 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
           pickNote: () => pickNoteLink(app),
         }),
       }));
-      // 2026-11-16-1000: what the Score's selection menu needs from the plugin: a sentence shown in the note's prompt box (a preview: nothing is applied until Apply), and a new transform phrase (the next free phrase_NNN, no dialog, opened, its title offered for renaming)
+      // 2026-11-16-1000: what the Score's selection menu needs from the plugin: a sentence APPENDED to the note's list (2026-11-19-0980; it was shown in the prompt box as a preview), and a new transform phrase (the next free phrase_NNN, no dialog, opened, its title offered for renaming)
       plugin.register(registerBarSelectionHost({
-        previewDescription: (path, text) => descriptions.suggestInBox(path, text),
+        appendLine: (path, sentence) => descriptions.appendLine(path, sentence),
         makePhrase: (params) => {
           // 2026-11-19-0975: what this action wrote (the text and the modification time of the new note), so a Cancel on the "Note title" dialog can take the note back (new-note-cancel-core.ts) and only an untouched one
           const wrote = new Map<TFile, WrittenNote>();

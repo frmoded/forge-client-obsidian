@@ -28,9 +28,9 @@ async function rig(opts: { path?: string; phrase?: PhraseParams; host?: boolean 
   const parent = win.document.createElement('div'); win.document.body.appendChild(parent);
   const files = new Map<string, string>([['bars/bar_005.md', BAR], ['phrases/phrase_006.md', noteContentFor('phrase_006', EXTEND)]]);
   if (opts.phrase) files.set(notePath, noteContentFor(notePath.replace(/^phrases\//, '').replace(/\.md$/, ''), opts.phrase));
-  const previews: Array<{ path: string; text: string }> = []; const made: TransformPhrase[] = []; const pins: unknown[] = [];
+  const previews: Array<{ path: string; text: string }> = []; const made: TransformPhrase[] = []; const pins: unknown[] = [];       // 2026-11-19-0980: `previews` is what the host was asked to APPEND (path and sentence)
   const off = opts.host === false ? () => {} : registerBarSelectionHost({
-    previewDescription: (p, text) => { previews.push({ path: p, text }); return true; },
+    appendLine: async (p, sentence) => { previews.push({ path: p, text: sentence }); return { ok: true, message: `Added: ${sentence}` }; },       // 2026-11-19-0980: the host APPENDS the sentence as a line of the list (it was previewDescription: shown in the prompt box)
     makePhrase: async (params) => { made.push(params); return { ok: true as const, path: 'phrases/phrase_099.md' }; },
   });
   const ports: PhraseMountPorts = {
@@ -136,21 +136,32 @@ test('Copy, Delete and Move on an EXTEND are a new transform phrase of it (its o
   }
 });
 
-test('on a TRANSFORM phrase, Copy / Delete / Move are a PREVIEW of its own Description in its prompt box: the new step before the Thin out, nothing made, nothing applied, the selection kept; the menu says what to do', async () => {
-  const r = await rig({ path: 'phrases/phrase_007.md', phrase: TRANSFORM });
+// 2026-11-19-0980 (deliberate): the step is APPENDED to the list (one write, by the host), not shown in the prompt box; a transform that has a Thin out already makes a new phrase (a step is never re-sorted before it)
+const PLAIN_TRANSFORM: PhraseParams = { kind: 'transform', source: 'phrases/phrase_006', ops: [] };
+test('on a TRANSFORM phrase, Copy / Delete / Move are APPENDED to its list through the host: the sentence alone, nothing made, nothing written by the tab, the selection kept; the menu says what happened and how to take it back', async () => {
+  const r = await rig({ path: 'phrases/phrase_007.md', phrase: PLAIN_TRANSFORM });
   try {
     assert.equal(r.bars().length, 8);
     r.click(r.bars()[3], { shiftKey: true }); r.click(r.bars()[4], { shiftKey: true });
     const written = [...r.files.entries()];
     await r.act('delete');
-    assert.deepEqual(r.previews, [{ path: 'phrases/phrase_007.md', text: 'Take [[phrase_006]]. Delete bars 4 to 5. Thin out bars 1 to 2, by half, keeping the downbeat.' }]);
+    assert.deepEqual(r.previews, [{ path: 'phrases/phrase_007.md', text: 'Delete bars 4 to 5.' }]);
     assert.deepEqual(r.made, []);
-    assert.deepEqual([...r.files.entries()], written, 'nothing is written: the prompt box applies');
+    assert.deepEqual([...r.files.entries()], written, 'the tab writes nothing: the host appends the line');
     assert.equal(r.count(), '2 bars selected: bars 4 to 5');
-    assert.equal(r.note(), '"Delete bars 4 to 5." is in the prompt box: press Apply to do it.');
+    assert.equal(r.note(), 'Added: Delete bars 4 to 5. (Cmd/Ctrl+Z in the composer takes it back.)');
     assert.equal(r.tinted().length, 2, 'the selection is still there');
     await r.act('move-right');
-    assert.equal(r.previews[1].text, 'Take [[phrase_006]]. Move bars 4 to 5 one bar right. Thin out bars 1 to 2, by half, keeping the downbeat.');
+    assert.equal(r.previews[1].text, 'Move bars 4 to 5 one bar right.');
+  } finally { r.done(); }
+});
+
+test('2026-11-19-0980: on a TRANSFORM phrase that already has a Thin out, a structure step makes a NEW phrase of it (never re-sorted before the Thin out), and nothing is appended', async () => {
+  const r = await rig({ path: 'phrases/phrase_007.md', phrase: TRANSFORM });
+  try {
+    r.click(r.bars()[3], { shiftKey: true }); r.click(r.bars()[4], { shiftKey: true });
+    await r.act('delete');
+    assert.deepEqual(r.previews, []); assert.equal(r.made.length, 1); assert.deepEqual(r.made[0].ops, [{ op: 'delete', runs: [[4, 5]] }]);
   } finally { r.done(); }
 });
 
@@ -174,7 +185,7 @@ test('a tab with no host (a lean edition, a test) says so in the menu\'s own lin
     r.click(r.bars()[1], { shiftKey: true });
     await r.act('delete');
     assert.equal(r.count(), 'bar 2 selected');
-    assert.equal(r.note(), 'no prompt box here to show it in.');
+    assert.equal(r.note(), 'no prompt box here to show it in.');       // 2026-11-19-0980: the tab with no host at all keeps its line
     assert.deepEqual(r.made, []);
   } finally { r.done(); }
 });
@@ -217,6 +228,6 @@ test('MECHANISM PIN 2026-11-16-1000 (if the design moves this SHOULD go red: rea
   assert.equal((dom.match(/selectBars: selectBarsPort\(\),/g) ?? []).length, 3, 'extend (and transform, which shares its inspector), mix and morph');
   assert.match(dom, /const selectBarsPort = \(\): ScoreInspectorPorts\['selectBars'\] => \(\{/, 'every phrase surface has the gesture, with or without a notebook');
   const first = fs.readFileSync(path.join(dir, 'score-first.ts'), 'utf8');
-  assert.match(first, /registerBarSelectionHost\(\{\s*previewDescription: \(path, text\) => descriptions\.suggestInBox\(path, text\),/);
+  assert.match(first, /registerBarSelectionHost\(\{\s*appendLine: \(path, sentence\) => descriptions\.appendLine\(path, sentence\),/);       // 2026-11-19-0980 (deliberate): the plugin's port APPENDS the line (it was previewDescription -> suggestInBox)
   assert.match(first, /plugin\.register\(registerBarSelectionHost/, 'taken away again on unload');
 });

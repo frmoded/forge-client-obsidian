@@ -26,7 +26,9 @@ export { canonical, complementOf100, describe, orderWords, plain, shiftDecimal, 
 
 /** The notes of the vault a description may name (basenames, no folder, no .md). `arrangements` and `kits` are optional: a list that is not given is not checked (names are then only checked for their spelling). */
 export interface GrammarVault { bars: readonly string[]; phrases: readonly string[]; arrangements?: readonly string[]; compositions?: readonly string[]; kits?: readonly string[] }
-export interface GrammarError { message: string; line: number; column: number }
+/** `code` says WHY for the few refusals a caller must tell from the rest (2026-11-19-0980): `order` = a structure step after a Thin out or a Double up; `head` = a line the grammar understood but the phrase's head cannot take (a tempo after a Morph, a Thin out after an Extend).
+ *  The sentence service cannot fix either: the person changes the order or the head. */
+export interface GrammarError { message: string; line: number; column: number; code?: 'order' | 'head' }
 export type ParseResult = { ok: true; params: GrammarParams } | { ok: false; error: GrammarError };
 
 const NUMBER_WORDS = ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'] as const;
@@ -56,6 +58,7 @@ export const VERBS: ReadonlyArray<{ verb: string; kind: 'extend' | 'mix' | 'morp
   { verb: 'then play', kind: null, example: 'Then play [[arr_002]] for 4 bars.' },
   { verb: 'repeat that', kind: null, example: 'Repeat that 2 more times.' },
   { verb: 'for bars play', kind: 'composition', example: 'For 8 bars play [[arr_001]].' },
+  { verb: 'make it', kind: null, example: 'Make it 20 percent slower.' },
 ];
 
 
@@ -63,7 +66,8 @@ export const VERBS: ReadonlyArray<{ verb: string; kind: 'extend' | 'mix' | 'morp
 
 export class Fail extends Error {
   at: number;
-  constructor(at: number, message: string) { super(message); this.at = at; }
+  code?: 'order' | 'head';
+  constructor(at: number, message: string, code?: 'order' | 'head') { super(message); this.at = at; if (code !== undefined) this.code = code; }
 }
 const NAME = NOTE_NAME;                                        // 2026-11-16-1100: words joined by single spaces (a renamed phrase: [[my groove]]); see phrase-core.ts
 
@@ -84,7 +88,7 @@ export class Scan {
     return `"${m[0]}"`;
   }
   fail(expected: string, at?: number): never { this.ws(); throw new Fail(at ?? this.at, `Expected ${expected}, but found ${this.found()}.`); }
-  failAt(message: string, at: number): never { throw new Fail(at, message); }
+  failAt(message: string, at: number, code?: 'order' | 'head'): never { throw new Fail(at, message, code); }
   comma(): boolean { this.ws(); if (this.s[this.i] === ',') { this.i++; return true; } return false; }
   /** Eat a keyword (several words separated by spaces, any case, any spacing), only whole words. */
   kw(phrase: string): boolean {
@@ -217,7 +221,7 @@ export function readStructureStep(f: Scan, afterDensity: boolean): StructureOp |
   const start = f.i;
   const verb = (['keep', 'delete', 'copy', 'move'] as const).find((v) => f.kw(v));
   if (verb === undefined) { f.i = start; return null; }
-  if (afterDensity) f.failAt(`Expected "${verb[0].toUpperCase()}${verb.slice(1)}" to come before any "Thin out" or "Double up" (a change of which bars there are comes first), but it comes after one.`, start);
+  if (afterDensity) f.failAt(`Expected "${verb[0].toUpperCase()}${verb.slice(1)}" to come before any "Thin out" or "Double up" (a change of which bars there are comes first), but it comes after one.`, start, 'order');
   const runs: BarRun[] = [];
   for (;;) {
     const at = f.at;
@@ -270,8 +274,63 @@ function parseExtend(ss: Sentence[], vault: GrammarVault): ExtendPhrase {
       pct = slower ? noNegZero(-n.value) : n.value; return true;
     } },
   ], `"to N bars", a style (${PHRASE_STYLES.map((s) => STYLE_WORDS[s]).join(', ')}) or "N percent slower" / "N percent faster"`);
-  const overrides = followForks(ss.slice(1), vault, () => bars);
-  return { kind: 'extend', source, bars, style, tempo_change_pct: pct, ...overrides };
+  const tail = readTail(ss.slice(1), vault, 'extend', { bars, pct });
+  return { kind: 'extend', source, bars: tail.bars, style, tempo_change_pct: tail.pct, ...tail.overrides, ...(tail.ops.length > 0 ? { ops: tail.ops } : {}) };
+}
+
+/**
+ * 2026-11-19-0980 (the list model, stage 2): the sentences AFTER the head of an extend or a morph, in any order: the MODIFIER lines ("Make it 20 percent slower.", "Make it 8 bars long.": each edits the head's segment of that name, the last one said wins), the STRUCTURE
+ * steps (Keep, Delete, Copy, Move: valid after any head, in the order said) and the forks ("Bar 3 is replaced by [[a bar]]"; they are checked against the bars the phrase has AFTER the modifiers and the steps). A Thin out or a Double up is a take's.
+ */
+function readTail(ss: Sentence[], vault: GrammarVault, head: 'extend' | 'morph', now: { bars: number; pct: number }): { bars: number; pct: number; ops: StructureOp[]; overrides: { overrides?: Record<string, string> } } {
+  let { bars, pct } = now;
+  const ops: StructureOp[] = [];
+  const forks: Sentence[] = [];
+  for (const s of ss) {
+    const sc = new Scan(s.text, s.start);
+    reservedGuard(sc);
+    if (sc.peekKw('bar')) { forks.push(s); continue; }
+    const m = readModifier(sc, head);
+    if (m !== null) { if (m.segment === 'length') bars = m.value; else pct = m.value; continue; }
+    const step = readStructureStep(sc, false);
+    if (step !== null) { ops.push(step); continue; }
+    densityRefusal(sc, head);
+    sc.fail('"Make it N percent slower.", "Make it N bars long.", "Keep ...", "Delete ...", "Copy ...", "Move ..." or "Bar N is replaced by [[a bar]]"');
+  }
+  if (ops.length > TRANSFORM_OPS_MAX) throw new Fail(ss[0].start, `Expected at most ${TRANSFORM_OPS_MAX} changes, but found ${ops.length}.`);
+  return { bars, pct, ops, overrides: followForks(forks, vault, () => (ops.length > 0 ? Number.MAX_SAFE_INTEGER : bars)) };
+}
+
+const HEAD_WORDS: Record<string, string> = { extend: 'an Extend', morph: 'a Morph', mix: 'a Mix', transform: 'a Take' };
+/** "Make it N percent slower." / "Make it N percent faster." (the head's tempo segment: an Extend's) and "Make it N bars long." (the head's length segment: an Extend's or a Morph's). Null (nothing eaten) when the sentence is not one; a head that has no such segment refuses it in words. */
+function readModifier(sc: Scan, head: 'extend' | 'morph' | 'mix' | 'transform'): { segment: 'tempo' | 'length'; value: number } | null {
+  const start = sc.i;
+  if (!sc.kw('make it')) { sc.i = start; return null; }
+  const at = sc.at;
+  const n = sc.number();
+  if (n === null) sc.fail('"Make it N percent slower.", "Make it N percent faster." or "Make it N bars long."');
+  if (sc.kw('percent') || sc.eatPercentSign()) {
+    const slower = sc.kw('slower');
+    if (!slower && !sc.kw('faster')) sc.fail('"slower" or "faster"');
+    if (head !== 'extend') sc.failAt(`Expected a tempo change ("Make it N percent slower.") only after an Extend, but this phrase is ${HEAD_WORDS[head]}.`, at, 'head');
+    if (n.value < 0 || n.value > (slower ? -PHRASE_PCT_MIN : PHRASE_PCT_MAX)) sc.failAt(`Expected a tempo change of 0 to ${slower ? -PHRASE_PCT_MIN : PHRASE_PCT_MAX} percent ${slower ? 'slower' : 'faster'}, but found ${n.text}.`, n.at);
+    sc.end();
+    return { segment: 'tempo', value: slower ? noNegZero(-n.value) : n.value };
+  }
+  if (head !== 'extend' && head !== 'morph') sc.failAt(`Expected a length ("Make it N bars long.") only after an Extend or a Morph, but this phrase is ${HEAD_WORDS[head]}.`, at, 'head');
+  if (!Number.isInteger(n.value)) sc.failAt(`Expected a number of bars as a whole number, but found ${n.text}.`, n.at);
+  if (n.value < PHRASE_BARS_MIN || n.value > PHRASE_BARS_MAX) sc.failAt(`Expected a number of bars from ${PHRASE_BARS_MIN} to ${PHRASE_BARS_MAX}, but found ${n.text}.`, n.at);
+  if (!(sc.kw('bars') || sc.kw('bar'))) sc.fail('"bars" after the number, as in "Make it 8 bars long."');
+  if (!sc.kw('long')) sc.fail('"long", as in "Make it 8 bars long."');
+  sc.end();
+  return { segment: 'length', value: n.value };
+}
+/** A Thin out or a Double up after a head that is not a Take: refused in words that say what may follow it. */
+function densityRefusal(sc: Scan, head: 'extend' | 'morph' | 'mix'): void {
+  const start = sc.i;
+  const verb = sc.kw('thin out') ? 'Thin out' : sc.kw('double up') ? 'Double up' : null;
+  if (verb !== null) sc.failAt(`Expected "${verb}" only after a Take (after ${HEAD_WORDS[head]} a phrase takes "Keep", "Delete", "Copy" and "Move"), but this phrase is ${HEAD_WORDS[head]}.`, start, 'head');
+  sc.i = start;
 }
 
 /** The sentences after the head of a kind that only has forks after it: each is "Bar N is replaced by [[a bar]]". */
@@ -307,10 +366,11 @@ function parseMorph(ss: Sentence[], vault: GrammarVault): MorphPhrase {
     { name: '"seed N"', read: () => { if (!sc.kw('seed')) return false; seedAt = sc.at; seed = sc.whole('a seed', 0); return true; } },
   ], `"over N bars", "as one bar, after N single-hit changes", or "in musical order" (also seeded, by-channel)`);
   if (seed !== null && order !== 'seeded') sc.failAt(`Expected a seed only with the seeded order, but this morph is in ${orderWords(order)}.`, seedAt);
+  const tail = readTail(ss.slice(1), vault, 'morph', { bars, pct: 0 });
+  bars = tail.bars;                                                                                       // 2026-11-19-0980: "Make it N bars long." edits the head's length before the one-bar rules are asked
   if (bars === 1 && position === null) sc.failAt('Expected "after N single-hit changes" for a morph of one bar, but found none.', ss[0].start);
   if (bars !== 1 && position !== null) sc.failAt('Expected a position only for a morph of one bar, but this morph has more.', positionAt);
-  const overrides = followForks(ss.slice(1), vault, () => bars);
-  return { kind: 'morph', a, b, bars, order, seed: seed ?? MORPH_DEFAULTS.seed, ...(bars === 1 ? { position: position ?? 0 } : {}), ...overrides };
+  return { kind: 'morph', a, b, bars, order, seed: seed ?? MORPH_DEFAULTS.seed, ...(bars === 1 ? { position: position ?? 0 } : {}), ...tail.overrides, ...(tail.ops.length > 0 ? { ops: tail.ops } : {}) };
 }
 
 function parseMix(ss: Sentence[], vault: GrammarVault): MixPhrase {
@@ -346,6 +406,7 @@ function parseMix(ss: Sentence[], vault: GrammarVault): MixPhrase {
   if (seed !== null && order !== 'seeded') sc.failAt(`Expected a seed only with the seeded order, but this mix is in ${orderWords((order ?? MORPH_DEFAULTS.order) as MorphOrder)}.`, seedAt);
   let threshold: number = MIX_DEFAULTS.threshold, ghost = false;
   const said = new Set<string>();
+  const ops: StructureOp[] = [];
   for (const s of ss.slice(1)) {
     const f = new Scan(s.text, s.start);
     reservedGuard(f);
@@ -355,9 +416,16 @@ function parseMix(ss: Sentence[], vault: GrammarVault): MixPhrase {
     } else if (f.kw('with ghost notes')) {
       if (said.has('ghost')) f.failAt('Expected the ghost notes to be said once, but they are said twice.', s.start);
       said.add('ghost'); ghost = true; f.end();
-    } else f.fail('"Threshold N percent." or "With ghost notes."');
+    } else {
+      f.i = 0; readModifier(f, 'mix');                                                                      // 2026-11-19-0980: a tempo and a length are not a mix's: refused in words that say so
+      const step = readStructureStep(f, false);
+      if (step !== null) { ops.push(step); continue; }
+      densityRefusal(f, 'mix');
+      f.fail('"Threshold N percent.", "With ghost notes.", "Keep ...", "Delete ...", "Copy ..." or "Move ..."');
+    }
   }
-  const base = { kind: 'mix' as const, a, b, weight, threshold, ghost };
+  if (ops.length > TRANSFORM_OPS_MAX) throw new Fail(ss[0].start, `Expected at most ${TRANSFORM_OPS_MAX} changes, but found ${ops.length}.`);
+  const base = { kind: 'mix' as const, a, b, weight, threshold, ghost, ...(ops.length > 0 ? { ops } : {}) };
   if (mode !== 'path') return base;
   const o: MorphOrder = order ?? MORPH_DEFAULTS.order;
   return { ...base, mode: 'path', order: o, seed: seed ?? MORPH_DEFAULTS.seed };
@@ -376,6 +444,7 @@ function parseTransform(ss: Sentence[], vault: GrammarVault): TransformPhrase & 
     if (f.peekKw('bar')) {                                              // "Bar 9 is replaced by ..." (a one-bar RANGE starts with its verb, never with "bar"; "Bars" is not the word "bar")
       forks.push(s); continue;
     }
+    readModifier(f, 'transform');                                        // 2026-11-19-0980: "Make it ..." is an Extend's or a Morph's: refused in words (it returns null, nothing eaten, for any other sentence)
     const structure = readStructureStep(f, ops.some((o) => !isStructureOp(o)));      // 2026-11-16-1000: Keep / Delete / Copy / Move
     if (structure !== null) { ops.push(structure); continue; }
     if (f.kw('thin out')) {
@@ -422,7 +491,7 @@ function parseTransform(ss: Sentence[], vault: GrammarVault): TransformPhrase & 
       ops.push({ op: 'double_up', first, last, ...(row !== undefined ? { row } : {}), grid });
     } else f.fail('"Thin out ...", "Double up ...", "Keep ...", "Delete ...", "Copy ...", "Move ..." or "Bar N is replaced by [[a bar]]"');
   }
-  if (ops.length === 0) sc.failAt('Expected at least one change after "Take" (Thin out or Double up), but found none.', ss[0].start + ss[0].text.length);
+  // 2026-11-19-0980 (deliberate): `Take [[x]].` alone is a phrase - a copy of x (zero changes); it was refused ("Expected at least one change after Take")
   if (ops.length > TRANSFORM_OPS_MAX) sc.failAt(`Expected at most ${TRANSFORM_OPS_MAX} changes, but found ${ops.length}.`, ss[0].start);
   const overrides = followForks(forks, vault, () => Number.MAX_SAFE_INTEGER);
   return { kind: 'transform', source: `${FOLDER_OF[src.kind as 'phrase' | 'arrangement' | 'composition']}/${src.name}`, ops, ...overrides };
@@ -566,7 +635,7 @@ export function parse(text: string, vault: GrammarVault): ParseResult {
     if (v.ok === false) return err(ss[0].start, v.message);
     return { ok: true, params };                                           // the validators are a gate: what they give back is what the grammar built
   } catch (e) {
-    if (e instanceof Fail) return err(e.at, e.message);
+    if (e instanceof Fail) { const r = err(e.at, e.message); return e.code !== undefined && r.ok === false ? { ok: false, error: { ...r.error, code: e.code } } : r; }
     return err(0, `Expected a description of this grammar, but it could not be read (${(e as Error)?.message ?? String(e)}).`);
   }
 }

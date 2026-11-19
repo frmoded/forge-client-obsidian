@@ -10,8 +10,9 @@ import { loggedNotice } from './logged-notice.ts';
 import { musicEdition } from './music-edition-selected.ts';
 import { scoreClickPlays } from './score-click-policy.ts';
 import { computeArrangementScoreViaEngine, computeCompositionScoreViaEngine, computePhraseScoreViaEngine, runCustomPythonViaEngine } from './phrase-engine.ts';
-import { PHRASE_VIEW_TYPE, type PhraseParams, applyPhraseWrite, phraseWriteRefusal, isBarPath, mixTraceEngine, mixTraceRead, mixTraceWritten, morphTraceEngine, morphTraceWritten } from './phrase-core.ts';
+import { PHRASE_VIEW_TYPE, type PhraseParams, phraseWriteRefusal, isBarPath, mixTraceEngine, mixTraceRead, mixTraceWritten, morphTraceEngine, morphTraceWritten } from './phrase-core.ts';
 import { handEditRefused } from './hand-edit-refusal-core.ts';
+import { writePhraseStrip } from './sentence-list-note-core.ts';
 import { mountPhrase, type PhraseHandle } from './phrase-dom.ts';
 import { phraseTabTitle } from './phrase-tab-title-core.ts';
 import type { PinnedNote } from './linked-panes-core.ts';
@@ -115,7 +116,7 @@ export class PhraseView extends EditableFileView {
         let refusal: string | null = null;
         try {
           await this.app.vault.process(file, (text) => {
-            const w = applyPhraseWrite(text, params, file.basename);       // 2026-10-26-1260: the derived description, links and sections follow the json
+            const w = writePhraseStrip(text, file.basename, params, this.vaultNames());       // 2026-10-26-1260: the derived description, links and sections follow the json; 2026-11-19-0980: the Description is the LIST, edited in the smallest way that says these params (a slider writes or replaces a modifier line or the head)
             if (w.ok === false) { refusal = w.message; return text; }
             return w.text;
           });
@@ -145,6 +146,12 @@ export class PhraseView extends EditableFileView {
       messages: messageDelivery,                         // the same message line as the bar's Score: the panel stays closed
     });
     await this.handle.load();
+  }
+
+  /** The notes a sentence of the list may name, as the description controller sees them (the strip's write replays the list against them). */
+  private vaultNames(): { bars: string[]; phrases: string[]; arrangements: string[]; compositions: string[]; kits: string[] } {
+    const names = (folder: string): string[] => this.app.vault.getFiles().filter((f) => f.path.startsWith(`${folder}/`)).map((f) => f.basename).filter((n) => n !== 'README');
+    return { bars: names('bars'), phrases: names('phrases'), arrangements: names('arrangements'), compositions: names('compositions'), kits: names('kits') };
   }
 
   async onUnloadFile(file: TFile): Promise<void> {

@@ -44,9 +44,9 @@ test('every refusal names the field', () => {
   assert.match(msg(T({ source: 'phrases/phrase_006.md' })), /source must be a phrase note/);
   assert.match(msg(T({ source: 'bars/bar_005' })), /source must be a phrase note/);
   assert.match(msg(T({ source: 7 })), /source must be a phrase note/);
-  assert.match(msg(T({ ops: [] })), /ops must be a list of 1 to 16 operations/);
-  assert.match(msg(T({ ops: 'thin' })), /ops must be a list of 1 to 16 operations/);
-  assert.match(msg(T({ ops: Array.from({ length: TRANSFORM_OPS_MAX + 1 }, () => ({ op: 'double_up', first: 1, last: 1 })) })), /ops must be a list of 1 to 16/);
+  assert.equal(validatePhrase(T({ ops: [] })).ok, true, '2026-11-19-0980 (deliberate): no change at all is a phrase now (a copy of its source); it was "1 to 16 operations"');
+  assert.match(msg(T({ ops: 'thin' })), /ops must be a list of 0 to 16 operations/);
+  assert.match(msg(T({ ops: Array.from({ length: TRANSFORM_OPS_MAX + 1 }, () => ({ op: 'double_up', first: 1, last: 1 })) })), /ops must be a list of 0 to 16/);
   assert.match(msg(T({ ops: [null] })), /ops\[0\] must be an object/);
   assert.match(msg(T({ ops: [{ op: 'melt', first: 1, last: 1 }] })), /ops\[0\]\.op must be "thin_out", "double_up", "keep", "delete", "copy" or "move", got "melt"/);
   for (const [first, last] of [[0, 1], [2, 1], [1.5, 2], ['1', 2], [1, undefined], [-1, 2]]) {

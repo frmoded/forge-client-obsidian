@@ -150,7 +150,7 @@ test('A4 OPEN, CLOSE, REOPEN an empty note: NO file change at all (no write, no 
   }
 });
 
-test('A5 THE FIRST SENTENCE, typed in the composer (Enter previews, Enter applies), gives the note its kind and fills every facet; the composer then shows the canonical sentence (a phrase) or is empty (the list of an arrangement or a composition)', async () => {
+test('A5 THE FIRST SENTENCE, typed in the composer (Enter previews, Enter applies), gives the note its kind and fills every facet; the composer is then empty (the list of a phrase, an arrangement or a composition is in the note: 2026-11-19-0980 for a phrase)', async () => {
   const cases: Array<[typeof NOTES[number], string, (t: string) => unknown]> = [
     [NOTES[0], S_EXTEND, (t) => readPhraseKind(t)], [NOTES[0], S_MIX, (t) => readPhraseKind(t)],
     [NOTES[1], S_ARR, (t) => (readArrangementNote(t).ok ? 'arrangement' : null)], [NOTES[2], S_COMP, (t) => (readCompositionNote(t).ok ? 'composition' : null)],
@@ -166,7 +166,8 @@ test('A5 THE FIRST SENTENCE, typed in the composer (Enter previews, Enter applie
     assert.ok(/\S/.test(text.slice(text.indexOf('# Recipe'), text.indexOf('# Python'))), `${n.tag}: the Recipe is filled`);
     assert.ok(/def compute/.test(text), `${n.tag}: the Python is filled`);
     // 2026-11-19-0970 (the list model): a phrase's composer shows its sentence as ever; an arrangement's and a composition's Description is a LIST and the prompt line is for the next sentence: empty
-    assert.equal(fieldOf(el).value, n.path.startsWith('phrases/') ? sentence : '', `${n.tag}: the composer shows the sentence of a phrase and nothing for a list note`);
+    // 2026-11-19-0980 (deliberate): a phrase's Description is a list too (line 1 is its head): the composer shows nothing of it, for every kind
+    assert.equal(fieldOf(el).value, '', `${n.tag}: the composer shows nothing of the list`);
     assert.equal(r.writes.length, 1, `${n.tag}: one write, by the sentence`);
   }
   assert.deepEqual(got, ['extend', 'mix', 'arrangement', 'composition']);

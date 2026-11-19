@@ -103,45 +103,52 @@ test('NEW PHRASE FROM THESE BARS: always a new transform phrase whose sentence n
   assert.ok(scrambled.kind === 'new-phrase' && scrambled.sentence === gap.sentence);
 });
 
-test('THE OTHER ACTIONS on a transform phrase are a PREVIEW of its own Description: the step goes after its structure steps and before any Thin out / Double up, which keep their place', () => {
-  const p = planAction('delete', sel(3, 4), TRANSFORM, 'phrase_007', 8);
+// 2026-11-19-0980 (deliberate): a transform's step is APPENDED as the next line of its list (it was a preview in the prompt box), and it is NEVER re-sorted before a Thin out or a Double up: a phrase that has one makes a new phrase instead (a structure step comes first)
+const PLAIN: TransformPhrase = { kind: 'transform', source: 'phrases/phrase_006', ops: [] };
+test('THE OTHER ACTIONS on a transform phrase are APPENDED to its list (2026-11-19-0980: they were a preview in the box): the step goes after the steps it already has, and its sentence is the line', () => {
+  const p = planAction('delete', sel(3, 4), PLAIN, 'phrase_007', 8);
   assert.equal(p.kind, 'preview');
   if (p.kind !== 'preview') return;
   assert.equal(p.sentence, 'Delete bars 3 to 4.');
-  assert.equal(p.text, 'Take [[phrase_006]]. Delete bars 3 to 4. Thin out bars 1 to 2, by half, keeping the downbeat.');
-  const twice = planAction('copy', sel(1), { ...TRANSFORM, ops: [{ op: 'keep', runs: [[2, 6]] }, ...TRANSFORM.ops] }, 'phrase_007', 5);
-  assert.ok(twice.kind === 'preview' && twice.text === 'Take [[phrase_006]]. Keep bars 2 to 6. Copy bar 1. Thin out bars 1 to 2, by half, keeping the downbeat.');
-  // the text the box will hold is a description the grammar reads: it parses to the ops it was made from
+  assert.equal(p.text, 'Take [[phrase_006]]. Delete bars 3 to 4.');
+  const twice = planAction('copy', sel(1), { ...PLAIN, ops: [{ op: 'keep', runs: [[2, 6]] }] }, 'phrase_007', 5);
+  assert.ok(twice.kind === 'preview' && twice.text === 'Take [[phrase_006]]. Keep bars 2 to 6. Copy bar 1.' && twice.sentence === 'Copy bar 1.');
+  // the text a reader holds is a description the grammar reads: it parses to the ops it was made from
   for (const a of ['copy', 'delete', 'move-left', 'move-right'] as const) {
-    const q = planAction(a, sel(3, 4, 6), TRANSFORM, 'phrase_007', 8);
+    const q = planAction(a, sel(3, 4, 6), PLAIN, 'phrase_007', 8);
     assert.equal(q.kind, 'preview', a);
     if (q.kind !== 'preview') continue;
     const back = parse(q.text, VAULT);
     assert.ok(back.ok, `${a}: ${q.text}`);
-    assert.deepEqual((back as { params: TransformPhrase }).params.ops, [q.step, ...TRANSFORM.ops], a);
+    assert.deepEqual((back as { params: TransformPhrase }).params.ops, [q.step], a);
   }
 });
-
+test('2026-11-19-0980: a transform that has a Thin out or a Double up makes a NEW phrase for a structure step (the list is never re-sorted: the step would have to go before them)', () => {
+  const p = planAction('delete', sel(3, 4), TRANSFORM, 'phrase_007', 8);
+  assert.equal(p.kind, 'new-phrase');
+  assert.ok(p.kind === 'new-phrase' && p.sentence === 'Take [[phrase_007]]. Delete bars 3 to 4.' && /Thin out or a Double up/.test(p.because), JSON.stringify(p));
+  const dbl = planAction('copy', sel(1), { ...PLAIN, ops: [{ op: 'double_up', first: 1, last: 2, grid: 16 }] }, 'phrase_007', 8);
+  assert.equal(dbl.kind, 'new-phrase');
+});
 test('A PHRASE THAT CANNOT TAKE THE STEP INTO ITS OWN DESCRIPTION makes a new transform phrase of itself instead: an extend, a morph, a mix, a transform with edited bars', () => {
   for (const current of [EXTEND, { kind: 'morph', a: 'bar_005', b: 'bar_007', bars: 5, order: 'musical', seed: 0 }, { kind: 'mix', a: 'bar_005', b: 'bar_007', weight: 0.5, threshold: 0.5, ghost: false }] as PhraseParams[]) {
     const p = planAction('delete', sel(2), current, 'phrase_007', 5);
     assert.equal(p.kind, 'new-phrase', current.kind);
     assert.ok(p.kind === 'new-phrase' && p.sentence === 'Take [[phrase_007]]. Delete bar 2.' && /not a transform/.test(p.because));
   }
-  const forked: TransformPhrase = { ...TRANSFORM, overrides: { '2': 'bars/bar_007' } };
+  const forked: TransformPhrase = { ...PLAIN, overrides: { '2': 'bars/bar_007' } };
   const f = planAction('move-left', sel(3), forked, 'phrase_007', 8);
   assert.ok(f.kind === 'new-phrase' && f.sentence === 'Take [[phrase_007]]. Move bar 3 one bar left.' && /bars you edited/.test(f.because));
-  const noForks = planAction('copy', sel(3), { ...TRANSFORM, overrides: {} }, 'phrase_007', 8);
+  const noForks = planAction('copy', sel(3), { ...PLAIN, overrides: {} }, 'phrase_007', 8);
   assert.equal(noForks.kind, 'preview');                                                       // an empty overrides object is no fork
 });
-
 test('REFUSED with the reason: every action on nothing, and the greyed cases, in every kind of phrase; a step that would make the phrase invalid (more than 16 steps)', () => {
   assert.deepEqual(planAction('delete', NO_SELECTION, TRANSFORM, 'phrase_007', 8), { kind: 'refused', message: 'Select some bars first.' });
   assert.deepEqual(planAction('move-left', sel(1), EXTEND, 'phrase_007', 8), { kind: 'refused', message: 'Bar 1 cannot move left.' });
   assert.deepEqual(planAction('delete', selectRange(1, 3), EXTEND, 'phrase_007', 3), { kind: 'refused', message: 'That would leave no bars.' });
   const full: TransformPhrase = { ...TRANSFORM, ops: Array.from({ length: 16 }, () => ({ op: 'copy' as const, runs: [[1, 1]] as Array<[number, number]> })) };
   const over = planAction('copy', sel(2), full, 'phrase_007', 20);
-  assert.ok(over.kind === 'refused' && /1 to 16 operations/.test(over.message), JSON.stringify(over));
+  assert.ok(over.kind === 'refused' && /0 to 16 operations/.test(over.message), JSON.stringify(over));      // 2026-11-19-0980 (deliberate): zero changes is a phrase now (a copy), so the range is 0 to 16
 });
 
 // ---- 2026-11-16-1000, from the mutation pass (446 mutants on bar-structure-core.ts and this file: 404 killed, the logic ones that survived are killed by what follows) ----------------------------------------------------------------

@@ -14,6 +14,7 @@ import { computeFacetStates, FacetState } from './facet-state-core.ts';
 import { sourceLayerStatusOf } from './source-layer-status-of-body-core.ts';
 import { facetHashSync } from './facet-sync-hash-core.ts';
 import { withoutDescription } from './test-support/sentence-list-fixtures.ts';
+import { asListNote } from './test-support/phrase-list-fixtures.ts';
 import { extractDescription, extractRecipeSection, getFrontmatterField } from './v2-note-core.ts';
 
 const VAULT = { bars: ['bar_007', 'bar_008'], phrases: ['phrase_001', 'phrase_003', 'phrase_009'], arrangements: ['arr_001'], compositions: ['comp_001'], kits: ['rock', 'latin'] };
@@ -34,7 +35,7 @@ test('"8 bars" -> "6 bars" in the RECIPE: it is APPLIED; the note is the one the
   const done = applyRecipeText(edited, 'phrase_001', 'phrase', VAULT, st.recipe);
   assert.equal(done.ok, true);
   if (!done.ok) return;
-  assert.equal(done.text, asRecipeSourced(note({ ...EXTEND, bars: 6 })), 'byte for byte what the controls make, as a Recipe-sourced note');
+  assert.equal(done.text, asRecipeSourced(asListNote(note({ ...EXTEND, bars: 6 }), 'phrase_001')), 'byte for byte what the controls make, as a Recipe-sourced note'); // 2026-11-19-0980 (deliberate): a phrase's Description is a numbered list now: the note a write leaves is the list note
   assert.equal(sourceFacetOf(done.text), 'recipe');
   assert.equal(fm(done.text, RECIPE_SOURCE_KEY), facetHashSync(extractRecipeSection(done.text) ?? ''), 'the Description is stamped as derived from THIS Recipe');
   assert.deepEqual(descriptionState(done.text, 'phrase', VAULT), { kind: 'synced' }, 'and it is synced again');
@@ -143,10 +144,10 @@ test('BOTH edited: nothing is applied and the sentence names both; "Update from 
   assert.equal(BOTH_EDITED, 'Description and Recipe were both edited; keep one: Update from Description / Update from Recipe.');
   const fromDescription = applyDescriptionText(both, 'phrase_001', 'phrase', VAULT, extractDescription(both), 'description');
   assert.ok(fromDescription.ok);
-  if (fromDescription.ok) assert.equal(fromDescription.text, note({ ...EXTEND, bars: 5 }), 'the Description\'s 5 bars, written as the controls write (a Description-sourced note)');
+  if (fromDescription.ok) assert.equal(fromDescription.text, asListNote(note({ ...EXTEND, bars: 5 }), 'phrase_001'), 'the Description\'s 5 bars, written as the controls write (a Description-sourced note)'); // 2026-11-19-0980 (deliberate): a phrase's Description is a numbered list now: the note a write leaves is the list note
   const fromRecipe = applyRecipeText(both, 'phrase_001', 'phrase', VAULT, extractRecipeSection(both) ?? '');
   assert.ok(fromRecipe.ok);
-  if (fromRecipe.ok) assert.equal(fromRecipe.text, asRecipeSourced(note({ ...EXTEND, bars: 6 })), 'the Recipe\'s 6 bars');
+  if (fromRecipe.ok) assert.equal(fromRecipe.text, asRecipeSourced(asListNote(note({ ...EXTEND, bars: 6 }), 'phrase_001')), 'the Recipe\'s 6 bars'); // 2026-11-19-0980 (deliberate): a phrase's Description is a numbered list now: the note a write leaves is the list note
   // pressing neither button (no `prefer`) applies nothing
   const none = applyDescriptionText(both, 'phrase_001', 'phrase', VAULT, extractDescription(both));
   assert.deepEqual(none, { ok: false, message: BOTH_EDITED, stale: true });
@@ -209,9 +210,9 @@ test('a control\'s write on a Recipe-sourced note makes it Description-sourced a
 test('Revert on a Recipe edit: the json cache says the last good note, every derived part with it (the Recipe edit is dropped), whether the Recipe parsed or not', () => {
   const edited = editRecipe(note(), '8 bars', '6 bars');
   const r = revertDescriptionText(edited, 'phrase_001', 'phrase');
-  assert.deepEqual(r, { ok: true, text: note() });
+  assert.deepEqual(r, { ok: true, text: asListNote(note(), 'phrase_001') }); // 2026-11-19-0980 (deliberate): a phrase's Description is a numbered list now: the note a write leaves is the list note
   const broken = note().replace(extractRecipeSection(note()) ?? '', 'Sprinkle.');
-  assert.deepEqual(revertDescriptionText(broken, 'phrase_001', 'phrase'), { ok: true, text: note() });
+  assert.deepEqual(revertDescriptionText(broken, 'phrase_001', 'phrase'), { ok: true, text: asListNote(note(), 'phrase_001') });
   assert.equal(recipeRevertedLine('phrase_001'), '[forge-recipe] reverted phrase_001 to the json cache');
   assert.equal(recipeAppliedLine('phrase_001', '8 -> 6 bars'), '[forge-recipe] applied phrase_001 (8 -> 6 bars)');
 });

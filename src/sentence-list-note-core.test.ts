@@ -188,17 +188,18 @@ test('a control that changes a kit\'s mute rewrites the Description as the parag
 });
 
 // ---- P3: phrases, bars and notes that are not music are untouched ----------------------------------------------------------------------------------------------------------------------------
-test('P3: a PHRASE is written exactly as before (a paragraph Description, no list); the phrase and the empty phrase are not read as lists', () => {
+test('2026-11-19-0980 (stage 2, deliberate; it was "P3: a PHRASE is written exactly as before (a paragraph Description, no list)"): a PHRASE is written as a LIST by every writer of its Description; a synced phrase has nothing to apply; the empty phrase is synced', () => {
   const ext: PhraseParams = { kind: 'extend', source: 'bar_007', bars: 8, style: 'repeat_with_fills', tempo_change_pct: -20 };
   const note = newPhraseNote('phrase_003', ext, formatPhraseJson(ext));
   const next: PhraseParams = { ...ext, bars: 6 };
   const w = writeFromParams(note, 'phrase_003', 'phrase', next); const old = applyPhraseWrite(note, next, 'phrase_003', true);
-  assert.ok(w.ok && old.ok); assert.equal((w as { text: string }).text, (old as { text: string }).text, 'byte for byte the old writer\'s');
+  assert.ok(w.ok && old.ok); assert.equal(extractDescription((w as { text: string }).text), '1. Extend [[bar_007]] to 6 bars, repeating with fills, 20 percent slower.', 'the Description is the list of its canonical sentences');
+  assert.equal(extractDescription((old as { text: string }).text), 'Extend [[bar_007]] to 6 bars, repeating with fills, 20 percent slower.', 'the old single-sentence writer (applyPhraseWrite, used when a note is first made from params) is unchanged');
   const d = applyDescriptionText(note, 'phrase_003', 'phrase', VAULT, extractDescription(note));
   assert.equal(d.ok, false, 'a synced phrase has nothing to apply');
   const edit = note.replace(/(# Description\n\n)[\s\S]*?(\n\n# Recipe)/, '$1Extend [[bar_007]] to 6 bars, repeating with fills, 20 percent slower.$2');
   const a = applyDescriptionText(edit, 'phrase_003', 'phrase', VAULT, 'Extend [[bar_007]] to 6 bars, repeating with fills, 20 percent slower.'); assert.ok(a.ok);
-  assert.ok(!/^1\. /m.test(extractDescription((a as { text: string }).text)), 'a phrase\'s Description stays a sentence');
+  assert.ok(/^1\. /m.test(extractDescription((a as { text: string }).text)), 'a phrase\'s Description is a list now (stage 2)');
   assert.equal(descriptionState(emptyPhraseNote('phrase_001'), 'phrase', VAULT).kind, 'synced');
 });
 

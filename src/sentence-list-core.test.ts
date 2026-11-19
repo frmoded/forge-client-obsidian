@@ -239,7 +239,7 @@ test('a line that draws random choices keeps its SEED in its canonical text, and
   const m = replayGrammar([mix], 'phrase', ctx); assert.equal(m.stop, null); assert.deepEqual(m.list, [mix], 'a seeded mix keeps its seed too');
   assert.deepEqual(replayGrammar(m.list, 'phrase', ctx).params, m.params, 'replaying the canonical list is the same replay');
   const alone = replayGrammar(['Take [[phrase_001]].'], 'phrase', ctx);
-  assert.equal(alone.applied, 0, 'a phrase\'s "Take" line alone says nothing yet (stage 2: what a phrase\'s first line must be)');
+  assert.equal(alone.applied, 1, 'a phrase\'s "Take" line alone is a copy of its source');       // 2026-11-19-0980 (deliberate): it said nothing yet (stage 1: "what a phrase\'s first line must be" was stage 2\'s question); `Take [[x]].` alone is a copy now
 });
 
 // ---- planAppend: what a typed sentence becomes ------------------------------------------------------------------------------------------------------------------------------------------------------

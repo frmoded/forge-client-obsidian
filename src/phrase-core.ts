@@ -12,6 +12,7 @@
 // bar" decision and its action with the vault injected, and the Score of a phrase with the engine injected. The gate (score-first vault or not) is an INPUT here; it is read in one place,
 // score-first.ts, like every other score-first decision.
 
+import { extractDescription } from './v2-note-core.ts';
 import { editabilityProblem, parseFrontmatter, readRhythmNote, type RhythmData, type Validation } from './rhythm-edit-core.ts';
 import { extractPhraseJsonBlock, handEditRefusalOf, isCustomNote, keepRecipeSource, newPhraseNote, renderPhraseNote } from './phrase-notes-core.ts';
 import { EMPTY_SOURCE, emptyPhraseNote, isEmptyNote } from './empty-note-core.ts';
@@ -64,6 +65,8 @@ export interface ExtendPhrase {
   tempo_change_pct: number;
   /** M9 (fork on edit): bar number (1-based, as a string key) -> the bar note that stands in for that generated bar (`bars/bar_NNN`, no .md). Absent = every bar is generated. */
   overrides?: Record<string, string>;
+  /** 2026-11-19-0980 (the list model, stage 2): the STRUCTURE steps (Keep, Delete, Copy, Move) that follow the head, in order, run on the bars the head made. Absent = none (every note written before has none and reads back exactly as before). With steps, `overrides` number the bars AFTER them, as a take's do. */
+  ops?: StructureOp[];
 }
 
 /** A bar as a weighted mix of two bars (`mix_rhythm` in forge/music/lib.py). `weight` is the weight of `a` (1 = all a, 0 = all b); a hit is placed where the weights reach `threshold`. */
@@ -81,6 +84,8 @@ export interface MixPhrase {
   order?: MorphOrder;
   /** Only in path mode (seeded order). */
   seed?: number;
+  /** 2026-11-19-0980: structure steps after the head (see ExtendPhrase.ops). */
+  ops?: StructureOp[];
 }
 export const MIX_MODES = ['vote', 'path'] as const;
 export type MixMode = typeof MIX_MODES[number];
@@ -98,12 +103,14 @@ export interface MorphPhrase {
   position?: number;
   /** M7c Phase B (fork on edit, as an extend's): bar number (1-based, as a string key) -> the bar note that stands in for that morph bar (`bars/bar_NNN`, no .md). Absent = every bar is generated. */
   overrides?: Record<string, string>;
+  /** 2026-11-19-0980: structure steps after the head; `overrides` then number the bars after them (see ExtendPhrase.ops). */
+  ops?: StructureOp[];
 }
 
 export const MORPH_ORDERS = ['musical', 'seeded', 'by_channel'] as const;
 export type MorphOrder = typeof MORPH_ORDERS[number];
 export const MORPH_DEFAULTS = { bars: 5, order: 'musical' as MorphOrder, seed: 0 };
-export const MORPH_KEYS = ['kind', 'a', 'b', 'bars', 'order', 'seed', 'position', 'overrides'] as const;
+export const MORPH_KEYS = ['kind', 'a', 'b', 'bars', 'order', 'seed', 'position', 'overrides', 'ops'] as const;
 
 /** 2026-10-27-1030 (M14 slice 1, design 4.13): a TRANSFORM changes a region of another phrase's bars. `source` is a phrase note id (`phrases/phrase_006`, no .md); `ops` run in order over the bars the source makes
  *  (`thin_out_bars` / `double_up_bars` in forge/music/lib.py: a 1-based inclusive range of bars and an optional row, i.e. a channel name). Bar numbers are those of the source's bars (a transform keeps their count).
@@ -149,9 +156,9 @@ export interface TransformInput { bars: RhythmData[] }
 
 export const MIX_DEFAULTS = { weight: 0.5, threshold: 0.5, ghost: false };
 
-export const PHRASE_KEYS = ['kind', 'source', 'bars', 'style', 'tempo_change_pct', 'overrides'] as const;
+export const PHRASE_KEYS = ['kind', 'source', 'bars', 'style', 'tempo_change_pct', 'overrides', 'ops'] as const;
 const OVERRIDE_NOTE = /^bars\/bar_\d+$/;
-export const MIX_KEYS = ['kind', 'a', 'b', 'weight', 'threshold', 'ghost', 'mode', 'order', 'seed'] as const;
+export const MIX_KEYS = ['kind', 'a', 'b', 'weight', 'threshold', 'ghost', 'mode', 'order', 'seed', 'ops'] as const;
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -185,9 +192,25 @@ export function validatePhrase(raw: unknown): Validation<PhraseParams> {
   if (typeof pct !== 'number' || !Number.isFinite(pct) || pct < PHRASE_PCT_MIN || pct > PHRASE_PCT_MAX) {
     return bad(`tempo_change_pct must be a number from ${PHRASE_PCT_MIN} to ${PHRASE_PCT_MAX}, got ${JSON.stringify(raw.tempo_change_pct)}.`);
   }
-  const overrides = validateOverrides(raw.overrides, bars);
+  const steps = validateHeadSteps(raw.ops);
+  if (typeof steps === 'string') return bad(steps);
+  const overrides = validateOverrides(raw.overrides, steps ? Number.MAX_SAFE_INTEGER : bars);          // with steps the forks number the bars AFTER them (what the head's own length cannot bound)
   if (typeof overrides === 'string') return bad(overrides);
-  return { ok: true, value: { kind: 'extend', source, bars, style: style as PhraseStyle, tempo_change_pct: pct, ...(overrides ? { overrides } : {}) } };
+  return { ok: true, value: { kind: 'extend', source, bars, style: style as PhraseStyle, tempo_change_pct: pct, ...(overrides ? { overrides } : {}), ...(steps ? { ops: steps } : {}) } };
+}
+
+/** 2026-11-19-0980: the `ops` of an extend, a mix or a morph: STRUCTURE steps only (Keep, Delete, Copy, Move; a thin out and a double up are for a take). `[]` and absent are the same: none. Returns the steps, undefined for none, or a refusal. */
+function validateHeadSteps(raw: unknown): StructureOp[] | undefined | string {
+  if (raw === undefined) return undefined;
+  if (!Array.isArray(raw) || raw.length > TRANSFORM_OPS_MAX) return `ops must be a list of 0 to ${TRANSFORM_OPS_MAX} steps, got ${Array.isArray(raw) ? `${raw.length}` : JSON.stringify(raw)}.`;
+  const out: StructureOp[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const op = validateTransformOp(raw[i], i);
+    if (typeof op === 'string') return op;
+    if (!isStructureOp(op)) return `ops[${i}]: only a change of which bars there are (keep, delete, copy, move) can follow an extend, a mix or a morph, got ${op.op} (a thin out and a double up are for a take).`;
+    out.push(op);
+  }
+  return out.length > 0 ? out : undefined;
 }
 
 /** M9: `overrides` is {"<bar number>": "bars/bar_NNN"}; the keys are whole bar numbers of THIS phrase, the values bar note paths. `{}` is no override. Returns the cleaned map (keys in numeric order), undefined for none, or a refusal. */
@@ -256,7 +279,9 @@ function validateMix(raw: Record<string, unknown>): Validation<PhraseParams> {
   // 2026-10-26-0900: the mode. Absent = a vote mix and the value carries no new field (a mix note that never had one reads back exactly as before); order and seed belong to path mode only.
   const mode = raw.mode;
   if (mode !== undefined && mode !== 'vote' && mode !== 'path') return bad(`mode must be "vote" or "path", got ${JSON.stringify(raw.mode)}.`);
-  const base = { kind: 'mix' as const, a: raw.a as string, b: raw.b as string, weight, threshold, ghost };
+  const steps = validateHeadSteps(raw.ops);
+  if (typeof steps === 'string') return bad(steps);
+  const base = { kind: 'mix' as const, a: raw.a as string, b: raw.b as string, weight, threshold, ghost, ...(steps ? { ops: steps } : {}) };
   if (mode !== 'path') {
     for (const field of ['order', 'seed'] as const) if (raw[field] !== undefined) return bad(`${field} only applies in path mode (set "mode": "path").`);
     return { ok: true, value: mode === 'vote' ? { ...base, mode: 'vote' } : base };
@@ -276,8 +301,9 @@ function validateTransform(raw: Record<string, unknown>): Validation<PhraseParam
   if (typeof raw.source !== 'string' || !TRANSFORM_SOURCE.test(raw.source)) {
     return bad(`source must be a phrase note without .md, like phrases/phrase_006, an arrangement note, like arrangements/arr_001, or a composition note, like compositions/intro, got ${JSON.stringify(raw.source)}.`);
   }
-  if (!Array.isArray(raw.ops) || raw.ops.length < 1 || raw.ops.length > TRANSFORM_OPS_MAX) {
-    return bad(`ops must be a list of 1 to ${TRANSFORM_OPS_MAX} operations, got ${Array.isArray(raw.ops) ? `${raw.ops.length}` : JSON.stringify(raw.ops)}.`);
+  // 2026-11-19-0980 (deliberate): ZERO changes is a phrase now - `Take [[x]].` alone is a copy of x (it was 1 to 16)
+  if (!Array.isArray(raw.ops) || raw.ops.length > TRANSFORM_OPS_MAX) {
+    return bad(`ops must be a list of 0 to ${TRANSFORM_OPS_MAX} operations, got ${Array.isArray(raw.ops) ? `${raw.ops.length}` : JSON.stringify(raw.ops)}.`);
   }
   const ops: TransformOp[] = [];
   for (let i = 0; i < raw.ops.length; i++) {
@@ -371,9 +397,11 @@ function validateMorph(raw: Record<string, unknown>): Validation<PhraseParams> {
   } else if (position !== undefined) {
     return bad('position only applies when bars is 1.');
   }
-  const overrides = validateOverrides(raw.overrides, bars);
+  const steps = validateHeadSteps(raw.ops);
+  if (typeof steps === 'string') return bad(steps);
+  const overrides = validateOverrides(raw.overrides, steps ? Number.MAX_SAFE_INTEGER : bars);
   if (typeof overrides === 'string') return bad(overrides);
-  return { ok: true, value: { kind: 'morph', a: raw.a as string, b: raw.b as string, bars, order: order as MorphOrder, seed, ...(bars === 1 ? { position: position as number } : {}), ...(overrides ? { overrides } : {}) } };
+  return { ok: true, value: { kind: 'morph', a: raw.a as string, b: raw.b as string, bars, order: order as MorphOrder, seed, ...(bars === 1 ? { position: position as number } : {}), ...(overrides ? { overrides } : {}), ...(steps ? { ops: steps } : {}) } };
 }
 
 /** What the morph strip writes: the position only while bars = 1 (0 when it was not there), never otherwise. Pure; the strip and the write both go through it, so a note never holds a position it ignores. */
@@ -516,59 +544,34 @@ export function formatTransformOp(o: TransformOp): string {
   return `{${parts.join(', ')}}`;
 }
 
+/** The json lines of an object: `fields` are single lines (`  "k": v`), `blocks` are multi-line values (an `overrides` map, an `ops` list); every line that is not the last gets its comma. */
+function jsonLines(fields: string[], blocks: string[][]): string[] {
+  const all = [...fields.map((f) => [f]), ...blocks];
+  return ['{', ...all.flatMap((b, i) => b.map((line, j) => (j === b.length - 1 && i < all.length - 1 ? `${line},` : line))), '}'];
+}
+const overridesBlock = (o: Record<string, string> | undefined): string[][] => (o ? [['  "overrides": {', ...Object.keys(o).sort((x, y) => Number(x) - Number(y)).map((k, i, all) => `    ${JSON.stringify(k)}: ${JSON.stringify(o[k])}${i < all.length - 1 ? ',' : ''}`), '  }']] : []);
+/** The `ops` list of a transform (always there: an empty list is a copy) or of a head with steps (only when there are some). */
+const opsBlock = (ops: readonly TransformOp[] | undefined, always: boolean): string[][] => (ops !== undefined && (always || ops.length > 0) ? [['  "ops": [', ...ops.map((o, i) => `    ${formatTransformOp(o)}${i < ops.length - 1 ? ',' : ''}`), '  ]']] : []);
+
 /** The block's text, field order as in the design. */
 export function formatPhraseJson(p: PhraseParams): string {
   if (p.kind === 'mix') {
-    return [
-      '{',
-      `  "kind": "mix",`,
-      `  "a": ${JSON.stringify(p.a)},`,
-      `  "b": ${JSON.stringify(p.b)},`,
-      `  "weight": ${p.weight},`,
-      `  "threshold": ${p.threshold},`,
-      `  "ghost": ${p.ghost}${p.mode !== undefined ? ',' : ''}`,
-      ...(p.mode !== undefined ? [`  "mode": ${JSON.stringify(p.mode)}${p.mode === 'path' ? ',' : ''}`] : []),
-      ...(p.mode === 'path' ? [`  "order": ${JSON.stringify(p.order ?? MORPH_DEFAULTS.order)},`, `  "seed": ${p.seed ?? MORPH_DEFAULTS.seed}`] : []),
-      '}',
-    ].join('\n');
+    return jsonLines([
+      `  "kind": "mix"`, `  "a": ${JSON.stringify(p.a)}`, `  "b": ${JSON.stringify(p.b)}`, `  "weight": ${p.weight}`, `  "threshold": ${p.threshold}`, `  "ghost": ${p.ghost}`,
+      ...(p.mode !== undefined ? [`  "mode": ${JSON.stringify(p.mode)}`] : []),
+      ...(p.mode === 'path' ? [`  "order": ${JSON.stringify(p.order ?? MORPH_DEFAULTS.order)}`, `  "seed": ${p.seed ?? MORPH_DEFAULTS.seed}`] : []),
+    ], opsBlock(p.ops, false)).join('\n');
   }
-  if (p.kind === 'transform') {
-    const oneOp = formatTransformOp;
-    return [
-      '{',
-      `  "kind": "transform",`,
-      `  "source": ${JSON.stringify(p.source)},`,
-      '  "ops": [',
-      ...p.ops.map((o, i) => `    ${oneOp(o)}${i < p.ops.length - 1 ? ',' : ''}`),
-      `  ]${p.overrides ? ',' : ''}`,
-      ...(p.overrides ? ['  "overrides": {', ...Object.keys(p.overrides).sort((x, y) => Number(x) - Number(y)).map((k, i, all) => `    ${JSON.stringify(k)}: ${JSON.stringify(p.overrides![k])}${i < all.length - 1 ? ',' : ''}`), '  }'] : []),
-      '}',
-    ].join('\n');
-  }
+  if (p.kind === 'transform') return jsonLines([`  "kind": "transform"`, `  "source": ${JSON.stringify(p.source)}`], [...opsBlock(p.ops, true), ...overridesBlock(p.overrides)]).join('\n');
   if (p.kind === 'morph') {
-    return [
-      '{',
-      `  "kind": "morph",`,
-      `  "a": ${JSON.stringify(p.a)},`,
-      `  "b": ${JSON.stringify(p.b)},`,
-      `  "bars": ${p.bars},`,
-      `  "order": ${JSON.stringify(p.order)},`,
-      `  "seed": ${p.seed}${p.position !== undefined || p.overrides ? ',' : ''}`,
-      ...(p.position !== undefined ? [`  "position": ${p.position}${p.overrides ? ',' : ''}`] : []),
-      ...(p.overrides ? ['  "overrides": {', ...Object.keys(p.overrides).sort((x, y) => Number(x) - Number(y)).map((k, i, all) => `    ${JSON.stringify(k)}: ${JSON.stringify(p.overrides![k])}${i < all.length - 1 ? ',' : ''}`), '  }'] : []),
-      '}',
-    ].join('\n');
+    return jsonLines([
+      `  "kind": "morph"`, `  "a": ${JSON.stringify(p.a)}`, `  "b": ${JSON.stringify(p.b)}`, `  "bars": ${p.bars}`, `  "order": ${JSON.stringify(p.order)}`, `  "seed": ${p.seed}`,
+      ...(p.position !== undefined ? [`  "position": ${p.position}`] : []),
+    ], [...overridesBlock(p.overrides), ...opsBlock(p.ops, false)]).join('\n');
   }
-  return [
-    '{',
-    `  "kind": ${JSON.stringify(p.kind)},`,
-    `  "source": ${JSON.stringify(p.source)},`,
-    `  "bars": ${p.bars},`,
-    `  "style": ${JSON.stringify(p.style)},`,
-    `  "tempo_change_pct": ${p.tempo_change_pct}${p.overrides ? ',' : ''}`,
-    ...(p.overrides ? ['  "overrides": {', ...Object.keys(p.overrides).sort((x, y) => Number(x) - Number(y)).map((k, i, all) => `    ${JSON.stringify(k)}: ${JSON.stringify(p.overrides![k])}${i < all.length - 1 ? ',' : ''}`), '  }'] : []),
-    '}',
-  ].join('\n');
+  return jsonLines([
+    `  "kind": ${JSON.stringify(p.kind)}`, `  "source": ${JSON.stringify(p.source)}`, `  "bars": ${p.bars}`, `  "style": ${JSON.stringify(p.style)}`, `  "tempo_change_pct": ${p.tempo_change_pct}`,
+  ], [...overridesBlock(p.overrides), ...opsBlock(p.ops, false)]).join('\n');
 }
 
 /** 2026-10-31-1120: THE one decision "may a control write this phrase note now?": null = yes, else the sentence that says why not. `applyPhraseWrite` asks it inside the atomic write, and anything that does work BEFORE the write
@@ -590,7 +593,7 @@ export function phraseWriteRefusal(currentText: string, name?: string, applyingD
 
 /** A control-strip edit, as a pure rewrite of the note's CURRENT text: only the json block's content changes, every other byte (frontmatter, line endings) is kept. Refused for a note that
  *  is not an editable data note (including `read_only: true`, constitution D7). The caller runs it inside one atomic read-modify-write. */
-export function applyPhraseWrite(currentText: string, p: PhraseParams, name?: string, applyingDescription = false): { ok: true; text: string } | { ok: false; message: string } {
+export function applyPhraseWrite(currentText: string, p: PhraseParams, name?: string, applyingDescription = false, sentence?: string): { ok: true; text: string } | { ok: false; message: string } {
   const refusal = phraseWriteRefusal(currentText, name, applyingDescription);
   if (refusal !== null) return { ok: false, message: refusal };
   const block = extractPhraseJsonBlock(currentText);
@@ -600,7 +603,7 @@ export function applyPhraseWrite(currentText: string, p: PhraseParams, name?: st
   // 2026-10-26-1260: with the note's name, the derived parts (description, links, Description / Recipe / Python) are regenerated from the params just written, so they never disagree with the json (since M15b the Description is the grammar's sentence and the note carries the Forge hash fields). Without it: the fence only, as before.
   if (name === undefined) return { ok: true, text };
   const again = extractPhraseJsonBlock(text);
-  return { ok: true, text: again.ok ? renderPhraseNote(text, name, p, again.fenceStart) : text };
+  return { ok: true, text: again.ok ? renderPhraseNote(text, name, p, again.fenceStart, sentence) : text };
 }
 
 /** "Refresh note links" on one phrase note: its derived parts regenerated from its json (the fence and its trailing bytes untouched). Idempotent: `changed` is false when nothing differs. Refuses a note it cannot read, with the reason. */
@@ -612,7 +615,8 @@ export function refreshPhraseNoteText(text: string, name: string): { ok: true; t
   if (block.ok === false) return { ok: false, message: block.message };
   const lost = handEditRefusalOf(text, false);
   if (lost !== null) return { ok: false, message: lost };
-  const next = keepRecipeSource(text, renderPhraseNote(text, name, read.value, block.fenceStart));
+  const desc = extractDescription(text);
+  const next = keepRecipeSource(text, renderPhraseNote(text, name, read.value, block.fenceStart, /^\s*1[.)]\s/.test(desc) ? desc : undefined));       // 2026-11-19-0980: a phrase whose Description is a LIST keeps it (a refresh makes the derived parts again, never the sentences), as an arrangement's does
   return { ok: true, text: next, changed: next !== text };
 }
 
@@ -962,6 +966,7 @@ export async function producePhrase(deps: PhraseScoreDeps, raw: unknown, title: 
 export const TRANSFORM_DEPTH_MAX = 6;
 
 async function produceValidated(deps: PhraseScoreDeps, params: PhraseParams, title: string, chain: string[]): Promise<ScoreOutcome> {
+  if (params.kind !== 'transform' && params.ops !== undefined && params.ops.length > 0) return produceWithSteps(deps, params, title, chain);       // 2026-11-19-0980: a head followed by structure steps
   if (params.kind === 'mix') return produceMix(deps, params, title);
   if (params.kind === 'morph') return produceMorph(deps, params, title);
   if (params.kind === 'transform') return produceTransform(deps, params, title, chain);
@@ -991,6 +996,30 @@ async function produceValidated(deps: PhraseScoreDeps, params: PhraseParams, tit
   const withForks = { ...params, override_bars: forks } as unknown as PhraseParams;
   const out = await computeScore((data, t) => asked(data as RhythmData, withForks, t), bar.value.data, title);
   return refused !== null ? { kind: 'refusal', message: `Phrase: ${refused}` } : out;
+}
+
+/**
+ * 2026-11-19-0980 (the list model, stage 2) - the Score of an extend, a mix or a morph that is followed by STRUCTURE steps ("Extend [[a]] to 6 bars. Keep bars 1 to 2."): the head is drawn first, exactly as it is without the steps (a phrase with no step
+ * never reaches this function: its engine call is what it always was), the bars it made go through the steps in TypeScript (bar-structure-core.ts, the same as a take's), and the bars that are left go to the engine as a take with no density change,
+ * so one code path draws them (and the forks, which number the bars AFTER the steps, lie over the result as a take's do). The head's own fork notes are not asked of the head: they belong to the final bars.
+ */
+async function produceWithSteps(deps: PhraseScoreDeps, params: ExtendPhrase | MixPhrase | MorphPhrase, title: string, chain: string[]): Promise<ScoreOutcome> {
+  const { ops, ...rest } = params;
+  const overrides = 'overrides' in rest ? rest.overrides : undefined;
+  const head = ('overrides' in rest ? (({ overrides: _o, ...h }) => h)(rest) : rest) as PhraseParams;
+  const made = await produceValidated(deps, head, title, chain);
+  if (made.kind !== 'score') return made;
+  const bars = barsOfPayload(made.payload);
+  if (bars === null) return { kind: 'refusal', message: `Phrase: the ${params.kind} gave no bars to change.` };
+  const done = applyStructureOps(bars, ops!);
+  if (done.ok === false) return { kind: 'refusal', message: `Phrase: the ${params.kind} has ${bars.length} bar${bars.length === 1 ? '' : 's'}; ${done.message}` };
+  let asked: PhraseParams = { kind: 'transform', source: 'phrases/head', ops: [] };
+  if (overrides) {
+    const forks = await readForks(deps, overrides, bars[0], `the bars of the ${params.kind}`);
+    if (typeof forks === 'string') return { kind: 'refusal', message: `Phrase: ${forks}` };
+    asked = { ...asked, override_bars: forks } as unknown as PhraseParams;
+  }
+  return computeScore(async (_data, t) => deps.compute({ bars: done.items }, asked, t), bars[0], title);
 }
 
 /** The data of every fork note of a phrase, by bar number, or the reason one cannot be used (naming the bar and the note). Each distinct note is read once. */

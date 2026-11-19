@@ -51,10 +51,10 @@ test('hand-edited morph JSON that is wrong is refused naming the field (never co
   assert.match(refusal({ bars: 1, position: -1 }), /^position must be a whole number, 0 or more, got -1\.$/);
   assert.match(refusal({ bars: 1, position: 0.5 }), /^position must be a whole number/);
   assert.match(refusal({ bars: 3, position: 1 }), /^position only applies when bars is 1\.$/);
-  assert.match(refusal({ speed: 3 }), /^Unexpected field "speed" \(a morph holds only kind, a, b, bars, order, seed, position, overrides\)\.$/);
+  assert.match(refusal({ speed: 3 }), /^Unexpected field "speed" \(a morph holds only kind, a, b, bars, order, seed, position, overrides, ops\)\.$/);   // 2026-11-19-0980 (deliberate): `ops` (the structure steps after a head) is a new key of every head
   assert.match(refusal({ a: 'bars/bar_005' }), /^a must be the name of a bar/);
   assert.match(refusal({ b: undefined }), /^b must be the name of a bar/);
-  assert.deepEqual([...MORPH_KEYS], ['kind', 'a', 'b', 'bars', 'order', 'seed', 'position', 'overrides']);
+  assert.deepEqual([...MORPH_KEYS], ['kind', 'a', 'b', 'bars', 'order', 'seed', 'position', 'overrides', 'ops']);   // 2026-11-19-0980 (deliberate): `ops` (the structure steps after a head) is a new key of every head
   assert.deepEqual([...MORPH_ORDERS], ['musical', 'seeded', 'by_channel']);
 });
 

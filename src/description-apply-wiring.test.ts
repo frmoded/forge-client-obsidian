@@ -17,6 +17,7 @@ import { extractDescription, extractRecipeSection } from './v2-note-core.ts';
 import { BOTH_EDITED } from './recipe-apply-core.ts';
 import { asRecipeSourced, isCustomNote, pythonTextOf } from './phrase-notes-core.ts';
 import { applyPythonText } from './description-apply-core.ts';
+import { asListNote } from './test-support/phrase-list-fixtures.ts';
 const THIN = "  bars[1] = thin_out_bars(bars=[bars[1]], first=1, last=1, amount=0.5)[0]\n  return bars";
 const withPython = (text: string, edit: (py: string) => string): string => { const py = (text.match(/```python\n([\s\S]*?)\n```/) as RegExpMatchArray)[1]; return text.replace(py, edit(py)); };
 
@@ -117,7 +118,7 @@ for (const edition of ['lean', 'music'] as const) {
       assert.deepEqual(w.writes, [], 'the person is still within the wait: nothing written yet');
       await w.wait(150);
       assert.deepEqual(w.writes, [PATH], 'one write');
-      assert.equal(w.store.get(PATH), noteContentFor('phrase_001', { ...EXTEND, bars: 6 }));
+      assert.equal(w.store.get(PATH), asListNote(noteContentFor('phrase_001', { ...EXTEND, bars: 6 }), 'phrase_001')); // 2026-11-19-0980 (deliberate): a phrase's Description is a numbered list now: the note a write leaves is the list note
       assert.equal(tab.contentEl.querySelector('.forge-phrase-bars').value, '6', 'the Bars control reads the new value');
       assert.deepEqual(w.lines, ['[forge-description] applied phrase_001 (8 -> 6 bars)']);
       await w.wait(3000);
@@ -146,7 +147,7 @@ for (const edition of ['lean', 'music'] as const) {
       assert.ok(tab.contentEl.querySelector('.forge-description-bar'), '... and the next time the workspace moves it is drawn again');
       assert.equal(tab.contentEl.querySelectorAll('.forge-description-bar').length, 1);
       (notes.contentEl.querySelector('[data-action="revert"]') as any).click(); await w.wait(100);
-      assert.equal(w.store.get(PATH), good);
+      assert.equal(w.store.get(PATH), asListNote(good, 'phrase_001')); // 2026-11-19-0980 (deliberate): a phrase's Description is a numbered list now: the note a write leaves is the list note
       assert.equal(tab.contentEl.querySelector('.forge-description-bar'), null); assert.equal(notes.contentEl.querySelector('.forge-description-bar'), null);
       assert.deepEqual(w.lines.at(-1), '[forge-description] reverted phrase_001 to the json cache');
     } finally { w.done(); }
@@ -202,7 +203,7 @@ for (const edition of ['lean', 'music'] as const) {
       assert.deepEqual(w.writes, [], 'still within the wait');
       await w.wait(150);
       assert.deepEqual(w.writes, [PATH], 'one write');
-      assert.equal(w.store.get(PATH), asRecipeSourced(noteContentFor('phrase_001', { ...EXTEND, bars: 6 })));
+      assert.equal(w.store.get(PATH), asRecipeSourced(asListNote(noteContentFor('phrase_001', { ...EXTEND, bars: 6 }), 'phrase_001'))); // 2026-11-19-0980 (deliberate): a phrase's Description is a numbered list now: the note a write leaves is the list note
       assert.equal(tab.contentEl.querySelector('.forge-phrase-bars').value, '6');
       assert.deepEqual(w.lines, ['[forge-recipe] applied phrase_001 (8 -> 6 bars)']);
       await w.wait(3000);
@@ -227,7 +228,7 @@ for (const edition of ['lean', 'music'] as const) {
       }
       assert.equal(tab.contentEl.querySelector('.forge-phrase-bars').value, '8', 'the last good cache still draws the tab');
       (notes.contentEl.querySelector('[data-action="revert"]') as any).click(); await w.wait(100);
-      assert.equal(w.store.get(PATH), good);
+      assert.equal(w.store.get(PATH), asListNote(good, 'phrase_001')); // 2026-11-19-0980 (deliberate): a phrase's Description is a numbered list now: the note a write leaves is the list note
       assert.equal(tab.contentEl.querySelector('.forge-description-bar'), null); assert.equal(notes.contentEl.querySelector('.forge-description-bar'), null);
       assert.equal(w.lines.at(-1), '[forge-recipe] reverted phrase_001 to the json cache');
     } finally { w.done(); }

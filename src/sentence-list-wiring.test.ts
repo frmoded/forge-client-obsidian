@@ -366,17 +366,16 @@ test('a note that vanished under an undo says so in the dialog (never silent): n
 });
 
 // ---- P3: nothing changes outside arrangements and compositions ---------------------------------------------------------------------------------------------------------------------
-test('P3, a PHRASE: the composer still shows the Description, a sentence REPLACES it, the bytes are the old writer\'s, there is no Undo in the "+" menu and Cmd+Z in an empty composer is not taken', async () => {
+test('2026-11-19-0980 (stage 2, deliberate; it was "P3, a PHRASE: the composer still shows the Description, a sentence REPLACES it, ... no Undo in the + menu"): a PHRASE is a list: the composer shows nothing of it, a head replaces line 1, the "+" menu has Undo and Redo, Cmd+Z in an empty composer is taken', async () => {
   const ext: PhraseParams = { kind: 'extend', source: 'bar_007', bars: 8, style: 'repeat_with_fills', tempo_change_pct: -20 };
   const note = newPhraseNote('phrase_003', ext, formatPhraseJson(ext)); const P = 'phrases/phrase_003.md';
   const r = rig({ path: P, note });
   await r.ready();
-  assert.equal(r.field().value, extractDescription(note), 'the composer shows the Description of a phrase, as before');
+  assert.equal(r.field().value, '', 'the composer shows nothing of the Description of a phrase');
   r.type('Extend [[bar_007]] to 6 bars, repeating with fills, 20 percent slower.'); await r.enter(); await r.enter();
-  const expected = applyPhraseWrite(note, { ...ext, bars: 6 }, 'phrase_003', true); assert.ok(expected.ok);
-  assert.equal(r.text(), (expected as { text: string }).text, 'byte for byte what the old writer wrote');
-  await r.openMenu(); assert.equal(r.menuItem('Undo last sentence'), undefined); assert.equal(r.menuItem('Redo'), undefined);
-  r.type(''); const w = r.writes.length; assert.equal(await r.undoKey(), false); assert.equal(r.writes.length, w);
+  assert.equal(extractDescription(r.text()), '1. Extend [[bar_007]] to 6 bars, repeating with fills, 20 percent slower.', 'the head replaced line 1 of the list the legacy paragraph was split into');
+  await r.openMenu(); assert.ok(r.menuItem('Undo last sentence') !== undefined); assert.ok(r.menuItem('Redo') !== undefined);
+  r.type(''); const w = r.writes.length; assert.equal(await r.undoKey(), true); assert.equal(r.writes.length, w + 1);
 });
 
 test('P3, a note that is not a phrase, arrangement or composition (a bar, a plain note) is neither read nor written: no composer, no process call', async () => {

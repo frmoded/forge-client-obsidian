@@ -32,13 +32,17 @@ export function phraseLinks(p: PhraseParams): string[] {
   return [...new Set([...read, ...forks(p).map((f) => f.note)])];
 }
 
+/** 2026-11-19-0980: the structure steps that follow a head, in the note's own words ("Then keep bars 1 to 2; delete bar 4."), or nothing. */
+const stepsWords = (p: PhraseParams): string => (p.kind !== 'transform' && p.ops !== undefined && p.ops.length > 0 ? ` Then ${p.ops.map(transformOpWords).join('; ')}.` : '');
+
 export function phraseDescription(name: string, p: PhraseParams): string {
   let sentence: string;
   if (p.kind === 'extend') sentence = `${name} — ${link(p.source)} extended to ${p.bars} bars: ${words(p.style)}, ${tempoWords(p.tempo_change_pct)}.`;
-  else if (p.kind === 'transform') sentence = `${name} — a transform of ${link(baseName(p.source))}: ${p.ops.map(transformOpWords).join('; ')}.`;
+  else if (p.kind === 'transform') sentence = p.ops.length === 0 ? `${name} — a copy of ${link(baseName(p.source))}.` : `${name} — a transform of ${link(baseName(p.source))}: ${p.ops.map(transformOpWords).join('; ')}.`;       // 2026-11-19-0980: no change at all is a copy
   else if (p.kind === 'morph') sentence = `${name} — a morph from ${link(p.a)} to ${link(p.b)} in ${p.bars} bars, ${p.order} order${p.order === 'seeded' ? ` (seed ${p.seed})` : ''}.`;
   else if (p.mode === 'path') sentence = `${name} — a mix of ${link(p.a)} and ${link(p.b)} as a path of single-hit changes: weight 1 is all of ${p.a}, 0 is all of ${p.b}, ${p.order ?? 'musical'} order.`;
   else sentence = `${name} — a mix of ${link(p.a)} and ${link(p.b)} by vote: ${Math.round(p.weight * 100)} % ${p.a} / ${Math.round((1 - p.weight) * 100)} % ${p.b}, threshold ${p.threshold.toFixed(2)}, ghost notes ${p.ghost ? 'on' : 'off'}.`;
+  sentence += stepsWords(p);
   const f = forks(p);
   return f.length > 0 ? `${sentence} Edited by hand: ${f.map((x) => `bar ${x.bar} is ${link(x.note)}`).join(', ')}.` : sentence;
 }
@@ -70,6 +74,7 @@ export function phraseRecipeSteps(p: PhraseParams): string[] {
     steps.push(`Take ${link(p.a)} and ${link(p.b)}.`,
       `Mix them by vote: ${share} % ${link(p.a)} and ${complementOf100(share)} % ${link(p.b)}, threshold ${threshold}, ghost notes ${p.ghost ? 'on' : 'off'}.`);
   }
+  if (p.kind !== 'transform') for (const o of p.ops ?? []) { const w = transformOpWords(o); steps.push(`${w[0].toUpperCase()}${w.slice(1)}.`); }          // 2026-11-19-0980: the structure steps after a head, said as a take's are
   for (const f of forks(p)) steps.push(`Bar ${f.bar} is replaced by ${link(f.note)}.`);
   return steps;
 }
@@ -88,6 +93,7 @@ export function phrasePython(p: PhraseParams): string {
   const out: string[] = ['def compute(context):'];
   if (p.kind === 'extend') {
     out.push(`  base = ${callNote(p.source)}`, `  bars = extend_rhythm(data=base, bars=${p.bars}, style=${pyStr(p.style)}, tempo_change_pct=${p.tempo_change_pct})`);
+    for (const o of p.ops ?? []) out.push(...structurePython(o));                                          // 2026-11-19-0980: the structure steps after the head
   } else if (p.kind === 'transform') {
     out.push(`  bars = ${callNote(baseName(p.source))}`);
     for (const o of p.ops) {
@@ -102,15 +108,18 @@ export function phrasePython(p: PhraseParams): string {
     out.push(p.bars === 1
       ? `  bars = [morph_rhythm(a=a, b=b, bars=1, order=${pyStr(p.order)}, seed=${p.seed}, position=${p.position ?? 0})]`
       : `  bars = morph_rhythm(a=a, b=b, bars=${p.bars}, order=${pyStr(p.order)}, seed=${p.seed})`);
+    for (const o of p.ops ?? []) out.push(...structurePython(o));
   } else if (p.mode === 'path') {
     const order = pyStr(p.order ?? 'musical'), seed = p.seed ?? 0;
     const millionths = Math.round(Math.min(1, Math.max(0, p.weight)) * 1e6);
     out.push(`  a = ${callNote(p.a)}`, `  b = ${callNote(p.b)}`, `  changes = morph_rhythm_info(a=a, b=b, order=${order}, seed=${seed})['d']`,
       `  stop = min(changes, max(0, ((1000000 - ${millionths}) * changes + 500000) // 1000000))`,
       `  bar = morph_rhythm(a=a, b=b, bars=1, order=${order}, seed=${seed}, position=stop)`);
+    if (p.ops !== undefined && p.ops.length > 0) { out.push('  bars = [bar]'); for (const o of p.ops) out.push(...structurePython(o)); return [...out, '  return bars', streamHint('bars')].join('\n'); }
     return [...out, '  return [bar]', streamHint('[bar]')].join('\n');
   } else {
     out.push(`  a = ${callNote(p.a)}`, `  b = ${callNote(p.b)}`, `  mixed = mix_rhythm(a=a, b=b, weight=${p.weight}, threshold=${p.threshold}, ghost=${p.ghost ? 'True' : 'False'})`);
+    if (p.ops !== undefined && p.ops.length > 0) { out.push('  bars = [mixed]'); for (const o of p.ops) out.push(...structurePython(o)); return [...out, '  return bars', streamHint('bars')].join('\n'); }
     return [...out, '  return [mixed]', streamHint('[mixed]')].join('\n');
   }
   for (const f of forks(p)) out.push(`  bars[${f.bar - 1}] = ${callNote(f.note)}`);
@@ -385,11 +394,12 @@ export function asCustom(text: string): string {
 export const keepRecipeSource = (before: string, after: string): string => (sourceFacetOf(before) === 'recipe' ? asRecipeSourced(after) : sourceFacetOf(before) === 'python' && !isCustomNote(before) ? asPythonSourced(after) : after);
 
 /** The parts of a phrase note: the `# Description` is the grammar's sentence for `p` (`describe`), the frontmatter `description` stays the words with wikilinks for the graph, Recipe and Python derive from `p` as they always did. */
-export const phraseParts = (name: string, p: PhraseParams): SourceChainParts => ({ description: phraseDescription(name, p), links: phraseLinks(p), sentence: describe(p), recipe: phraseRecipeSteps(p), python: phrasePython(p) });
+/** 2026-11-19-0980: `sentence` is the `# Description` body when it is not the grammar's single paragraph (a phrase's LIST, written by sentence-list-note-core.ts). */
+export const phraseParts = (name: string, p: PhraseParams, sentence?: string): SourceChainParts => ({ description: phraseDescription(name, p), links: phraseLinks(p), sentence: sentence ?? describe(p), recipe: phraseRecipeSteps(p), python: phrasePython(p) });
 
 /** The whole phrase note with its source chain regenerated from `p`; the text from the fence on is kept byte for byte. */
-export function renderPhraseNote(text: string, name: string, p: PhraseParams, fenceStart: number): string {
-  return renderSourceChainNote(text, phraseParts(name, p), fenceStart);
+export function renderPhraseNote(text: string, name: string, p: PhraseParams, fenceStart: number, sentence?: string): string {
+  return renderSourceChainNote(text, phraseParts(name, p, sentence), fenceStart);
 }
 
 /** The starter text of a new phrase note: frontmatter, derived sections, then the fence last. */

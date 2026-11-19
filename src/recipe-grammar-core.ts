@@ -13,7 +13,7 @@ import {
 } from './phrase-grammar-core.ts';
 import {
   MIX_DEFAULTS, MORPH_DEFAULTS, MORPH_ORDERS, PHRASE_BARS_MAX, PHRASE_BARS_MIN, PHRASE_DEFAULTS, PHRASE_PCT_MAX, PHRASE_PCT_MIN, TRANSFORM_DEFAULTS, TRANSFORM_OPS_MAX, validatePhrase,
-  type ExtendPhrase, type MixPhrase, type MorphOrder, type MorphPhrase, type PhraseStyle, type TransformOp, type TransformPhrase,
+  type ExtendPhrase, type MixPhrase, type MorphOrder, type MorphPhrase, type PhraseStyle, type StructureOp, type TransformOp, type TransformPhrase,
 } from './phrase-core.ts';
 import { phraseRecipeSteps } from './phrase-notes-core.ts';
 import { arrangementRecipeSteps } from './arrangement-core.ts';
@@ -88,6 +88,19 @@ function takeBars(s: Sentence, vault: GrammarVault, two: boolean): string[] {
   return [a, b];
 }
 
+/** 2026-11-19-0980: what follows a head's own step in a Recipe: the STRUCTURE steps (said as a take's are) and the forks ("Bar 9 is replaced by [[bar_009]]."), in any order; the forks number the bars after the steps. */
+function stepsAndForks(ss: Sentence[], vault: GrammarVault, bars: () => number): { ops?: StructureOp[]; overrides?: Record<string, string> } {
+  const ops: StructureOp[] = [], forks: Sentence[] = [];
+  for (const s of ss) {
+    const f = new Scan(s.text, s.start);
+    if (f.peekKw('bar')) { forks.push(s); continue; }
+    const step = readStructureStep(f, false);
+    if (step !== null) { ops.push(step); continue; }
+    f.fail('"Keep ...", "Delete ...", "Copy ...", "Move ..." or "Bar N is replaced by [[a bar]]"');
+  }
+  return { ...(ops.length > 0 ? { ops } : {}), ...followForks(forks, vault, () => (ops.length > 0 ? Number.MAX_SAFE_INTEGER : bars())) };
+}
+
 function parseExtendRecipe(ss: Sentence[], vault: GrammarVault): ExtendPhrase {
   const [source] = takeBars(ss[0], vault, false);
   const sc = new Scan(ss[1].text, ss[1].start);
@@ -113,8 +126,7 @@ function parseExtendRecipe(ss: Sentence[], vault: GrammarVault): ExtendPhrase {
     pct = slower ? noNegZero(-n.value) : n.value;
   }
   sc.end();
-  const overrides = followForks(ss.slice(2), vault, () => bars);
-  return { kind: 'extend', source, bars, style, tempo_change_pct: pct, ...overrides };
+  return { kind: 'extend', source, bars, style, tempo_change_pct: pct, ...stepsAndForks(ss.slice(2), vault, () => bars) };
 }
 
 function parseMorphRecipe(ss: Sentence[], vault: GrammarVault): MorphPhrase {
@@ -136,8 +148,19 @@ function parseMorphRecipe(ss: Sentence[], vault: GrammarVault): MorphPhrase {
   const seed = parenSeed(sc);
   if (seed !== null && order !== 'seeded') sc.failAt(`Expected a seed only with the seeded order, but this morph is in ${order} order.`, seedAt);
   sc.end();
-  const overrides = followForks(ss.slice(2), vault, () => bars);
-  return { kind: 'morph', a, b, bars, order, seed: seed ?? MORPH_DEFAULTS.seed, ...(bars === 1 ? { position: position ?? 0 } : {}), ...overrides };
+  return { kind: 'morph', a, b, bars, order, seed: seed ?? MORPH_DEFAULTS.seed, ...(bars === 1 ? { position: position ?? 0 } : {}), ...stepsAndForks(ss.slice(2), vault, () => bars) };
+}
+
+/** The structure steps after a vote mix's step (2026-11-19-0980): nothing else may follow it. */
+function mixSteps(ss: Sentence[]): { ops?: StructureOp[] } {
+  const ops: StructureOp[] = [];
+  for (const s of ss) {
+    const x = new Scan(s.text, s.start);
+    const step = readStructureStep(x, false);
+    if (step === null) x.fail('nothing after the vote step, except "Keep ...", "Delete ...", "Copy ..." or "Move ..."');
+    ops.push(step);
+  }
+  return ops.length > 0 ? { ops } : {};
 }
 
 /** "Mix them by vote: 70 % [[a]] and 30 % [[b]], threshold 0.50, ghost notes off." and "Mix them as a path ... Keep the state at weight 0.7 (...)." with the two sentences a path may add. */
@@ -169,8 +192,8 @@ function parseMixRecipe(ss: Sentence[], vault: GrammarVault): MixPhrase {
     let ghost: boolean;
     if (sc.kw('on')) ghost = true; else if (sc.kw('off')) ghost = false; else sc.fail('"on" or "off"');
     sc.end();
-    if (ss.length > 2) { const x = new Scan(ss[2].text, ss[2].start); x.fail('nothing after the vote step'); }
-    return { kind: 'mix', a, b, weight: Number(shiftDecimal(first.text, -2)), threshold: Number(t.text), ghost };
+    const steps = mixSteps(ss.slice(2));
+    return { kind: 'mix', a, b, weight: Number(shiftDecimal(first.text, -2)), threshold: Number(t.text), ghost, ...steps };
   }
   if (!sc.kw('mix them as a path of single-hit changes from the first to the second')) sc.fail('"Mix them by vote: ..." or "Mix them as a path of single-hit changes from the first to the second, in musical order."');
   sc.comma();
@@ -200,6 +223,7 @@ function parseMixRecipe(ss: Sentence[], vault: GrammarVault): MixPhrase {
   w.end();
   let threshold: number = MIX_DEFAULTS.threshold, ghost = false;
   const said = new Set<string>();
+  const ops: StructureOp[] = [];
   for (const s of ss.slice(3)) {
     const f = new Scan(s.text, s.start);
     if (f.kw('threshold')) {
@@ -208,9 +232,13 @@ function parseMixRecipe(ss: Sentence[], vault: GrammarVault): MixPhrase {
     } else if (f.kw('with ghost notes')) {
       if (said.has('ghost')) f.failAt('Expected the ghost notes to be said once, but they are said twice.', s.start);
       said.add('ghost'); ghost = true; f.end();
-    } else f.fail('"Threshold N percent." or "With ghost notes."');
+    } else {
+      const step = readStructureStep(f, false);
+      if (step === null) f.fail('"Threshold N percent.", "With ghost notes.", "Keep ...", "Delete ...", "Copy ..." or "Move ..."');
+      ops.push(step);
+    }
   }
-  return { kind: 'mix', a, b, weight: Number(n.text), threshold, ghost, mode: 'path', order, seed: seed ?? MORPH_DEFAULTS.seed };
+  return { kind: 'mix', a, b, weight: Number(n.text), threshold, ghost, mode: 'path', order, seed: seed ?? MORPH_DEFAULTS.seed, ...(ops.length > 0 ? { ops } : {}) };
 }
 
 /**
@@ -262,7 +290,7 @@ function parseTransformRecipe(ss: Sentence[], vault: GrammarVault): TransformPhr
     f.end();
     ops.push({ op: 'thin_out', first, last, ...(row !== undefined ? { row } : {}), amount, ...(keep === 'seeded' ? { keep: 'seeded' as const, seed: seed ?? 0 } : {}) });
   }
-  if (ops.length === 0) t.failAt('Expected at least one change after "Take" (Thin out or Double up), but found none.', ss[0].start + ss[0].text.length);
+  // 2026-11-19-0980 (deliberate): "Take [[x]]." alone is a copy of x: no change is a phrase
   if (ops.length > TRANSFORM_OPS_MAX) t.failAt(`Expected at most ${TRANSFORM_OPS_MAX} changes, but found ${ops.length}.`, ss[0].start);
   const overrides = followForks(forks, vault, () => Number.MAX_SAFE_INTEGER);
   return { kind: 'transform', source: `${FOLDER_OF[src.kind as 'phrase' | 'arrangement' | 'composition']}/${src.name}`, ops, ...overrides };

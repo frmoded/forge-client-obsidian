@@ -32,8 +32,8 @@ test('an explicit "vote" is a vote mix and keeps its word; order and seed do not
 });
 
 test('MIX_KEYS names mode, order and seed after the vote fields; the unknown-field refusal lists them', () => {
-  assert.deepEqual([...MIX_KEYS], ['kind', 'a', 'b', 'weight', 'threshold', 'ghost', 'mode', 'order', 'seed']);
-  assert.deepEqual(validatePhrase({ ...VOTE, swing: 3 }), { ok: false, message: 'Unexpected field "swing" (a mix holds only kind, a, b, weight, threshold, ghost, mode, order, seed).' });
+  assert.deepEqual([...MIX_KEYS], ['kind', 'a', 'b', 'weight', 'threshold', 'ghost', 'mode', 'order', 'seed', 'ops']);   // 2026-11-19-0980 (deliberate): `ops` (the structure steps after a head) is a new key of every head
+  assert.deepEqual(validatePhrase({ ...VOTE, swing: 3 }), { ok: false, message: 'Unexpected field "swing" (a mix holds only kind, a, b, weight, threshold, ghost, mode, order, seed, ops).' });
 });
 
 // ---- the mode ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------

@@ -1,6 +1,8 @@
 // 2026-11-19-0970 (THE LIST MODEL, stage 1; checklists/music_tabs_chat_ui_design.md section 11): for an ARRANGEMENT and a COMPOSITION the Description is an ordered list of canonical sentences (sentence-list-core.ts): a sentence typed in the composer is
 // APPENDED (the preview says what it replaces), the note is rewritten from the whole list in ONE write (commitList), a hand edit of the list is re-read on save (an unreadable line is kept and named in the dialog, the replay stops before it),
-// and Cmd/Ctrl+Z (in an empty composer) and the "+" menu undo and redo the last sentence. A phrase, a bar and every other note keep the one-description flow below, untouched.
+// and Cmd/Ctrl+Z (in an empty composer) and the "+" menu undo and redo the last sentence.
+// 2026-11-19-0980 (stage 2): a PHRASE is a list too - line 1 is its HEAD (Extend, Mix, Morph or Take), later lines are modifier lines, structure steps, transforms and forks (sentence-list-core.ts, kind 'phrase'); a head replaces line 1; a random line
+// draws its seed once (at the preview, the apply writes the SAME one); the composer shows nothing of the list; the bar-selection menu APPENDS its sentence (`appendLine`). A bar and every other note are untouched (P3).
 // 2026-10-31-1140 (M16a): the same controller also hears a hand-edited RECIPE (the Recipe is a source too): it parses (applied by ONE `process`, the Description, Python, json cache and stamps made again from it), it does not parse (nothing is
 // written; the bar says the line and the column; Revert), or the Description was edited too (nothing is applied; the bar offers Update from Description / Update from Recipe). One controller and one bar per pane, so a note with two
 // things to say is said once. The service is NOT offered for a Recipe (no LLM): a Recipe that does not parse is the person's to fix.
@@ -10,7 +12,7 @@
 // score-first vault: P3).
 import { mountDescriptionBar, type BarAction, type BarHandle, type BarView } from './description-bar-dom.ts';
 import {
-  DESCRIPTION_DEBOUNCE_MS, REVERT_GENERATED_CONFIRM, appliedLine, applyDescriptionText, applyPythonText, applyRecipeText, askedServiceLine, askingServiceLine, cacheParams, changeSummary, descriptionState, familyOfPath, rejectedLine, rejectionMessage, revertDescriptionText, revertToGeneratedText, revertedLine, writeFromParams, pythonCustomBarMessage,
+  DESCRIPTION_DEBOUNCE_MS, REVERT_GENERATED_CONFIRM, appliedLine, applyDescriptionText, applyPythonText, applyRecipeText, askedServiceLine, askingServiceLine, cacheParams, changeSummary, descriptionState, familyOfPath, rejectedLine, rejectionMessage, revertDescriptionText, revertToGeneratedText, revertedLine, pythonCustomBarMessage,
   type DescriptionState, type Family,
 } from './description-apply-core.ts';
 import { bothEditedLine, recipeAppliedLine, recipeRejectedLine, recipeRevertedLine } from './recipe-apply-core.ts';
@@ -28,11 +30,11 @@ import type { PhraseParams } from './phrase-core.ts';
 import type { PromptBoxHandle } from './prompt-box-dom.ts';
 import { mountChatPanel, type ChatPanelHandle } from './chat-panel-dom.ts';
 import { append, expireOpen, fromOutcome, memoryStore, openSuggestion, resolveSuggestion, type DialogEntry, type DialogEvent, type DialogStore } from './dialog-core.ts';
-import { replaceDescriptionSection } from './prompt-box-core.ts';
-import { createUndoStack, linesOfParams, planAppend, replay, sentencesOfText, stopNotice, type ListStop, type Plan, type ReplayCtx, type UndoStack } from './sentence-list-core.ts';
+import { createUndoStack, defaultSeed, drawSeeds, linesOfParams, planAppend, replay, sentencesOfText, stopNotice, type ListStop, type Plan, type ReplayCtx, type UndoStack } from './sentence-list-core.ts';
 import { listOfNote, writeListNote } from './sentence-list-note-core.ts';
 import { REDO_ID, REDO_LABEL, UNDO_ID, UNDO_LABEL } from './composer-core.ts';
 import { isEmptyNote } from './empty-note-core.ts';
+import { FAMILY_KINDS } from './note-family-core.ts';
 import type { ComposerMenuItem, PreviewResult, PromptBoxPorts } from './prompt-box-dom.ts';
 import type { Proposal } from './composer-core.ts';
 
@@ -66,15 +68,17 @@ export interface DescriptionPorts {
   confirm?(message: string): Promise<boolean>;
   /** 2026-11-17-2001: MUSIC_COMPOSER_AUTO_APPLY (default off): a sentence the grammar reads exactly skips the preview. */
   composerAutoApply?(): boolean;
+  /** 2026-11-19-0980: the seed a random line of a phrase draws, ONCE, when the sentence is typed (a whole number; absent = a random one from 0 to 999). Tests give it a fixed one. */
+  drawSeed?(): number;
   /** 2026-11-17-2001: the composer's "+" menu (the New actions; `pickNote` gives "Insert a link to a note"); absent = no "+". */
   composerMenu?(): { items: readonly ComposerMenuItem[]; run(id: string): void; pickNote?(): Promise<string | null> } | undefined;
 }
 
 interface Ui { state: DescriptionState; message?: string; preview?: { params: GrammarParams; description: string; recipe: string; forSentence: string; /** 2026-11-19-0970: for an arrangement or composition the sentence service's answer as canonical LINES to append (and the sentence they replace) */ lines?: string[]; replaces?: string }; busy?: boolean; /** the sentence was typed in the prompt box (nothing was written to the note: there is no Revert to offer) */ fromBox?: boolean; /** from the box: the Description ON DISK when the sentence was sent (a preview is applied only over that) */ base?: string }
 const basename = (path: string): string => path.replace(/^.*\//, '').replace(/\.md$/, '');
-/** 2026-11-19-0970: the two kinds whose Description is a list of canonical sentences (stage 1 of the list model; a phrase and a bar are not yet). */
-type ListFamily = 'arrangement' | 'composition';
-const isList = (f: Family | null): f is ListFamily => f === 'arrangement' || f === 'composition';
+/** 2026-11-19-0970 and 2026-11-19-0980: the three kinds whose Description is a list of canonical sentences (a phrase, an arrangement, a composition; a bar is not sentence-driven yet: stage 3). */
+type ListFamily = Family;
+const isList = (f: Family | null): f is ListFamily => f !== null;
 
 export interface DescriptionController {
   /** The vault says this note changed: evaluate it once the person stops typing. */
@@ -94,14 +98,14 @@ export interface DescriptionController {
   revertGenerated(path: string): Promise<void>;
   /** 2026-11-12-1203: put the cursor in the docked prompt box of this note's tab (the first box when no path is given); false = there is none. */
   focusBox(path?: string): boolean;
-  /** 2026-11-16-1000: show `text` in this note's prompt box as a PREVIEW (edited, not applied; nothing is written until Apply). false = the note has no prompt box on screen. */
-  suggestInBox(path: string, text: string): boolean;
   /** Apply this text as the note's Description, as the prompt box's Apply does (the existing "Update from Description" writers; a sentence that does not parse writes nothing and the strip says where). */
   applyFromBox(path: string, text: string): Promise<{ ok: boolean; disk?: string }>;
   /** 2026-11-17-2001: what would this sentence do? The grammar first, the sentence service when it cannot read it; NOTHING is written. */
   previewFromBox(path: string, text: string): Promise<PreviewResult>;
   /** 2026-11-17-2001: write what the person saw (the second Enter). */
   applyProposal(path: string, text: string, proposal: Proposal): Promise<{ ok: boolean; disk?: string; message?: string }>;
+  /** 2026-11-19-0980: APPEND one canonical sentence to the note's list now (the bar-selection menu's Keep, Delete, Copy and Move; stage 3's grid clicks): one write, undoable, the composer's text left alone. `message` says what was added, or why not (in words). */
+  appendLine(path: string, sentence: string): Promise<{ ok: boolean; message: string }>;
   /** 2026-11-19-0970 (the list model): take back the last sentence of an arrangement's or composition's list (Cmd/Ctrl+Z in an empty composer, the "+" menu), and put it back. One write each; the dialog says what was removed or added again. */
   undoLast(path: string): Promise<{ ok: boolean; message: string }>;
   redoLast(path: string): Promise<{ ok: boolean; message: string }>;
@@ -197,7 +201,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   // ---- 2026-11-12-1203: the docked prompt box. An EDITOR VIEW of the Description facet on a score tab (the note on disk stays the only source of truth); the controls' writes reach it through the vault's `modify`.
   const boxes = new Map<HTMLElement, { path: string; handle: PromptBoxHandle; chat: ChatPanelHandle }>();
   const descriptionOf = async (path: string): Promise<string | null> => { try { return extractDescription(await ports.read(path)); } catch { return null; } };
-  /** 2026-11-19-0970: what the composer's text area shows of the note: the Description of a phrase (as ever); NOTHING of an arrangement's or a composition's list (the list is in the note and the dialog, the prompt line is for the next sentence). */
+  /** 2026-11-19-0970 and 2026-11-19-0980: what the composer's text area shows of the note: NOTHING of a phrase's, an arrangement's or a composition's list (the list is in the note and the dialog, the prompt line is for the next sentence). */
   const boxDisk = (family: Family | null, text: string): string => (isList(family) ? '' : extractDescription(text));
   const boxDescriptionOf = async (path: string): Promise<string | null> => { try { return boxDisk(familyOfPath(path), await ports.read(path)); } catch { return null; } };
   const syncBoxes = (): void => {
@@ -279,52 +283,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   async function applyFromBoxCore(path: string, text: string, said = false): Promise<{ ok: boolean; disk?: string; message?: string }> {
     const family = familyOfPath(path); if (family === null) { pbWarn(`ask skipped: ${path} is not a phrase, arrangement or composition note`); return { ok: false }; }
     if (!said) say(path, { type: 'you', text });                                                          // 2026-11-13-1214: the sentence as typed, when Apply is pressed (2026-11-17-2001: said already when the preview was asked for)
-    if (isList(family)) return applyList(path, family, text);                                             // 2026-11-19-0970: an arrangement and a composition APPEND the sentence to their list
-    let failure: string | null = null, change = '', sentence = text;
-    {                                                                                                       // 2026-11-19-0910: the box's apply (the second Enter, or an apply with no preview) asks the same loop check before it writes
-      let now = ''; try { now = await ports.read(path); } catch { /* the write below says so */ }
-      const edited0 = now === '' ? null : replaceDescriptionSection(now, text); const st0 = edited0 === null ? null : descriptionState(edited0, family, ports.vault());
-      const loop = st0 !== null && st0.kind === 'apply' ? await loopRefusalOf(noteId(path), st0.params) : null;
-      if (loop !== null) { pb(`apply refused: ${loop}`); say(path, { type: 'refused', message: loop, by: 'plugin' }); setBoxNote(path, `Refused: ${loop}`); return { ok: false, message: `Refused: ${loop}` } as { ok: boolean; disk?: string; message?: string }; }
-    }
-    try {
-      await proc(path, (cur) => {
-        const edited = replaceDescriptionSection(cur, text);
-        if (edited === null) { failure = 'This note has no Description heading to write the sentence under.'; return cur; }
-        const st = descriptionState(edited, family, ports.vault());
-        if (st.kind === 'rejected' || st.kind === 'both-edited') { failure = st.message; sentence = st.kind === 'rejected' ? st.sentence : text; return cur; }
-        if (st.kind !== 'apply') { if (st.kind === 'synced') return cur; failure = 'This note has something else to say first; see the line at the top.'; return cur; }
-        const r = applyDescriptionText(edited, basename(path), family, ports.vault(), st.sentence);
-        if (r.ok === false) { failure = r.message; return cur; }
-        change = r.change;
-        return r.text;
-      });
-    } catch (e) { failure = `Update from Description: ${(e as Error)?.message ?? e}`; console.error('prompt-box: could not write the note', e); pbWarn(`could not write the note: ${(e as Error)?.message ?? e}`); }
-    if (failure !== null) {
-      const cur = await ports.read(path).catch(() => '');
-      const st = descriptionState(replaceDescriptionSection(cur, text) ?? cur, family, ports.vault());
-      const state: DescriptionState = st.kind === 'rejected' ? st : { kind: 'rejected', sentence, error: { message: failure, line: 1, column: 1 }, message: failure };
-      const base = extractDescription(cur);
-      set(path, { state, message: failure, fromBox: true, base });
-      pb(`grammar verdict: ${st.kind === 'rejected' || st.kind === 'both-edited' ? st.kind : `other:${st.kind}`}`);
-      const gateLine = `service gate: askPlan=${ports.askPlan === undefined ? 'absent' : 'present'} configured=${ports.configured === undefined ? 'unset' : String(ports.configured())}`;
-      setBoxNote(path, st.kind === 'rejected' ? `The grammar did not accept this sentence (line ${st.error.line}, column ${st.error.column}: ${st.error.message}).` : failure);
-      if (st.kind === 'rejected') say(path, { type: 'rejected', line: st.error.line, column: st.error.column, message: st.error.message }); else say(path, { type: 'notice', message: failure });
-      // 2026-11-12-1204: the GRAMMAR rejected the text (free, instant, exact: tried first, always). For a PHRASE, with the sentence service set up, Apply asks it ONCE, automatically, and shows the PREVIEW (nothing is written until it is
-      // applied). Never while typing, never when the grammar accepted the text. 2026-11-12-1206: for an arrangement and a composition too (the service is version-gated for them: an older one says so, in one sentence).
-      if (st.kind !== 'rejected') { pb(`ask skipped: the verdict is ${st.kind}, not a sentence the grammar rejected`); return { ok: false }; }
-      if (ports.askPlan === undefined) { pbWarn(gateLine); setBoxNote(path, 'The sentence service is not available in this build.'); say(path, { type: 'notice', message: 'The sentence service is not available in this build.' }); return { ok: false }; }
-      if (ports.configured?.() === false) { pbWarn(gateLine); setBoxNote(path, 'The sentence service is not set up: add its URL and token in Settings -> Forge.'); say(path, { type: 'notice', message: 'The sentence service is not set up: add its URL and token in Settings -> Forge.' }); return { ok: false }; }
-      pb(gateLine);
-      await ask(path);
-      return { ok: false };
-    }
-    pb('grammar verdict: accepted');
-    told.delete(path); ports.trace(appliedLine(basename(path), change || 'unchanged')); set(path, null);
-    setBoxNote(path, change ? 'Applied.' : 'Nothing changed: the note already says this.');
-    const disk = await descriptionOf(path);
-    say(path, { type: 'applied', change: change || 'unchanged', description: disk ?? text });
-    return { ok: true, disk: disk ?? text };
+    return applyList(path, family, text);                                                                 // 2026-11-19-0970 / 0980: a sentence is APPENDED to the list of a phrase, an arrangement or a composition
   }
   const set = (path: string, u: Ui | null): void => { if (u === null || u.state.kind === 'synced') ui.delete(path); else { ui.set(path, u); notices.delete(path); } syncBars(); };
 
@@ -530,6 +489,12 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   // ================================================================================================================================================================================================
   const stacks = new Map<string, UndoStack>();                    // path -> the undo / redo of the open note (in memory only: it is gone when Obsidian closes; undo then still removes the last item of the list as it is)
   const stackOf = (path: string): UndoStack => { let st = stacks.get(path); if (!st) { st = createUndoStack(); stacks.set(path, st); } return st; };
+  const previewed = new Map<string, { text: string; lines: string[] }>();      // 2026-11-19-0980: path -> the typed text and its sentences as the PREVIEW canonicalized them (a random line's seed drawn once): the second Enter writes these, never a second draw
+  const sentencesFor = (path: string, family: ListFamily, text: string): string[] => {
+    const saved = previewed.get(path);
+    if (saved !== undefined && saved.text === text) return saved.lines;
+    return drawSeeds(sentencesOfText(text, family), family, ports.drawSeed ?? defaultSeed);
+  };
   const ctxFor = (path: string): ReplayCtx => ({ vault: ports.vault(), self: noteId(path), readSections: readSectionsOf });
   const listOf = (cur: string, family: ListFamily): string[] => listOfNote(cur, family, ports.vault()).list;
 
@@ -565,12 +530,16 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
 
   /** 2026-11-19-0970 - the composer's FIRST Enter in an arrangement or a composition: the typed sentence(s) APPENDED to the list (or in place of the sentence they replace), nothing written. */
   async function previewList(path: string, family: ListFamily, text: string, cur: string): Promise<PreviewResult> {
-    const plan = await planAppend(listOf(cur, family), family, sentencesOfText(text, family), ctxFor(path));
+    previewed.delete(path);
+    const typed = sentencesFor(path, family, text);                                                       // a random line draws its seed HERE, once
+    const plan = await planAppend(listOf(cur, family), family, typed, ctxFor(path));
     if (plan.ok === true) {
+      previewed.set(path, { text, lines: typed });
       if (plan.unchanged) { const m = 'Nothing changed: the note already says this.'; say(path, { type: 'notice', message: m }); return { ok: false, message: m }; }
       const description = plan.added.join(' '), replaces = plan.replaced.map((r) => r.sentence).join(' ');
       pb('grammar verdict: accepted (preview, nothing written)');
       say(path, { type: 'suggestion', description, recipe: '', via: 'grammar', ...(replaces !== '' ? { replaces } : {}) });
+      if (plan.replay.stop !== null) setBoxNote(path, stopNotice(plan.replay.stop, plan.replay.applied));       // 2026-11-19-0980: a new head left a line it cannot take: said under the card, before the apply
       return { ok: true, proposal: { description, via: 'grammar', ...(replaces !== '' ? { replaces } : {}) } };
     }
     if (plan.reason === 'loop') { pb(`grammar verdict: accepted, then refused: ${plan.message}`); say(path, { type: 'refused', message: plan.message, by: 'plugin' }); setBoxNote(path, `Refused: ${plan.message}`); return { ok: false, message: `Refused: ${plan.message}` }; }
@@ -582,7 +551,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   async function applyList(path: string, family: ListFamily, text: string): Promise<{ ok: boolean; disk?: string; message?: string }> {
     let cur = ''; try { cur = await ports.read(path); } catch (e) { console.error('[forge-promptbox] applyList: could not read the note', e); const m = `Could not read the note: ${(e as Error)?.message ?? e}`; say(path, { type: 'failed', message: m }); return { ok: false, message: m }; }
     const before = listOf(cur, family);
-    const plan = await planAppend(before, family, sentencesOfText(text, family), ctxFor(path));
+    const plan = await planAppend(before, family, sentencesFor(path, family, text), ctxFor(path));
     if (plan.ok === false) {
       if (plan.reason === 'loop') { pb(`apply refused: ${plan.message}`); say(path, { type: 'refused', message: plan.message, by: 'plugin' }); setBoxNote(path, `Refused: ${plan.message}`); return { ok: false, message: `Refused: ${plan.message}` }; }
       if (plan.reason !== 'unreadable') { say(path, { type: 'notice', message: plan.message }); setBoxNote(path, plan.message); return { ok: false, message: plan.message }; }
@@ -593,10 +562,29 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     if (plan.unchanged) { told.delete(path); set(path, null); setBoxNote(path, 'Nothing changed: the note already says this.'); say(path, { type: 'applied', change: 'unchanged', description: extractDescription(cur) }); return { ok: true, disk: '' }; }
     const done = await commitList(path, family, plan.list, extractDescription(cur), { before, added: plan.added, replaced: plan.replaced });
     if (done.ok === false) { pb(`apply failed: ${done.message}`); setBoxNote(path, done.message); say(path, { type: 'failed', message: done.message }); return { ok: false, message: done.message }; }
+    previewed.delete(path);
     told.delete(path); ports.trace(appliedLine(basename(path), done.change)); set(path, null);
     setBoxNote(path, 'Applied.');
     say(path, { type: 'applied', change: done.change, description: (await descriptionOf(path)) ?? plan.list.join(' ') });
+    if (done.stop !== null) sayCut(path, { stop: done.stop, applied: done.applied });                       // 2026-11-19-0980: a head that left a line it cannot take: "Line 3 is not a sentence I can read; the note shows lines 1 and 2."
     return { ok: true, disk: '' };
+  }
+
+  /** 2026-11-19-0980 - one canonical sentence APPENDED now (the bar-selection menu's steps; stage 3's grid clicks): the same plan as a typed sentence, written in one go and recorded for undo; the composer's text is not touched. */
+  async function appendLine(path: string, sentence: string): Promise<{ ok: boolean; message: string }> {
+    const family = familyOfPath(path);
+    if (!isList(family)) return { ok: false, message: 'This note is not a phrase, an arrangement or a composition.' };
+    let cur = ''; try { cur = await ports.read(path); } catch (e) { console.error('[forge-promptbox] appendLine: could not read the note', e); const message = `Could not read the note: ${(e as Error)?.message ?? e}`; say(path, { type: 'failed', message }); return { ok: false, message }; }
+    const before = listOf(cur, family);
+    const plan = await planAppend(before, family, sentencesFor(path, family, sentence), ctxFor(path));
+    if (plan.ok === false) { pb(`append refused: ${plan.message}`); say(path, { type: 'notice', message: plan.message }); return { ok: false, message: plan.message }; }
+    if (plan.unchanged) { const message = 'Nothing changed: the note already says this.'; say(path, { type: 'notice', message }); return { ok: true, message }; }
+    const done = await commitList(path, family, plan.list, extractDescription(cur), { before, added: plan.added, replaced: plan.replaced });
+    if (done.ok === false) { pb(`append failed: ${done.message}`); say(path, { type: 'failed', message: done.message }); return { ok: false, message: done.message }; }
+    told.delete(path); ports.trace(appliedLine(basename(path), done.change)); set(path, null);
+    say(path, { type: 'applied', change: done.change, description: (await descriptionOf(path)) ?? plan.list.join(' ') });
+    if (done.stop !== null) sayCut(path, { stop: done.stop, applied: done.applied });
+    return { ok: true, message: `Added: ${plan.added.join(' ')}` };
   }
 
   /** The service's answer for an arrangement or a composition, as canonical lines: APPENDED to the list (a sentence typed in the composer), or the whole list (a Description edited by hand that the grammar could not read), written in one go. */
@@ -736,7 +724,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     const recipe = (outcome.params.kind === 'arrangement' || outcome.params.kind === 'composition' ? familyRecipeSteps(outcome.params) : phraseRecipeSteps(outcome.params as PhraseParams)).join('\n');
     // 2026-11-19-0970: for an arrangement or a composition the service's plan is the CANONICAL LINES of what the typed sentence says; they are appended to the note's list (a Description edited by hand that the grammar could not read: the whole list)
     let listed: { description: string; lines: string[]; replaces?: string } | null = null;
-    if (isList(family) && outcome.params.kind === family) {
+    if (FAMILY_KINDS[family].includes(outcome.params.kind)) {
       let cur = ''; try { cur = await ports.read(path); } catch { /* the note went away: the apply says so */ }
       const lines = linesOfParams(outcome.params, family);
       const plan = await planAppend(now.fromBox ? listOf(cur, family) : [], family, lines, ctxFor(path));
@@ -759,25 +747,14 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     const family = familyOfPath(path); const u = ui.get(path);
     if (family === null || !u?.preview) return { ok: false, message: 'There is nothing to apply.' };                // never without a preview
     const { params, forSentence } = u.preview;
-    let failure: string | null = null, change = '';
     { const loop = await loopRefusalOf(noteId(path), params as GrammarParams);                                // the vault may have moved since the preview was made (another composition edited): asked once more, the same words
       if (loop !== null) { set(path, { state: u.state, message: loop, ...(u.fromBox ? { fromBox: true, base: u.base } : {}) }); if (u.fromBox) { endSuggestion(path, 'expired'); say(path, { type: 'refused', message: loop, by: 'plugin' }); } return { ok: false, message: loop }; } }
     // a suggestion for a sentence typed in the BOX: nothing was written for it, so the Description on disk must be what it was when the sentence was sent, and the box must still hold that sentence
     if (u.fromBox && boxText(path) !== undefined && boxText(path) !== forSentence) { set(path, { state: u.state, message: 'The text in the box changed after the suggestion; ask again.', fromBox: true, base: u.base }); endSuggestion(path, 'expired'); say(path, { type: 'notice', message: 'The text in the box changed after the suggestion; ask again.' }); return { ok: false, message: 'The text in the box changed after the suggestion; ask again.' }; }
-    if (isList(family) && u.preview.lines !== undefined) return applyListPreview(path, family, u);          // 2026-11-19-0970: the service's lines are appended to the list
-    try {
-      await proc(path, (cur) => {
-        if (extractDescription(cur) !== (u.fromBox ? u.base : forSentence)) { failure = 'The Description changed while the service was thinking; its suggestion was dropped.'; return cur; }
-        const w = writeFromParams(cur, basename(path), family, params as GrammarParams);
-        if (w.ok === false) { failure = w.message; return cur; }
-        change = changeSummary(cacheParams(cur, family), params as GrammarParams);
-        return w.text;
-      });
-    } catch (e) { failure = `Apply: ${(e as Error)?.message ?? e}`; }
-    if (failure !== null) { set(path, { state: u.state, message: failure, ...(u.fromBox ? { fromBox: true, base: u.base } : {}) }); if (u.fromBox) { endSuggestion(path, 'expired'); say(path, { type: 'failed', message: failure }); } return { ok: false, message: failure }; }
-    told.delete(path); ports.trace(appliedLine(basename(path), change)); set(path, null);
-    if (u.fromBox) { const d = await descriptionOf(path); if (d !== null) for (const b of boxes.values()) if (b.path === path) b.handle.reset(d); endSuggestion(path, 'applied'); say(path, { type: 'applied', change, description: d ?? describe(params as GrammarParams) }); setBoxNote(path, 'Applied.'); return { ok: true, ...(d !== null ? { disk: d } : {}) }; }        // applied: the box shows the canonical grammar sentence, not the free one
-    return { ok: true };
+    if (u.preview.lines !== undefined) return applyListPreview(path, family, u);                            // 2026-11-19-0970 / 0980: the service's lines are appended to the list (a note's Description is always a list now)
+    const message = 'The suggestion does not fit this note.';                                                   // a service answer of another kind than the note's: ask() never previews it, so this is a guard, not a path
+    set(path, { state: u.state, message, ...(u.fromBox ? { fromBox: true, base: u.base } : {}) }); if (u.fromBox) { endSuggestion(path, 'expired'); say(path, { type: 'failed', message }); }
+    return { ok: false, message };
   }
 
   /** 2026-11-17-2001 - the composer's FIRST Enter: what would this sentence do? Nothing is written. The grammar reads it first (free, instant, exact); when it cannot, the sentence service is asked ONCE (the same gates as
@@ -799,31 +776,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     cancelledAsk.delete(path);
     let cur = '';
     try { cur = await ports.read(path); } catch (e) { const m = `Could not read the note: ${(e as Error)?.message ?? e}`; say(path, { type: 'failed', message: m }); return { ok: false, message: m }; }
-    if (isList(family)) return previewList(path, family, text, cur);                                       // 2026-11-19-0970: an arrangement and a composition APPEND the sentence to their list
-    const edited = replaceDescriptionSection(cur, text);
-    if (edited === null) { const m = 'This note has no Description heading to write the sentence under.'; say(path, { type: 'notice', message: m }); return { ok: false, message: m }; }
-    const st = descriptionState(edited, family, ports.vault());
-    if (st.kind === 'apply') {
-      if (st.unchanged) { const m = 'Nothing changed: the note already says this.'; say(path, { type: 'notice', message: m }); return { ok: false, message: m }; }
-      const loop = await loopRefusalOf(noteId(path), st.params);                                           // 2026-11-19-0910: the grammar read it, but a LOOP is refused before any preview, in the same words as the service path
-      if (loop !== null) { pb(`grammar verdict: accepted, then refused: ${loop}`); say(path, { type: 'refused', message: loop, by: 'plugin' }); setBoxNote(path, `Refused: ${loop}`); return { ok: false, message: `Refused: ${loop}` }; }
-      const description = describe(st.params as never);
-      pb('grammar verdict: accepted (preview, nothing written)');
-      say(path, { type: 'suggestion', description, recipe: '', via: 'grammar' });
-      return { ok: true, proposal: { description, via: 'grammar' } };
-    }
-    if (st.kind === 'synced') { const m = 'Nothing changed: the note already says this.'; say(path, { type: 'notice', message: m }); return { ok: false, message: m }; }
-    if (st.kind !== 'rejected' && st.kind !== 'both-edited') { const m = 'This note has something else to say first; see the line at the top.'; say(path, { type: 'notice', message: m }); return { ok: false, message: m }; }
-    // the grammar did not accept it (or the note's other facets were edited too): the same strip, trace and dialog lines as before, then the service, once
-    const failure = st.kind === 'rejected' ? st.message : st.message;
-    const sentence = st.kind === 'rejected' ? st.sentence : text;
-    const state: DescriptionState = st.kind === 'rejected' ? st : { kind: 'rejected', sentence, error: { message: failure, line: 1, column: 1 }, message: failure };
-    set(path, { state, message: failure, fromBox: true, base: extractDescription(cur) });
-    pb(`grammar verdict: ${st.kind}`);
-    const rejectedText = st.kind === 'rejected' ? `The grammar did not accept this sentence (line ${st.error.line}, column ${st.error.column}: ${st.error.message}).` : failure;
-    if (st.kind === 'rejected') say(path, { type: 'rejected', line: st.error.line, column: st.error.column, message: st.error.message }); else say(path, { type: 'notice', message: failure });
-    if (st.kind !== 'rejected') return { ok: false, message: rejectedText };
-    return askTail(path, sentence, rejectedText);
+    return previewList(path, family, text, cur);                                                          // 2026-11-19-0970 / 0980: the typed sentence APPENDED to the list (or in place of the line it replaces), nothing written
   }
   /** The service, once, for a sentence the grammar did not accept (the same gates as ever); its answer is the proposal the composer shows, or why there is none. (2026-11-19-0970: the tail of previewFromBoxCore, shared with the list.) */
   async function askTail(path: string, sentence: string, rejectedText: string): Promise<PreviewResult> {
@@ -841,6 +794,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
 
   /** 2026-11-17-2001 - Esc on a preview (or typing over it): drop the proposal, nothing was written. */
   function discardPreview(path: string): void {
+    previewed.delete(path);
     const u = ui.get(path); if (u?.preview) { const rest = { ...u }; delete rest.preview; set(path, rest); }
     endSuggestion(path, 'cancelled');
   }
@@ -871,7 +825,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     },
     inspect: (path) => evaluate(path, false),
     drop(path) { const t = timers.get(path); if (t !== undefined) { ports.clearTimer(t); timers.delete(path); } },
-    async reset(path) { const t = timers.get(path); if (t !== undefined) { ports.clearTimer(t); timers.delete(path); } ui.delete(path); told.delete(path); notices.delete(path); stacks.delete(path); syncBars(); await evaluate(path, false); },
+    async reset(path) { const t = timers.get(path); if (t !== undefined) { ports.clearTimer(t); timers.delete(path); } ui.delete(path); told.delete(path); notices.delete(path); stacks.delete(path); previewed.delete(path); syncBars(); await evaluate(path, false); },
     async inspectOpen() {
       if (disposed) return;
       const todo = new Set<string>();
@@ -881,11 +835,10 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     canRevertGenerated: (path) => { const st = ui.get(path)?.state; return st?.kind === 'custom-note' && st.canRevert; },
     revertGenerated,
     focusBox(path) { for (const b of boxes.values()) if (path === undefined || b.path === path) { b.handle.focus(); return true; } return false; },
-    suggestInBox(path, text) { for (const b of boxes.values()) if (b.path === path) { b.handle.suggest(text); return true; } return false; },
     applyFromBox, previewFromBox, applyProposal,
-    undoLast, redoLast, canUndo: (path) => canStep(path, 'undo'), canRedo: (path) => canStep(path, 'redo'),
+    appendLine, undoLast, redoLast, canUndo: (path) => canStep(path, 'undo'), canRedo: (path) => canStep(path, 'redo'),
     update, revert, ask, syncBars,
     canUpdate: (path) => { const u = ui.get(path); return u !== undefined && (u.state.kind === 'apply' || u.state.kind === 'recipe-apply' || u.state.kind === 'python-apply' || u.state.kind === 'python-custom'); },
-    dispose() { disposed = true; notices.clear(); stacks.clear(); for (const t of timers.values()) ports.clearTimer(t); timers.clear(); for (const h of bars.values()) h.dispose(); bars.clear(); for (const b of boxes.values()) b.handle.dispose(); boxes.clear(); ui.clear(); },
+    dispose() { disposed = true; notices.clear(); stacks.clear(); previewed.clear(); for (const t of timers.values()) ports.clearTimer(t); timers.clear(); for (const h of bars.values()) h.dispose(); bars.clear(); for (const b of boxes.values()) b.handle.dispose(); boxes.clear(); ui.clear(); },
   };
 }

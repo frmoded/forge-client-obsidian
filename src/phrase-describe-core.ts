@@ -1,7 +1,7 @@
 // 2026-10-30-1050 (M15b) - the SAYING half of the description grammar (phrase-grammar-core.ts, M15a): `describe` (the canonical text of a phrase or an arrangement), `canonical` (the params as that text carries them) and the
 // words and numbers they use. Split out of phrase-grammar-core.ts so the note writers in phrase-core.ts and arrangement-core.ts can call `describe` without importing the parser (which imports them): this file takes from phrase-core.ts
 // only the three DEFAULTS objects, read INSIDE functions (never at load), so the two modules may load in either order (a test loads each first, in its own process). Pure: no Obsidian.
-import { MIX_DEFAULTS, MORPH_DEFAULTS, TRANSFORM_DEFAULTS, type MorphOrder, type PhraseParams, type PhraseStyle, type TransformOp } from './phrase-core.ts';
+import { MIX_DEFAULTS, MORPH_DEFAULTS, TRANSFORM_DEFAULTS, type MorphOrder, type PhraseParams, type PhraseStyle, type StructureOp, type TransformOp } from './phrase-core.ts';
 import { structureSentence } from './bar-structure-core.ts';
 import type { ArrangementParams, ArrangementTrack } from './arrangement-core.ts';
 import type { CompositionParams, CompositionSection } from './composition-core.ts';
@@ -14,6 +14,11 @@ export type GrammarParams = PhraseParams | ArrangementParams | CompositionParams
 export const STYLE_WORDS: Record<PhraseStyle, string> = { repeat_with_fills: 'repeating with fills', building: 'building up', ghost_notes: 'adding ghost notes' };
 /** How an order is said: its engine name with the underscore a hyphen, then "order" (the notes' own words: `morphOrderWords` in phrase-core.ts says the same). */
 export const orderWords = (order: MorphOrder): string => `${order.replace(/_/g, '-')} order`;
+
+/** 2026-11-19-0980 (the list model, stage 2): the MODIFIER lines of a phrase's list, which edit a segment of the head ("Make it 20 percent slower.", "Make it 8 bars long."). `describe` itself still says a head as ONE sentence with every segment (every note written before is byte for byte what it was);
+ *  these are the lines the composer, the strip and the list write: the number as a person says it, "1 bar" for one. */
+export const tempoModifierSentence = (pct: number): string => `Make it ${plain(Math.abs(pct))} percent ${pct > 0 ? 'faster' : 'slower'}.`;      // a tempo of 0 is "0 percent slower": back at the tempo of the bar
+export const lengthModifierSentence = (bars: number): string => `Make it ${bars} ${bars === 1 ? 'bar' : 'bars'} long.`;
 
 // ---- numbers, written the way a person writes them: number-words-core.ts (a leaf, shared with phrase-words-core.ts), re-exported here so every importer is unchanged ----------------------------------------------------------------------
 import { complementOf100, percentOf, plain, shiftDecimal } from './number-words-core.ts';
@@ -39,6 +44,8 @@ function canonicalOp(o: TransformOp): TransformOp {
   if (o.op === 'double_up') return { op: 'double_up', ...base, grid: o.grid };
   return o.keep === 'seeded' ? { op: 'thin_out', ...base, amount: noNegZero(o.amount), keep: 'seeded', seed: o.seed ?? 0 } : { op: 'thin_out', ...base, amount: noNegZero(o.amount) };
 }
+/** 2026-11-19-0980: the structure steps that follow a head (none = the field is left out, as every note written before has it). */
+const canonicalSteps = (ops: readonly TransformOp[] | undefined): { ops?: StructureOp[] } => (ops !== undefined && ops.length > 0 ? { ops: ops.map((o) => canonicalOp(o) as StructureOp) } : {});
 /** The params as `describe` says them and `parse` gives them back: ignored fields dropped, defaults filled, keys in the validators' order. `parse(describe(p)).params` is `canonical(p)` for every valid `p`. */
 export function canonical(p: GrammarParams): GrammarParams {
   if (p.kind === 'composition') {
@@ -49,12 +56,12 @@ export function canonical(p: GrammarParams): GrammarParams {
       kit: t.kit, phrase: t.phrase, ...(t.mute === true ? { mute: true } : {}), ...(t.solo === true ? { solo: true } : {}), ...(t.volume !== undefined && t.volume !== 100 ? { volume: t.volume } : {}),
     })) };
   }
-  if (p.kind === 'extend') return { kind: 'extend', source: p.source, bars: p.bars, style: p.style, tempo_change_pct: noNegZero(p.tempo_change_pct), ...sortedOverrides(p.overrides) };
+  if (p.kind === 'extend') return { kind: 'extend', source: p.source, bars: p.bars, style: p.style, tempo_change_pct: noNegZero(p.tempo_change_pct), ...sortedOverrides(p.overrides), ...canonicalSteps(p.ops) };
   if (p.kind === 'morph') {
-    return { kind: 'morph', a: p.a, b: p.b, bars: p.bars, order: p.order, seed: p.order === 'seeded' ? p.seed : 0, ...(p.bars === 1 ? { position: p.position ?? 0 } : {}), ...sortedOverrides(p.overrides) };
+    return { kind: 'morph', a: p.a, b: p.b, bars: p.bars, order: p.order, seed: p.order === 'seeded' ? p.seed : 0, ...(p.bars === 1 ? { position: p.position ?? 0 } : {}), ...sortedOverrides(p.overrides), ...canonicalSteps(p.ops) };
   }
   if (p.kind === 'transform') return { kind: 'transform', source: p.source, ops: p.ops.map(canonicalOp), ...sortedOverrides(p.overrides) };
-  const base = { kind: 'mix' as const, a: p.a, b: p.b, weight: p.weight, threshold: p.threshold, ghost: p.ghost };
+  const base = { kind: 'mix' as const, a: p.a, b: p.b, weight: p.weight, threshold: p.threshold, ghost: p.ghost, ...canonicalSteps(p.ops) };
   if (p.mode !== 'path') return base;
   const order = p.order ?? MORPH_DEFAULTS.order;
   return { ...base, mode: 'path', order, seed: order === 'seeded' ? p.seed ?? 0 : 0 };
@@ -62,6 +69,7 @@ export function canonical(p: GrammarParams): GrammarParams {
 
 // ---- describe ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
+const stepSentences = (ops: readonly TransformOp[] | undefined): string[] => (ops ?? []).map(opSentence);
 const forkSentences = (o: Record<string, string> | undefined): string[] => (o ? Object.keys(o).map((k) => `Bar ${k} is replaced by ${link(baseName(o[k]))}.`) : []);
 const amountWords = (a: number): string => (a === 0.5 ? 'half' : `${percentOf(a)} percent`);
 const rangeText = (first: number, last: number): string => (first === last ? `bar ${first}` : `bars ${first} to ${last}`);
@@ -101,11 +109,11 @@ export function describe(params: GrammarParams): string {
   } else if (p.kind === 'extend') {
     const parts = [`Extend ${link(p.source)} to ${p.bars} ${barsWord(p.bars)}`, STYLE_WORDS[p.style]];
     if (p.tempo_change_pct !== 0) parts.push(`${plain(Math.abs(p.tempo_change_pct))} percent ${p.tempo_change_pct < 0 ? 'slower' : 'faster'}`);
-    out.push(`${parts.join(', ')}.`, ...forkSentences(p.overrides));
+    out.push(`${parts.join(', ')}.`, ...stepSentences(p.ops), ...forkSentences(p.overrides));
   } else if (p.kind === 'morph') {
     const order = p.order === 'seeded' ? `${orderWords(p.order)}, seed ${p.seed}` : orderWords(p.order);
     const how = p.bars === 1 ? `as one bar, after ${p.position} single-hit ${p.position === 1 ? 'change' : 'changes'}` : `over ${p.bars} bars`;
-    out.push(`Morph ${link(p.a)} into ${link(p.b)} ${how}, in ${order}.`, ...forkSentences(p.overrides));
+    out.push(`Morph ${link(p.a)} into ${link(p.b)} ${how}, in ${order}.`, ...stepSentences(p.ops), ...forkSentences(p.overrides));
   } else if (p.kind === 'transform') {
     out.push(`Take ${link(baseName(p.source))}.`, ...p.ops.map(opSentence), ...forkSentences(p.overrides));
   } else {
@@ -114,6 +122,7 @@ export function describe(params: GrammarParams): string {
     out.push(`Mix ${link(p.a)} and ${link(p.b)}, ${share}, ${how}.`);
     if (p.threshold !== MIX_DEFAULTS.threshold) out.push(`Threshold ${percentOf(p.threshold)} percent.`);
     if (p.ghost) out.push('With ghost notes.');
+    out.push(...stepSentences(p.ops));
   }
   return out.join(' ');
 }

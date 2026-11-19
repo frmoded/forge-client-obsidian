@@ -14,6 +14,7 @@ import { CUSTOM_BANNER, asRecipeSourced, isCustomNote, pythonTextOf } from './ph
 import { customCallNotes } from './custom-note-core.ts';
 import { REVERT_GENERATED_CONFIRM } from './description-apply-core.ts';
 import { newArrangementNote } from './arrangement-core.ts';
+import { asListNote } from './test-support/phrase-list-fixtures.ts';
 
 const win: any = new Window({ url: 'http://localhost/' });
 const PATH = 'phrases/phrase_001.md';
@@ -54,7 +55,7 @@ test('a Description edited to parse is applied once the person STOPS typing (600
   assert.deepEqual(r.writes, [], 'not before the wait is over');
   await r.advance(1);
   assert.deepEqual(r.writes, [PATH]);
-  assert.equal(r.store.get(PATH), noteContentFor('phrase_001', { ...EXTEND, bars: 6 }));
+  assert.equal(r.store.get(PATH), asListNote(noteContentFor('phrase_001', { ...EXTEND, bars: 6 }), 'phrase_001')); // 2026-11-19-0980 (deliberate): a phrase's Description is a numbered list now: the note a write leaves is the list note
   assert.deepEqual(r.lines, ['[forge-description] applied phrase_001 (8 -> 6 bars)']);
   await r.advance(5000);
   assert.deepEqual(r.writes, [PATH], 'and the write\'s own modify event finds the note synced: nothing more happens');
@@ -100,7 +101,7 @@ test('a Description that does not parse: NOTHING is written, the sentence is in 
   r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
   assert.equal(r.lines.length, 1, 'the same sentence is not reported again');
   (a.querySelector('[data-action="revert"]') as HTMLElement).click(); await r.advance(1);
-  assert.equal(r.store.get(PATH), good);
+  assert.equal(r.store.get(PATH), asListNote(good, 'phrase_001')); // 2026-11-19-0980 (deliberate): a phrase's Description is a numbered list now: the note a write leaves is the list note
   assert.equal(a.querySelector('.forge-description-bar'), null, 'the bar is gone with the problem'); assert.equal(b.querySelector('.forge-description-bar'), null);
   assert.deepEqual(r.lines.at(-1), '[forge-description] reverted phrase_001 to the json cache');
 });
@@ -367,7 +368,7 @@ test('a Recipe edited to parse is applied once the person STOPS typing, by one w
   assert.deepEqual(r.writes, [], 'not before the wait is over');
   await r.advance(1);
   assert.deepEqual(r.writes, [PATH]);
-  assert.equal(r.store.get(PATH), asRecipeSourced(noteContentFor('phrase_001', { ...EXTEND, bars: 6 })));
+  assert.equal(r.store.get(PATH), asRecipeSourced(asListNote(noteContentFor('phrase_001', { ...EXTEND, bars: 6 }), 'phrase_001'))); // 2026-11-19-0980 (deliberate): a phrase's Description is a numbered list now: the note a write leaves is the list note
   assert.deepEqual(r.lines, ['[forge-recipe] applied phrase_001 (8 -> 6 bars)']);
   r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS * 3);
   assert.deepEqual(r.writes, [PATH], 'nothing more happens'); assert.equal(r.lines.length, 1);
@@ -386,7 +387,7 @@ test('a Recipe that does not parse: NOTHING is written, the bar says the line an
   r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
   assert.equal(r.lines.length, 1, 'said once');
   (a.querySelector('[data-action="revert"]') as HTMLElement).click(); await r.advance(1);
-  assert.equal(r.store.get(PATH), good);
+  assert.equal(r.store.get(PATH), asListNote(good, 'phrase_001')); // 2026-11-19-0980 (deliberate): a phrase's Description is a numbered list now: the note a write leaves is the list note
   assert.equal(a.querySelector('.forge-description-bar'), null);
   assert.equal(r.lines.at(-1), '[forge-recipe] reverted phrase_001 to the json cache');
   // and a Recipe fixed instead of reverted is applied
@@ -420,7 +421,7 @@ test('edge: a hand edit of the RECIPE right after the Description was just auto-
   r.store.set(PATH, editRecipe(r.store.get(PATH)!, '6 bars', '4 bars')); r.ctl.modified(PATH);                        // 1 ms after
   await r.advance(DESCRIPTION_DEBOUNCE_MS);
   assert.deepEqual(r.lines, ['[forge-description] applied phrase_001 (8 -> 6 bars)', '[forge-recipe] applied phrase_001 (6 -> 4 bars)']);
-  assert.equal(r.store.get(PATH), asRecipeSourced(noteContentFor('phrase_001', { ...EXTEND, bars: 4 })));
+  assert.equal(r.store.get(PATH), asRecipeSourced(asListNote(noteContentFor('phrase_001', { ...EXTEND, bars: 4 }), 'phrase_001'))); // 2026-11-19-0980 (deliberate): a phrase's Description is a numbered list now: the note a write leaves is the list note
 });
 
 test('edge: a Recipe edit INSIDE the wait of a Description edit: when the timer fires BOTH differ from their stamps, so nothing is written and the person is asked (the first edit is not applied behind the second one\'s back)', async () => {
@@ -597,7 +598,7 @@ test('Revert says which kind of problem it reverted ([forge-recipe] for a Recipe
     r.store.set(PATH, typed); await r.ctl.inspect(PATH);
     assert.ok(a.querySelector('.forge-description-bar'), `${label}: there is something to revert`);
     await r.ctl.revert(PATH);                                                                   // the command's path: one for every state (both edited has no Revert button)
-    assert.equal(r.store.get(PATH), good, label);
+    assert.equal(r.store.get(PATH), asListNote(good, 'phrase_001'), label); // 2026-11-19-0980 (deliberate): a phrase's Description is a numbered list now: the note a write leaves is the list note
     assert.equal(r.lines.at(-1), want, label);
     assert.equal(a.querySelector('.forge-description-bar'), null, label);
     // it forgot it was told: the same problem is said again when it comes back
@@ -822,7 +823,7 @@ test('a custom note opened (inspect): the banner is shown and nothing is written
   await yes.ctl.inspect(PATH);
   (ya.querySelector('[data-action="revert-generated"]') as HTMLElement).click(); await yes.advance(1);
   assert.deepEqual(yes.writes, [PATH]);
-  assert.equal(yes.store.get(PATH), original, 'byte for byte the note the controls made');
+  assert.equal(yes.store.get(PATH), asListNote(original, 'phrase_001'), 'byte for byte the note the controls made'); // 2026-11-19-0980 (deliberate): a phrase's Description is a numbered list now: the note a write leaves is the list note
   assert.deepEqual(yes.lines, ["[forge-python] reverted phrase_001 to the grammar's Python (from the json cache)"]);
   assert.equal(ya.querySelector('.forge-description-bar'), null);
 });
@@ -890,7 +891,7 @@ test('the second door: canRevertGenerated is true only on a custom note that has
   await r.ctl.inspectOpen();
   assert.equal(r.ctl.canRevertGenerated(PATH), true);
   await r.ctl.revertGenerated(PATH); await r.advance(1);
-  assert.deepEqual(r.confirms, [REVERT_GENERATED_CONFIRM]); assert.equal(r.store.get(PATH), original);
+  assert.deepEqual(r.confirms, [REVERT_GENERATED_CONFIRM]); assert.equal(r.store.get(PATH), asListNote(original, 'phrase_001')); // 2026-11-19-0980 (deliberate): a phrase's Description is a numbered list now: the note a write leaves is the list note
   assert.equal(r.ctl.canRevertGenerated(PATH), false, 'and once reverted the command is not offered');
   const plain = rig(); plain.pane(); await plain.ctl.inspectOpen();
   assert.equal(plain.ctl.canRevertGenerated(PATH), false, 'a note that is not custom has nothing to revert');

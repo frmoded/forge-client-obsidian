@@ -11,6 +11,7 @@ import { newArrangementNote } from './arrangement-core.ts';
 import { newCompositionNote } from './composition-core.ts';
 import { descriptionEditedByHand, extractPhraseJsonBlock } from './phrase-notes-core.ts';
 import { extractDescription } from './v2-note-core.ts';
+import { asListNote } from './test-support/phrase-list-fixtures.ts';
 
 const VAULT = { bars: ['bar_007', 'bar_008'], phrases: ['phrase_001', 'phrase_003', 'phrase_009'], arrangements: [], compositions: [], kits: ['rock', 'latin'] };
 const EXTEND: PhraseParams = { kind: 'extend', source: 'bar_007', ...PHRASE_DEFAULTS, bars: 8 };
@@ -38,7 +39,7 @@ test('"8 bars" -> "6 bars": a hand-edited Description that parses is APPLIED; th
   const done = applyDescriptionText(edited, 'phrase_001', 'phrase', VAULT, st.sentence);
   assert.equal(done.ok, true);
   if (!done.ok) return;
-  assert.equal(done.text, note({ ...EXTEND, bars: 6 }), 'byte for byte what the controls make');
+  assert.equal(done.text, asListNote(note({ ...EXTEND, bars: 6 }), 'phrase_001'), 'byte for byte what the controls make'); // 2026-11-19-0980 (deliberate): a phrase's Description is a numbered list now: the note a write leaves is the list note
   const read = readPhraseNote(done.text); assert.equal(read.ok && read.value.kind === 'extend' && read.value.bars, 6, 'the json cache says 6');
   assert.deepEqual(descriptionState(done.text, 'phrase', VAULT), { kind: 'synced' });
   assert.deepEqual(applyDescriptionText(done.text, 'phrase_001', 'phrase', VAULT, st.sentence).ok, false, 'applied twice: the second finds nothing to do');
@@ -54,7 +55,7 @@ test('a Description that does not parse writes NOTHING and says where, in one se
   assert.equal(applyDescriptionText(edited, 'phrase_001', 'phrase', VAULT, st.sentence).ok, false);
   assert.equal(rejectedLine('phrase_001', st.error), `[forge-description] rejected phrase_001: line 1 column ${st.error.column} ${st.error.message}`);
   const reverted = revertDescriptionText(edited, 'phrase_001', 'phrase');
-  assert.equal(reverted.ok && reverted.text, note(), 'back to the last good Description, byte for byte');
+  assert.equal(reverted.ok && reverted.text, asListNote(note(), 'phrase_001'), 'back to the last good Description, byte for byte'); // 2026-11-19-0980 (deliberate): a phrase's Description is a numbered list now: the note a write leaves is the list note
 });
 
 test('rejectionMessage lower-cases the grammar\'s first word and keeps the rest', () => {
@@ -68,7 +69,7 @@ test('edge: a whitespace-only edit is applied as "no change in the music" and th
   if (st.kind !== 'apply') return;
   assert.equal(st.unchanged, true); assert.equal(st.change, 'no change in the music');
   const done = applyDescriptionText(edited, 'phrase_001', 'phrase', VAULT, st.sentence);
-  assert.equal(done.ok && done.text, note());
+  assert.equal(done.ok && done.text, asListNote(note(), 'phrase_001')); // 2026-11-19-0980 (deliberate): a phrase's Description is a numbered list now: the note a write leaves is the list note
 });
 
 test('edge: a source that is not in the vault (a transform whose source phrase was deleted) is rejected and the error NAMES the missing note', () => {

@@ -800,7 +800,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
     if (from !== 'notebook' && notebookHandle && (runs || next.bars.length === 0)) notebookHandle.selectRange(next.bars.length > 0 ? next.bars[0] : 1, next.bars.length > 0 ? next.bars[next.bars.length - 1] : 0);
     console.info(`[forge-barsel] ${from}: ${selectionText(next)}`);
   };
-  /** A menu action: plan it (bar-selection-core.ts), then PREVIEW the sentence in the prompt box (a transform phrase), or make the new phrase (everything else). Nothing is applied here. */
+  /** A menu action: plan it (bar-selection-core.ts), then APPEND the sentence to the phrase's list (a transform phrase), or make the new phrase (everything else). */
   const runSelectionAction = async (action: SelectionAction): Promise<void> => {
     const host = barSelectionHost();
     const plan = planAction(action, selection, current, phraseName, scoreBars?.length ?? 0);
@@ -809,8 +809,8 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
     if (plan.kind === 'refused') { say(plan.message); return; }
     if (host === null) { say('no prompt box here to show it in.'); return; }
     if (plan.kind === 'preview') {
-      if (!host.previewDescription(notePath, plan.text)) say('this tab has no prompt box to show the sentence in.');
-      else say(`"${plan.sentence}" is in the prompt box: press Apply to do it.`);
+      const done = await host.appendLine(notePath, plan.sentence);                                          // 2026-11-19-0980: the step is a LINE of the list now: added at once, one write, Cmd/Ctrl+Z in the composer takes it back
+      say(done.ok ? `${done.message} (Cmd/Ctrl+Z in the composer takes it back.)` : done.message);
       return;
     }
     const made = await host.makePhrase(plan.params);

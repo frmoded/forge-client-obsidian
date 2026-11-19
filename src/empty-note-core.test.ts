@@ -100,8 +100,9 @@ test('THE FIRST SENTENCE (the same path the composer takes: the Description repl
     assert.equal(isEmptyNote(text), false, `${family}: it is a note with a kind now`);
     const kind = kindOf(text); assert.ok(kind !== null, `${family}: the kind is read from the note`); kinds.push(kind);
     // 2026-11-19-0970 (the list model): the Description of an arrangement and a composition is a numbered list of the canonical sentences (an arrangement's closing "Together." is not one); a phrase's is still the sentence
-    const expected = family === 'phrase' ? sentence : sentence.replace(/ Together\.$/, '').split(/(?<=\.) /).map((x, i) => `${i + 1}. ${x}`).join('\n');
-    assert.equal(extractDescription(text).trim(), expected, `${family}: the Description is the canonical sentence${family === 'phrase' ? '' : ' as a list of one'}`);
+    // 2026-11-19-0980 (deliberate): a phrase's Description is a numbered list too now (line 1 is its head): "1. Extend ..." / "1. Mix ..." / "1. Morph ..."
+    const expected = sentence.replace(/ Together\.$/, '').split(/(?<=\.) /).map((x, i) => `${i + 1}. ${x}`).join('\n');
+    assert.equal(extractDescription(text).trim(), expected, `${family}: the Description is the canonical sentence as a list of one`);
     assert.ok((extractRecipeSection(text) ?? '').trim().length > 0, `${family}: the Recipe is filled`);
     assert.ok((pythonTextOf(text) ?? '').trim().length > 0, `${family}: the Python is filled`);
     assert.ok(cacheParams(text, family) !== null, `${family}: the cache holds the params`);

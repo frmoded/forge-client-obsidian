@@ -138,7 +138,7 @@ test('a sentence the grammar reads: the first Enter adds YOU and a PREVIEW (the 
   assert.deepEqual(kinds(r.el), ['you', 'suggestion', 'applied']);
   const e = dialogEntries(r.el);
   assert.equal(e[0]!.text, 'Extend [[bar_007]] to 6 bars, repeating with fills.');
-  assert.match(e[2]!.text, /^✓ Applied \(8 -> 6 bars\): Extend \[\[bar_007\]\] to 6 bars/);
+  assert.match(e[2]!.text, /^✓ Applied \(8 -> 6 bars\): 1\. Extend \[\[bar_007\]\] to 6 bars/);       // 2026-11-19-0980 (deliberate): a phrase's Description is a numbered list now, and the dialog shows it as the note has it
   assert.equal(r.el.querySelector('.forge-chat-chosen')!.textContent, 'Applied.');
   assert.deepEqual(r.writes, [PATH]);
 });

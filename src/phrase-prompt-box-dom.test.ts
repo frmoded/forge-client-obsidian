@@ -6,7 +6,8 @@ import { Window } from 'happy-dom';
 
 import { mountPhrase, type PhraseMountPorts } from './phrase-dom.ts';
 import { createDescriptionController } from './description-apply.ts';
-import { applyPhraseWrite, noteContentFor, type PhraseParams } from './phrase-core.ts';
+import { noteContentFor, type PhraseParams } from './phrase-core.ts';
+import { writePhraseStrip } from './sentence-list-note-core.ts';
 import { extractDescription } from './v2-note-core.ts';
 
 const PATH = 'phrases/phrase_002.md';
@@ -33,7 +34,8 @@ function rig() {
     path: PATH, title: 'phrase_002', plan: 'score', initial: files.get(PATH)!,
     listBars: () => ['bar_005', 'bar_006'],
     readNote: async (p) => { const t = files.get(p); if (t === undefined) throw new Error('File not found'); return t; },
-    writePhrase: async (params) => { const w = applyPhraseWrite(files.get(PATH)!, params, 'phrase_002'); if (w.ok === false) return w; files.set(PATH, w.text); modified(PATH); return { ok: true }; },
+    writePhrase: async (params) => { const w = writePhraseStrip(files.get(PATH)!, 'phrase_002', params, { bars: ['bar_005', 'bar_006'], phrases: ['phrase_002'] }); if (w.ok === false) return w;       // 2026-11-19-0980: the plugin's strip write: the Description is the LIST, edited in the smallest way
+    files.set(PATH, w.text); modified(PATH); return { ok: true }; },
     compute: async (_d, params) => ({ type: 'musicxml', content: `<score-partwise>${params.kind === 'mix' ? params.weight : '?'}</score-partwise>` }),
     renderInto: (host) => { host.textContent = 'engraved'; return true; },
     stopPlayers: () => {},
@@ -52,11 +54,11 @@ test('on the real phrase tab: moving the Weight slider changes the box text; app
   assert.equal(r.parent.lastElementChild.className, 'forge-chat-panel', '2026-11-13-1214 (it said "the box is the last child of the tab"): the panel is the last thing in the tab, below the body that holds the strip and the Score');
   assert.equal(r.parent.lastElementChild.lastElementChild, r.q('.forge-composer-error'), 'and the card is the LAST thing in it but the one muted line under it: at the bottom');
   assert.equal(r.q('.forge-prompt-box').nextElementSibling, r.q('.forge-composer-error'));
-  assert.equal(r.q('.forge-prompt-box-text').value, 'Mix [[bar_005]] and [[bar_006]], 50 percent [[bar_005]], as a vote.');
-  // a control change -> the box
+  assert.equal(r.q('.forge-prompt-box-text').value, '', '2026-11-19-0980 (deliberate): the phrase composer does not show the Description (a list: it is in the note and the dialog; the prompt line is for the next sentence)');
+  // a control change -> the note (the head line of the list)
   r.q('.forge-mix-weight').value = '0.35'; r.q('.forge-mix-weight').dispatchEvent(new r.win.Event('input', { bubbles: true })); await flush();
-  assert.equal(extractDescription(r.files.get(PATH)!), 'Mix [[bar_005]] and [[bar_006]], 35 percent [[bar_005]], as a vote.');
-  assert.equal(r.q('.forge-prompt-box-text').value, 'Mix [[bar_005]] and [[bar_006]], 35 percent [[bar_005]], as a vote.', 'the box shows what the control wrote');
+  assert.equal(extractDescription(r.files.get(PATH)!), '1. Mix [[bar_005]] and [[bar_006]], 35 percent [[bar_005]], as a vote.'+'', 'the strip rewrote the head line of the list');
+  assert.equal(r.q('.forge-prompt-box-text').value, '', 'and the composer stays empty');
   assert.equal(r.q('.forge-prompt-box.is-edited'), null);
   // the box -> the controls
   const f = r.q('.forge-prompt-box-text');
@@ -64,20 +66,20 @@ test('on the real phrase tab: moving the Weight slider changes the box text; app
   for (let n = 0; n < 2; n++) { f.dispatchEvent(new r.win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); await flush(); }                  // 2026-11-17-2001: the first Enter previews, the second applies
   assert.equal(r.q('.forge-mix-weight').value, '0.8', 'the Weight slider shows the new value');
   assert.equal(r.q('.forge-mix-threshold').value, '0.65', 'and the Threshold');
-  assert.equal(extractDescription(r.files.get(PATH)!), 'Mix [[bar_005]] and [[bar_006]], 80 percent [[bar_005]], as a vote. Threshold 65 percent.');
-  assert.equal(r.q('.forge-prompt-box-text').value, 'Mix [[bar_005]] and [[bar_006]], 80 percent [[bar_005]], as a vote. Threshold 65 percent.');
+  assert.equal(extractDescription(r.files.get(PATH)!), '1. Mix [[bar_005]] and [[bar_006]], 80 percent [[bar_005]], as a vote.\n2. Threshold 65 percent.');       // 2026-11-19-0980 (deliberate): the head replaced line 1, the threshold is a line of its own
+  assert.equal(r.q('.forge-prompt-box-text').value, '', 'the composer is empty after an apply');
   // typing in the box, then a control moves: the typing stays
   f.value = 'half-typed'; f.dispatchEvent(new r.win.Event('input', { bubbles: true }));
   r.q('.forge-mix-weight').value = '0.2'; r.q('.forge-mix-weight').dispatchEvent(new r.win.Event('input', { bubbles: true })); await flush();
   assert.equal(r.q('.forge-prompt-box-text').value, 'half-typed');
-  assert.ok(r.q('.forge-prompt-box-conflict') && r.q('.forge-prompt-box-conflict').style.display !== 'none');
+  const conflict = r.q('.forge-prompt-box-conflict'); assert.ok(conflict === null || conflict.style.display === 'none', '2026-11-19-0980 (deliberate): the composer shows nothing of the Description, so a control that changes it never conflicts with what is typed');
 });
 
 test('the Path switch of a mix writes the path sentence and the box follows; a vote sentence typed in the box switches the controls back to Vote', async () => {
   const r = rig();
   await r.handle.load(); await flush(); await r.ctl.inspect(PATH); await flush();
   r.q('.forge-mix-mode').value = 'path'; r.q('.forge-mix-mode').dispatchEvent(new r.win.Event('change', { bubbles: true })); await flush();
-  assert.match(r.q('.forge-prompt-box-text').value, /as a path, in musical order/);
+  assert.match(extractDescription(r.files.get(PATH)!), /as a path, in musical order/);       // 2026-11-19-0980 (deliberate): the head line of the list says it (the composer shows nothing of the list)
   const f = r.q('.forge-prompt-box-text');
   f.value = 'Mix [[bar_005]] and [[bar_006]], 50 percent [[bar_005]], as a vote.'; f.dispatchEvent(new r.win.Event('input', { bubbles: true }));
   for (let n = 0; n < 2; n++) { f.dispatchEvent(new r.win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); await flush(); }                  // 2026-11-17-2001: the first Enter previews, the second applies
@@ -93,5 +95,5 @@ test('a tab that rebuilds itself for a new kind of note (a mix hand-edited into 
   assert.equal(r.parent.querySelectorAll('.forge-prompt-box').length, 1, 'one box');
   assert.equal(r.q('.forge-prompt-box').nextElementSibling, r.q('.forge-composer-error'), 'and it is still the last thing in the panel (2026-11-13-1214)');
   assert.equal(r.parent.lastElementChild.lastElementChild, r.q('.forge-composer-error'));
-  assert.equal(r.q('.forge-prompt-box-text').value, 'Morph [[bar_005]] into [[bar_006]] over 5 bars, in musical order.');
+  assert.equal(r.q('.forge-prompt-box-text').value, '', '2026-11-19-0980 (deliberate): the composer shows nothing of the Description, whatever the kind');
 });

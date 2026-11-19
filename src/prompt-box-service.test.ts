@@ -89,8 +89,8 @@ test('applying the preview writes the note (one write, the phrase the suggestion
   assert.deepEqual(r.writes, [PATH]);
   const read = readPhraseNote(r.store.get(PATH)!);
   assert.ok(read.ok && read.value.kind === 'extend' && read.value.bars === 12 && read.value.tempo_change_pct === -10);
-  assert.equal(r.field().value, extractDescription(r.store.get(PATH)!), 'the box is the Description the note says now');
-  assert.notEqual(r.field().value, FREE);
+  assert.equal(r.field().value, '', 'the composer shows nothing of the Description (a list: 2026-11-19-0980); the note says the canonical sentence as line 1');
+  assert.equal(extractDescription(r.store.get(PATH)!), '1. Extend [[bar_007]] to 12 bars, repeating with fills, 10 percent slower.');
   assert.equal(r.el.querySelector('.forge-prompt-box.is-edited'), null);
   assert.equal(r.el.querySelector('.forge-prompt-box-conflict') === null || (r.el.querySelector('.forge-prompt-box-conflict') as HTMLElement).style.display === 'none', true, 'no leftover conflict');
   assert.match(r.strip(), /^✓ Applied \(/, 'the dialog says what was applied (2026-11-13-1214: no longer the strip)');

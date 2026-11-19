@@ -14,9 +14,14 @@
 // `describe` ADDS when line i is replayed after lines 1 to i-1 (the difference of two describes). So "play phrase_002 on the latin kit" becomes "Play [[phrase_002]] on the [[latin]] kit.", a composition's first section is "Play ...", the
 // next ones "Then play ..." whatever the person typed, and a line that adds nothing (a mute said twice, a volume back at 100) is kept as written. Two things are NOT lines: an arrangement's closing "Together." (the grammar needs it at the end of
 // the description; the replay adds it, the list never carries it) and, in a composition, nothing else. A seed is part of the sentence of a line that draws random choices (the grammar says "in seeded order, seed 3" itself), so a replay is the same
-// twice. `kind` 'phrase' is replayed by the very same loop (one description, one sentence per line, no pipeline yet: stage 2); the wiring does not use it.
+// twice.
+// 2026-11-19-0980 (STAGE 2: PHRASES) - `kind` 'phrase' is a PIPELINE in the same loop: line 1 is the HEAD (Extend, Mix, Morph or Take), later lines are the head's modifier lines ("Make it 20 percent slower.", "Make it 8 bars long."), its structure steps,
+// the transforms of a Take and the forks. The canonical line of a head is the first sentence `describe` says of it; of a modifier, its own sentence; of any later line, the sentence `describe` ADDS after the head (the same difference of two describes).
+// A later head REPLACES line 1 (and the modifier lines of a segment it says itself); the lines still valid for the new head stay, the first invalid one stops the replay. A modifier replaces the earlier one of the same segment, a fork the earlier fork of the
+// same bar, a thin out / double up the earlier one of the same range and row (all in place); a structure step never conflicts and one after a density step is REFUSED (never re-sorted). A random line draws its seed ONCE (`drawSeeds`), so a replay is the same.
+// `listAfterParams` is the STRIP's side: what the lines become when a slider wrote new params.
 import { parse, sentencesOf, type GrammarParams, type GrammarVault } from './phrase-grammar-core.ts';
-import { compositionSentences, describe } from './phrase-describe-core.ts';
+import { canonical, compositionSentences, describe, lengthModifierSentence, tempoModifierSentence } from './phrase-describe-core.ts';
 import { wrongKindSentence, type Family } from './note-family-core.ts';
 import { arrangementPython, arrangementRecipeSteps, formatArrangementJson, type ArrangementParams } from './arrangement-core.ts';
 import { compositionPython, compositionRecipeSteps, formatCompositionJson, type CompositionParams, type CompositionSection } from './composition-core.ts';
@@ -77,6 +82,7 @@ const pick = (m: RegExpExecArray, i: number): string => (m[i] ?? m[i + 1] ?? '')
 /** What a line is ABOUT, for the conflict rule: an arrangement line is about a kit's phrase (`play:K`), a kit's volume (`volume:K`), a kit's mute (`mute:K`) or the solo (`only`); a composition line is about nothing (null: compositions
  *  are plain sequences and never conflict), and so is a line of any shape the grammar knows nothing of. A reading of the sentence's SHAPE only: whether the line means anything is the grammar's. */
 export function subjectOf(sentence: string, kind: ListKind): string | null {
+  if (kind === 'phrase') return phraseSubjectOf(sentence);
   if (kind !== 'arrangement') return null;
   const s = sentence.trim();
   let m = VOLUME.exec(s); if (m) return `volume:${pick(m, 1)}`;
@@ -86,17 +92,51 @@ export function subjectOf(sentence: string, kind: ListKind): string | null {
   return null;
 }
 
+// ---- the conflict subjects of a phrase (2026-11-19-0980): a SHAPE reading, like the arrangement's above -------------------------------------------------------------------------------------------------------------------
+const HEAD_LINE = /^\s*(?:extend|mix|morph|take)\b/i;
+const TEMPO_LINE = /^\s*make\s+it\s+[^\s]+\s*(?:percent|%)\s*(?:slower|faster)\b/i;
+const LENGTH_LINE = /^\s*make\s+it\s+[^\s]+\s+bars?\s+long\b/i;
+const FORK_LINE = /^\s*bar\s+(\d+)\s+is\b/i;
+const DENSITY_LINE = /^\s*(thin\s+out|double\s+up)\s+bars?\s+(\d+)(?:\s+to\s+(\d+))?\b(.*)$/i;
+/** Is this line a HEAD of a phrase (it opens a phrase: Extend, Mix, Morph or Take)? */
+export const isHeadLine = (sentence: string): boolean => HEAD_LINE.test(sentence);
+function phraseSubjectOf(sentence: string): string | null {
+  const s = sentence.trim();
+  if (HEAD_LINE.test(s)) return 'head';
+  if (TEMPO_LINE.test(s)) return 'tempo';
+  if (LENGTH_LINE.test(s)) return 'length';
+  let m = FORK_LINE.exec(s); if (m) return `fork:${Number(m[1])}`;
+  m = DENSITY_LINE.exec(s);
+  if (m) { const row = /,\s*([A-Za-z0-9_-]+)\s+row\b/i.exec(m[4])?.[1]?.toLowerCase() ?? ''; return `${/^thin/i.test(m[1]) ? 'thin' : 'double'}:${Number(m[2])}-${Number(m[3] ?? m[2])}:${row}`; }
+  if (/^\s*threshold\b/i.test(s)) return 'threshold';
+  if (/^\s*with\s+ghost\s+notes\b/i.test(s)) return 'ghost';
+  return null;
+}
+/** The head segments a TYPED head sentence says itself ("to 12 bars", "over 5 bars", "as one bar", "20 percent slower"): a modifier line of that segment is then superseded (the typed words win). */
+export function segmentsSaidBy(head: string): Array<'length' | 'tempo'> {
+  const out: Array<'length' | 'tempo'> = [];
+  if (/\b(?:to|over)\s+[^\s,]+\s+bars?\b|\b(?:as|in)\s+one\s+bar\b/i.test(head)) out.push('length');
+  if (/[^\s,]+\s*(?:percent|%)\s+(?:slower|faster)\b/i.test(head)) out.push('tempo');
+  return out;
+}
+
 /** `sentence` as the next line, or in the place of the LAST earlier line about the same subject (in place: the lines that came after it still follow, so a mute of that kit still finds its kit). `replaced` is what it took the place of. */
-export function append(list: SentenceList, sentence: string, kind: ListKind): { list: string[]; replaced: Replaced | null; at: number } {
+export function append(list: SentenceList, sentence: string, kind: ListKind): { list: string[]; replaced: Replaced | null; at: number; also: Replaced[] } {
   const subject = subjectOf(sentence, kind);
+  if (kind === 'phrase' && subject === 'head' && list.length > 0) {                                      // a later HEAD replaces line 1; a modifier line of a segment the new head says itself is superseded (dropped), every other line stays where it is
+    const said = new Set<string>(segmentsSaidBy(sentence));
+    const dropped: Replaced[] = []; const rest: string[] = [];
+    list.forEach((line, i) => { if (i === 0) return; const sub = phraseSubjectOf(line); if (sub !== null && said.has(sub)) dropped.push({ index: i, sentence: line }); else rest.push(line); });
+    return { list: [sentence, ...rest], replaced: { index: 0, sentence: list[0] }, at: 0, also: dropped };
+  }
   if (subject !== null) {
     for (let i = list.length - 1; i >= 0; i--) {
       if (subjectOf(list[i], kind) !== subject) continue;
       const next = [...list]; next[i] = sentence;
-      return { list: next, replaced: { index: i, sentence: list[i] }, at: i };
+      return { list: next, replaced: { index: i, sentence: list[i] }, at: i, also: [] };
     }
   }
-  return { list: [...list, sentence], replaced: null, at: list.length };
+  return { list: [...list, sentence], replaced: null, at: list.length, also: [] };
 }
 
 /** The list without line `i` (an index outside the list, or not a whole number, changes nothing). */
@@ -115,7 +155,7 @@ export interface ReplayCtx {
   /** Apply at most this many lines (the loop check of the caller cut the list there). */
   maxApplied?: number;
 }
-export interface ListStop { index: number; reason: 'unreadable' | 'loop'; message: string; line: number; column: number }
+export interface ListStop { index: number; reason: 'unreadable' | 'loop'; message: string; line: number; column: number; /** 2026-11-19-0980: the grammar's own code for a refusal that is about the ORDER or the HEAD of a phrase's list (see GrammarError) */ code?: 'order' | 'head' }
 export interface Replay {
   /** The lines: the ones that were read in their canonical wording, the one that stopped the replay and the ones after it exactly as written. */
   list: string[];
@@ -159,6 +199,18 @@ export function extra(a: readonly string[], b: readonly string[]): string[] {
   return a.filter((x) => { const n = left.get(x) ?? 0; if (n > 0) { left.set(x, n - 1); return false; } return true; });
 }
 
+/** 2026-11-19-0980: the canonical line of line `i` of a phrase's list (`per[i]` is what lines 1 to i+1 say): the head is the first sentence `describe` says; a modifier its own sentence with the value it set; any other line the sentence `describe` ADDS after the head (the difference of two describes, the head left out); a line that adds nothing is kept as written. */
+function phraseLine(line: string, i: number, per: readonly GrammarParams[]): string {
+  const after = (p: GrammarParams): string[] => linesOfParams(p, 'phrase').slice(1);
+  if (i === 0) return linesOfParams(per[0], 'phrase')[0] ?? norm(line);
+  const sub = phraseSubjectOf(line);
+  const now = per[i] as unknown as { bars?: number; tempo_change_pct?: number };
+  if (sub === 'tempo' && now.tempo_change_pct !== undefined) return tempoModifierSentence(now.tempo_change_pct);
+  if (sub === 'length' && now.bars !== undefined) return lengthModifierSentence(now.bars);
+  const added = extra(after(per[i]), after(per[i - 1]));
+  return added.length === 1 ? added[0] : norm(line);
+}
+
 /** The Recipe, the Python and the json cache of params (the same builders the note writers use). */
 function derived(params: GrammarParams | null): Pick<Replay, 'recipe' | 'python' | 'json'> {
   if (params === null) return { recipe: [], python: '', json: '{}' };
@@ -185,7 +237,7 @@ function run(list: SentenceList, kind: ListKind, ctx: ReplayCtx): { replay: Repl
     const read = parse(prefixText(fixed, i + 1, kind), ctx.vault);
     if (read.ok === false) {
       const other = wrongKindOf(fixed, i + 1, kind, ctx.vault);                                       // a line of the OTHER kind fails in this kind's reading: the message says which kind it is, as a whole-description reading always did
-      stop = { index: i, reason: 'unreadable', message: other ?? read.error.message, line: i + 1, column: other !== null || read.error.line - 1 !== i ? 1 : read.error.column }; break;
+      stop = { index: i, reason: 'unreadable', message: other ?? read.error.message, line: i + 1, column: other !== null || read.error.line - 1 !== i ? 1 : read.error.column, ...(read.error.code !== undefined && other === null ? { code: read.error.code } : {}) }; break;
     }
     const wrong = wrongKindSentence(kind, read.params.kind, 'the sentence');
     if (wrong !== null) { stop = { index: i, reason: 'unreadable', message: wrong, line: i + 1, column: 1 }; break; }
@@ -193,6 +245,7 @@ function run(list: SentenceList, kind: ListKind, ctx: ReplayCtx): { replay: Repl
   }
   const lines = raw.map((line, i) => {
     if (i >= per.length) return line;
+    if (kind === 'phrase') return phraseLine(fixed[i], i, per);
     const added = extra(linesOfParams(per[i], kind), i === 0 ? [] : linesOfParams(per[i - 1], kind));
     return added.length === 1 ? added[0] : norm(fixed[i]);                       // a line that adds nothing (a mute said twice, a volume back at 100) is kept as written
   });
@@ -230,26 +283,104 @@ export function stopNotice(stop: ListStop, applied: number): string {
 
 export type Plan =
   | { ok: true; list: string[]; added: string[]; replaced: Replaced[]; unchanged: boolean; replay: Replay }
-  /** `empty` nothing to add; `blocked` the list has a line that cannot be read (fix or undo it first); `unreadable` the typed sentence (line and column are IN THE TYPED TEXT); `loop` the typed sentence would make a composition play itself. */
-  | { ok: false; reason: 'empty' | 'blocked' | 'unreadable' | 'loop'; message: string; line: number; column: number };
+  /** `empty` nothing to add; `blocked` the list has a line that cannot be read (fix or undo it first); `unreadable` the typed sentence (line and column are IN THE TYPED TEXT); `loop` the typed sentence would make a composition play itself;
+   *  2026-11-19-0980: `order` a structure step after a Thin out or a Double up of a phrase (do the structure steps first; never re-sorted), `head` a line the grammar read but the phrase's head cannot take (or no head yet): neither is for the sentence service. */
+  | { ok: false; reason: 'empty' | 'blocked' | 'unreadable' | 'loop' | 'order' | 'head'; message: string; line: number; column: number };
+
+/** The words a structure step after a density step is refused in: what to do and what was left alone. */
+export const orderRefusal = (sentence: string): string => `Do the structure steps first: "${sentence}" changes which bars there are, and this phrase already has a Thin out or a Double up before it (a Keep, Delete, Copy or Move comes before them). The list is unchanged.`;
 
 /** What the typed sentences (already split: one per sentence) become when they are APPENDED to `list`: each one canonicalized, in place of the earlier line it conflicts with or at the end, the whole result replayed. Nothing is written here. */
 export async function planAppend(list: SentenceList, kind: ListKind, typed: readonly string[], ctx: ReplayCtx): Promise<Plan> {
   const sentences = typed.map((t) => t.trim()).filter((t) => t !== '' && !(kind === 'arrangement' && TOGETHER.test(t)));
   if (sentences.length === 0) return { ok: false, reason: 'empty', message: 'There is no sentence to add.', line: 1, column: 1 };
   const base = await replay(list, kind, ctx);
-  if (base.stop !== null) return { ok: false, reason: 'blocked', message: stopNotice(base.stop, base.applied), line: base.stop.line, column: base.stop.column };
+  const newHead = kind === 'phrase' && sentences.some(isHeadLine);                                       // a head replaces line 1: it can repair a list whose line 1 cannot be read
+  if (base.stop !== null && !newHead) return { ok: false, reason: 'blocked', message: stopNotice(base.stop, base.applied), line: base.stop.line, column: base.stop.column };
   let next: string[] = [...list]; const at: number[] = []; const replacedAll: Replaced[] = [];
-  for (const sentence of sentences) { const r = append(next, sentence, kind); next = r.list; at.push(r.at); if (r.replaced !== null) replacedAll.push(r.replaced); }
+  for (const sentence of sentences) { const r = append(next, sentence, kind); next = r.list; at.push(r.at); if (r.replaced !== null) replacedAll.push(r.replaced); replacedAll.push(...r.also); }
   const rep = await replay(next, kind, ctx);
   if (rep.stop !== null) {
     const j = at.indexOf(rep.stop.index);
-    if (j === -1) return { ok: false, reason: 'blocked', message: stopNotice(rep.stop, rep.applied), line: rep.stop.line, column: rep.stop.column };
-    return { ok: false, reason: rep.stop.reason === 'loop' ? 'loop' : 'unreadable', message: rep.stop.message, line: j + 1, column: rep.stop.column };
+    if (j === -1 && newHead) { /* the new head left a later line that it cannot take: the replay stops there (the unreadable-line words), nothing is dropped */ }
+    else if (j === -1) return { ok: false, reason: 'blocked', message: stopNotice(rep.stop, rep.applied), line: rep.stop.line, column: rep.stop.column };
+    else if (rep.stop.code === 'order') return { ok: false, reason: 'order', message: orderRefusal(sentences[j]), line: j + 1, column: rep.stop.column };
+    else if (rep.stop.code === 'head' || (kind === 'phrase' && list.length === 0 && j === 0 && !isHeadLine(sentences[0]) && phraseSubjectOf(sentences[0]) !== null)) return { ok: false, reason: 'head', message: rep.stop.message, line: j + 1, column: rep.stop.column };
+    else return { ok: false, reason: rep.stop.reason === 'loop' ? 'loop' : 'unreadable', message: rep.stop.message, line: j + 1, column: rep.stop.column };
   }
-  const added = [...new Set(at)].map((i) => rep.list[i]);
-  const replaced = replacedAll.filter((r) => rep.list[r.index] !== base.list[r.index]);
+  const added = [...new Set(at)].filter((i) => i < rep.list.length).map((i) => rep.list[i]);
+  const replaced = kind === 'phrase' ? replacedAll.filter((r) => !rep.list.includes(r.sentence)) : replacedAll.filter((r) => rep.list[r.index] !== base.list[r.index]);
   return { ok: true, list: rep.list, added, replaced, unchanged: same(rep.list, base.list), replay: rep };
+}
+
+// ---- a random line draws its seed ONCE (2026-11-19-0980) ---------------------------------------------------------------------------------------------------------------------------------------------------------
+
+/** A seed for a random line: a whole number from 0 to 999 (the default draw; the controller may be given another). */
+export const defaultSeed = (): number => Math.floor(Math.random() * 1000);
+const SEEDED_ORDER = /\bin\s+seeded\s+order\b(?!\s*,?\s*seed\b)/i;
+const AT_RANDOM = /,?\s*(?:chosen\s+)?at\s+random\b|,?\s*chosen\s+by\s+seed(?!\s+\d)/i;
+/** The typed sentences of a phrase with the seed of every RANDOM line drawn once and said in the sentence ("... in seeded order, seed 3." / "..., chosen by seed 3."): a seeded morph or mix that said no seed, a thin out "chosen at random". A line that has its seed, or
+ *  nothing random, is returned as it is, and `draw` is not asked. Called ONCE, when the sentence is typed (the preview): the replay of the stored line is the same every time, so undo, redo and a re-render give the same bars. Other kinds draw nothing. */
+export function drawSeeds(sentences: readonly string[], kind: ListKind, draw: () => number): string[] {
+  if (kind !== 'phrase') return [...sentences];
+  return sentences.map((t) => {
+    if (SEEDED_ORDER.test(t)) return t.replace(SEEDED_ORDER, (m) => `${m}, seed ${draw()}`);
+    if (AT_RANDOM.test(t)) return t.replace(AT_RANDOM, () => `, chosen by seed ${draw()}`);
+    return t;
+  });
+}
+
+// ---- the strip (sliders) writes lines (2026-11-19-0980) -----------------------------------------------------------------------------------------------------------------------------------------------------------
+
+type Mod = { sub: 'length' | 'tempo'; sentence: (p: Record<string, unknown>) => string; value: (p: Record<string, unknown>) => number | undefined };
+const MODS: Mod[] = [
+  { sub: 'length', sentence: (p) => lengthModifierSentence(p.bars as number), value: (p) => p.bars as number | undefined },
+  { sub: 'tempo', sentence: (p) => tempoModifierSentence(p.tempo_change_pct as number), value: (p) => p.tempo_change_pct as number | undefined },
+];
+const sameParams = (a: GrammarParams, b: GrammarParams): boolean => JSON.stringify(canonical(a)) === JSON.stringify(canonical(b));
+
+/**
+ * What the LINES become when the strip wrote `params` (a slider moved, a bar was forked): the list is edited in the smallest way that makes its replay say `params`. The length and the tempo are MODIFIER lines (written or replaced in place; taken away when the
+ * value is what the head itself says), a fork is a fork line (added, replaced in place, taken away), the mix's threshold and ghost notes their own lines, every other change (the source, the style, the share, the order) rewrites the HEAD line, and every
+ * other line (a Keep, a Thin out) stays where it is. When the result does not replay to `params` (a list that cannot be read, a kind that changed) it is the canonical lines of `params`, as the strip always replaced the Description. Pure.
+ */
+export function listAfterParams(list: SentenceList, params: GrammarParams, kind: ListKind, ctx: ReplayCtx): string[] {
+  const fallback = linesOfParams(params, kind);
+  if (kind !== 'phrase' || params.kind === 'arrangement' || params.kind === 'composition') return fallback;
+  const now = replayGrammar(list, kind, ctx), head = replayGrammar(list.slice(0, 1), kind, ctx);
+  if (now.params === null || now.stop !== null || head.params === null || head.params.kind !== params.kind || now.params.kind !== params.kind) return fallback;
+  const want = params as unknown as Record<string, unknown>, own = head.params as unknown as Record<string, unknown>;
+  // the head line: the head's own sentence for the params, at the head's OWN length and tempo (the modifier lines carry the rest), without forks, steps, threshold and ghost notes of a mix
+  const { overrides: _o, ops: _p, ...headOnly } = want;
+  const headParams = { ...headOnly, ...(MODS.reduce<Record<string, unknown>>((acc, m) => { const v = m.value(own); if (v !== undefined) acc[m.sub === 'length' ? 'bars' : 'tempo_change_pct'] = v; return acc; }, {})), ...(params.kind === 'mix' ? { threshold: 0.5, ghost: false } : {}), ...(params.kind === 'transform' ? { ops: [] } : {}) } as unknown as GrammarParams;
+  let out = [linesOfParams(headParams, kind)[0], ...list.slice(1)];
+  // the modifier lines
+  for (const m of MODS) {
+    const desired = m.value(want), wasHead = m.value(own);
+    if (desired === undefined) continue;
+    const at = out.map((l, i) => (i > 0 && phraseSubjectOf(l) === m.sub ? i : -1)).filter((i) => i >= 0);
+    if (desired === wasHead) { out = out.filter((_, i) => !at.includes(i)); continue; }
+    const line = m.sentence(want);
+    if (at.length === 0) { out = [...out, line]; continue; }
+    const keep = at[at.length - 1]; out = out.map((l, i) => (i === keep ? line : l)).filter((_, i) => !at.slice(0, -1).includes(i));
+  }
+  // the lines the strip edits by name: forks, a mix's threshold and ghost notes
+  const target = linesOfParams(params, kind).slice(1).filter((l) => { const sub = phraseSubjectOf(l); return sub !== null && (sub.startsWith('fork:') || sub === 'threshold' || sub === 'ghost'); });
+  const named = (l: string): boolean => { const sub = phraseSubjectOf(l); return sub !== null && (sub.startsWith('fork:') || sub === 'threshold' || sub === 'ghost'); };
+  const wanted = new Map(target.map((l) => [phraseSubjectOf(l)!, l] as const));
+  const seen = new Set<string>(); const placed: string[] = [];
+  for (let i = out.length - 1; i >= 0; i--) {                                                           // the LAST line of a subject is the one in force; earlier ones are dropped
+    const l = out[i];
+    if (!named(l)) { placed.unshift(l); continue; }
+    const sub = phraseSubjectOf(l)!;
+    if (seen.has(sub)) continue;
+    seen.add(sub);
+    if (wanted.has(sub)) placed.unshift(wanted.get(sub)!);
+  }
+  for (const [sub, l] of wanted) if (!seen.has(sub)) placed.push(l);
+  const result = placed;
+  const check = replayGrammar(result, kind, ctx);
+  return check.stop === null && check.params !== null && sameParams(check.params, params) ? check.list : fallback;
 }
 
 // ---- undo and redo (in memory, per open note) -------------------------------------------------------------------------------------------------------------------------------------------

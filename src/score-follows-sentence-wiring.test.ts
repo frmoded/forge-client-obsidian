@@ -84,7 +84,7 @@ async function world(extra: Record<string, string> = {}) {
     getInstance: async () => ({
       computePhraseScore: async (data: any, params: any, title: string) => {
         asked.push({ data, params, title });
-        const bars = params.kind === 'extend' ? params.bars : params.kind === 'transform' ? (data.bars?.length ?? 0) : 1;
+        const bars = params.kind === 'extend' || params.kind === 'morph' ? params.bars : params.kind === 'transform' ? (data.bars?.length ?? 0) : 1;     // 2026-11-19-0980: a morph answers its own bars (a Keep after a Morph head asks for the bars it made)
         return { type: 'musicxml', content: `<score-partwise><x>${bars}</x></score-partwise>`, bars_data: Array.from({ length: bars }, (_, i) => mid(i)) };
       },
     }),
@@ -220,4 +220,50 @@ test('[music] a COMPOSITION: Apply (appended), Undo and Redo each refresh the op
       assert.ok(w.writes.includes(target));
     } finally { w.done(); }
   }
+});
+
+// ---- 2026-11-19-0980: a PHRASE is a list (a head, then lines): apply, a modifier, a Keep after an Extend, undo, redo and a head replacement each refresh the open Score at once -----------------------------------------------------------------------------------------------
+test('[music] a PHRASE LIST: a head, a modifier line, a Keep after the Extend head, Undo, Redo and a replacing head each re-ask the engine for the note as it is NOW; the same in a renamed tab (the 0975 fix holds for the list)', async () => {
+  for (const renamed of [false, true]) {
+    const w = await world();
+    try {
+      const tab = await w.open(PHRASE_VIEW_TYPE, PHRASE);
+      let target = PHRASE;
+      if (renamed) { await w.rename(tab, 'phrases/bridge.md'); target = 'phrases/bridge.md'; }
+      const kindAndBars = (a: Ask | undefined) => `${a?.params.kind}:${a?.params.kind === 'transform' ? a.data.bars.length : a?.params.bars}`;
+      let n = w.asked.length;
+      await w.say(tab, 'Make it 3 bars long.');
+      assert.ok(w.asked.length > n, `a modifier line: the engine was asked (renamed=${renamed})`); assert.equal(kindAndBars(w.lastAsk()), 'extend:3');
+      n = w.asked.length;
+      await w.say(tab, 'Keep bars 1 to 2.');
+      assert.ok(w.asked.length > n, 'a Keep after an Extend head: the engine was asked'); assert.equal(kindAndBars(w.lastAsk()), 'transform:2', 'the Score is for the 2 kept bars');
+      n = w.asked.length;
+      await w.undo(tab);
+      assert.ok(w.asked.length > n, 'undo: the engine was asked'); assert.equal(kindAndBars(w.lastAsk()), 'extend:3', 'the Keep is out of the Score too');
+      n = w.asked.length;
+      await w.undo(tab, true);
+      assert.ok(w.asked.length > n, 'redo: the engine was asked'); assert.equal(kindAndBars(w.lastAsk()), 'transform:2');
+      n = w.asked.length;
+      await w.say(tab, 'Morph [[bar_007]] into [[bar_008]] over 4 bars, in musical order.');
+      assert.ok(w.asked.length > n, 'a replacing head: the engine was asked'); assert.equal(kindAndBars(w.lastAsk()), 'transform:2', 'the Morph head says its own length ("over 4 bars"), which supersedes the modifier line; the Keep, still valid for a Morph, stays');
+      const text = w.store.get(target)!;
+      assert.match(text, /^1\. Morph \[\[bar_007\]\] into \[\[bar_008\]\] over 4 bars, in musical order\.$/m); assert.match(text, /^2\. Keep bars 1 to 2\.$/m); assert.ok(!/Make it 3 bars long/.test(text.split('# Recipe')[0].split('# Description')[1]), 'the superseded modifier line is gone from the list');
+      assert.ok(w.writes.includes(target));
+    } finally { w.done(); }
+  }
+});
+
+// ---- 2026-11-19-0980 (mutation survivors of phrase-view.ts 153-154): the notes the strip's write replays the list against are the vault's own, by folder -----------------------------------------------------------------------------------------------------------------
+test('[music] a phrase tab\'s vaultNames (what the strip\'s write replays the list against): the notes of bars/, phrases/, arrangements/, compositions/ and kits/ by folder, README and every other folder left out', async () => {
+  const w = await world({ [ARR]: emptyArrangementNote('arr_001'), [COMP]: emptyCompositionNote('song_1'), 'phrases/README.md': '# phrases\n', 'notes/zzz.md': '# not a note of the vault\n', 'bars/README.md': '# bars\n' });
+  try {
+    const tab: any = await w.open(PHRASE_VIEW_TYPE, PHRASE);
+    const names = tab.vaultNames();
+    const sorted = (a: string[]) => [...a].sort();
+    assert.deepEqual(sorted(names.bars), ['bar_007', 'bar_008']);
+    assert.deepEqual(sorted(names.phrases), ['phrase_001', 'phrase_002']);
+    assert.deepEqual(sorted(names.arrangements), ['arr_001']);
+    assert.deepEqual(sorted(names.compositions), ['song_1']);
+    assert.deepEqual(sorted(names.kits), ['latin', 'rock']);
+  } finally { w.done(); }
 });

@@ -267,7 +267,7 @@ test('REFUSED, never guessed: an unknown note, a number out of range, a paramete
   assert.match(bad('Morph [[bar_001]] into [[bar_002]] over 4 bars, after 2 single-hit changes.').message, /position only for a morph of one bar/);
   assert.match(bad('Morph [[bar_001]] into [[bar_002]] over 4 bars, in musical order, seed 3.').message, /seed only with the seeded order/);
   assert.match(bad('Mix [[bar_001]] and [[bar_002]], as a vote, in seeded order.').message, /only for a mix as a path/);
-  assert.match(bad('Take [[phrase_006]].').message, /at least one change after "Take"/);
+  assert.ok(parse('Take [[phrase_006]].', VAULT).ok, '2026-11-19-0980 (deliberate): `Take [[x]].` alone is a copy of x now; it was refused ("at least one change after Take")');
   assert.match(bad('Take [[phrase_006]]. Thin out bars 5 to 3.').message, /last bar to be 5 or more, but found 3/);
   assert.match(bad('Take [[phrase_006]]. Thin out bars 0 to 3.').message, /a bar number, 1 or more, but found 0/);
   assert.match(bad('Take [[phrase_006]]. Thin out bar 2, by 150 percent.').message, /an amount from 0 to 100 percent, but found 150/);
@@ -309,8 +309,8 @@ test('what is not a description at all: an empty text, a sentence that opens not
   assert.match(bad('Extend [[bars/bar_005]].').message, /Expected a note name \(letters, digits, spaces, _ and -, no folder\) inside the link, but found "bars\/bar_005"/);
   assert.match(bad('Extend bar_005 to 8 bars, dancing.').message, /Expected "to N bars", a style \(repeating with fills, building up, adding ghost notes\)/);
   assert.match(bad('Extend [[bar_005]] to 8 bars, building up, building up.').message, /the style to be said once, but it is said twice/);
-  assert.match(bad('Extend [[bar_005]]. Threshold 40 percent.').message, /Expected "Bar N is replaced by \[\[a bar\]\]"/);
-  assert.match(bad('Mix [[bar_001]] and [[bar_002]]. Bar 1 is replaced by [[bar_003]].').message, /Expected "Threshold N percent\." or "With ghost notes\."/);
+  assert.match(bad('Extend [[bar_005]]. Threshold 40 percent.').message, /Expected "Make it N percent slower\.", "Make it N bars long\.", "Keep \.\.\.", "Delete \.\.\.", "Copy \.\.\.", "Move \.\.\." or "Bar N is replaced by \[\[a bar\]\]"/);       // 2026-11-19-0980 (deliberate): after an Extend head the modifier lines and the structure steps are named too
+  assert.match(bad('Mix [[bar_001]] and [[bar_002]]. Bar 1 is replaced by [[bar_003]].').message, /Expected "Threshold N percent\.", "With ghost notes\.", "Keep \.\.\.", "Delete \.\.\.", "Copy \.\.\." or "Move \.\.\."/); // 2026-11-19-0980 (deliberate): after a head the grammar names the modifier lines and the structure steps too
   assert.match(bad('Mix [[bar_001]] and [[bar_002]]. Threshold 40 percent. Threshold 50 percent.').message, /threshold to be said once/);
   assert.match(bad('Mix [[bar_001]] and [[bar_002]]. With ghost notes. With ghost notes.').message, /ghost notes to be said once/);
   assert.match(bad('Mix [[bar_001]] and [[bar_002]]. Threshold 140 percent.').message, /a threshold from 0 to 100 percent, but found 140/);
@@ -338,7 +338,7 @@ const REFUSALS: Array<[string, number, number, string]> = [
   ["Extend [[bar_005]] to 8 bars. Bar 3 replaced by [[bar_001]].", 1, 37, "Expected \"is replaced by\", but found \"replaced\"."],
   ["Extend [[bar_005]] to 8 bars. Bar 3 is replaced by [[bar_001]] again.", 1, 64, "Expected the end of the sentence, but found \"again\"."],
   ["Extend [[bar_005]] to 8 bars. Bar 3 is replaced by.", 1, 51, "Expected bar 3, as [[a note]], but found the end of the sentence."],
-  ["Extend [[bar_005]] to 8 bars. Take [[phrase_001]].", 1, 31, "Expected \"Bar N is replaced by [[a bar]]\", but found \"Take\"."],
+  ["Extend [[bar_005]] to 8 bars. Take [[phrase_001]].", 1, 31, "Expected \"Make it N percent slower.\", \"Make it N bars long.\", \"Keep ...\", \"Delete ...\", \"Copy ...\", \"Move ...\" or \"Bar N is replaced by [[a bar]]\", but found \"Take\"."],       // 2026-11-19-0980 (deliberate): after an Extend (or a Morph) the modifier lines and the structure steps are named too
   ["Extend [[bar_005]] to 8 bars. Bar 0 is replaced by [[bar_001]].", 1, 35, "Expected a bar number, 1 or more, but found 0."],
   ["Morph [[bar_001]] into.", 1, 23, "Expected the bar to end at, as [[a note]], but found the end of the sentence."],
   ["Morph [[bar_001]] [[bar_002]].", 1, 19, "Expected \"into\", but found \"[[bar_002]]\"."],
@@ -370,7 +370,7 @@ const REFUSALS: Array<[string, number, number, string]> = [
   ["Mix [[bar_001]] and [[bar_002]]. Threshold x percent.", 1, 44, "Expected a threshold as a number of percent, but found \"x\"."],
   ["Mix [[bar_001]] and [[bar_002]]. Threshold 40 percent extra.", 1, 55, "Expected the end of the sentence, but found \"extra\"."],
   ["Mix [[bar_001]] and [[bar_002]]. With ghost notes extra.", 1, 51, "Expected the end of the sentence, but found \"extra\"."],
-  ["Mix [[bar_001]] and [[bar_002]]. Dancing.", 1, 34, "Expected \"Threshold N percent.\" or \"With ghost notes.\", but found \"Dancing\"."],
+  ["Mix [[bar_001]] and [[bar_002]]. Dancing.", 1, 34, "Expected \"Threshold N percent.\", \"With ghost notes.\", \"Keep ...\", \"Delete ...\", \"Copy ...\" or \"Move ...\", but found \"Dancing\"."],       // 2026-11-19-0980 (deliberate): a Mix may be followed by structure steps too
   ["Take.", 1, 5, "Expected the note to take, as [[a note]], but found the end of the sentence."],
   ["Take [[phrase_006]] extra.", 1, 21, "Expected the end of the sentence, but found \"extra\"."],
   ["Take [[nothing]]. Thin out bar 1.", 1, 6, "Expected a phrase, an arrangement or a composition of this vault for the note to take, but \"nothing\" is not one."],
@@ -392,7 +392,7 @@ const REFUSALS: Array<[string, number, number, string]> = [
   ["Take [[phrase_006]]. Double up bar 2, kick.", 1, 39, "Expected \"kick row\" or \"on a grid of N\", but found \"kick\"."],
   ["Take [[phrase_006]]. Double up bar 2, dancing.", 1, 39, "Expected \"kick row\" or \"on a grid of N\", but found \"dancing\"."],
   ["Take [[phrase_006]]. Double up.", 1, 31, "Expected \"bar N\" or \"bars N to M\", but found the end of the sentence."],
-  ["Take [[phrase_006]]. Bar 2 is replaced by [[bar_001]]. Bar 2 is replaced by [[bar_002]].", 1, 20, "Expected at least one change after \"Take\" (Thin out or Double up), but found none."],
+  ["Take [[phrase_006]]. Bar 2 is replaced by [[bar_001]]. Bar 2 is replaced by [[bar_002]].", 1, 56, "Expected bar 2 to be replaced once, but it is replaced twice."],       // 2026-11-19-0980 (deliberate): a Take with no change is a copy now, so the refusal that came first ("at least one change") is gone and the real one (a fork said twice) is the one said
   ["Play.", 1, 5, "Expected the phrase to play, as [[a note]], but found the end of the sentence."],
   ["Play [[phrase_006]]. Repeat that 2 times. Repeat that 3 times.", 1, 43, "Expected \"Repeat that\" to be said once for a section, but it is said twice."],
   ["Play [[phrase_006]] for 0 bars.", 1, 25, "Expected a number of bars from 1 to 256, but found 0."],
@@ -593,12 +593,12 @@ test('THE TABLE OF VERBS, as documented: each verb, the note it opens, and its e
   assert.deepEqual(VERBS.map((v) => [v.verb, v.kind]), [
     ['extend', 'extend'], ['mix', 'mix'], ['morph', 'morph'], ['take', 'transform'], ['play', 'arrangement'],
     ['thin out', null], ['double up', null], ['keep', null], ['delete', null], ['copy', null], ['move', null], ['bar replaced', null], ['threshold', null], ['ghost notes', null], ['volume', null], ['mute', null], ['only', null], ['together', null],
-    ['play for', 'composition'], ['then play', null], ['repeat that', null], ['for bars play', 'composition'],
+    ['play for', 'composition'], ['then play', null], ['repeat that', null], ['for bars play', 'composition'], ['make it', null],       // 2026-11-19-0980 (deliberate): the modifier lines are ONE new row of the table
   ]);
   assert.deepEqual(VERBS.map((v) => v.example), [
     'Extend [[bar_005]] to 8 bars, repeating with fills, 20 percent slower.', 'Mix [[bar_005]] and [[bar_006]], 70 percent [[bar_005]], as a vote.', 'Morph [[bar_003]] into [[bar_001]] over 8 bars, in musical order.', 'Take [[phrase_006]].', 'Play [[phrase_006]] on the [[rock]] kit.',
     'Thin out bars 3 to 5, kick row, by half, keeping the downbeat.', 'Double up bars 3 to 5, kick row.', 'Keep bars 3 to 5 and bar 8.', 'Delete bars 3 to 5 and bar 8.', 'Copy bars 3 to 5.', 'Move bars 3 to 5 one bar left.', 'Bar 9 is replaced by [[bar_009]].', 'Threshold 40 percent.', 'With ghost notes.', 'Play the [[rock]] kit at 70 percent volume.', 'Mute the [[latin]] kit.', 'Only the [[rock]] kit plays.', 'Together.',
-    'Play [[arr_001]] for 8 bars.', 'Then play [[arr_002]] for 4 bars.', 'Repeat that 2 more times.', 'For 8 bars play [[arr_001]].',
+    'Play [[arr_001]] for 8 bars.', 'Then play [[arr_002]] for 4 bars.', 'Repeat that 2 more times.', 'For 8 bars play [[arr_001]].', 'Make it 20 percent slower.',
   ]);
   for (const text of ['Extend [[bar_005]] to 8 bars, repeating with fills, 20 percent slower.', 'Mix [[bar_005]] and [[bar_006]], 70 percent [[bar_005]], as a vote.', 'Morph [[bar_003]] into [[bar_001]] over 8 bars, in musical order.']) assert.equal(describe(ok(text)), text);
 });
@@ -627,7 +627,7 @@ test('THE EXTENSION POINT: every verb the grammar speaks is a row of ONE table (
   assert.deepEqual(VERBS.filter((v) => v.kind !== null).map((v) => v.kind), ['extend', 'mix', 'morph', 'transform', 'arrangement', 'composition', 'composition']);
   // the examples that are whole descriptions parse as written; the clause examples parse after the sentence that opens their kind
   const opener: Record<string, string> = {
-    'thin out': 'Take [[phrase_006]]. ', 'double up': 'Take [[phrase_006]]. ', 'keep': 'Take [[phrase_006]]. ', 'delete': 'Take [[phrase_006]]. ', 'copy': 'Take [[phrase_006]]. ', 'move': 'Take [[phrase_006]]. ', 'bar replaced': 'Extend [[bar_005]] to 12 bars. ', 'threshold': 'Mix [[bar_005]] and [[bar_006]]. ', 'ghost notes': 'Mix [[bar_005]] and [[bar_006]]. ',
+    'make it': 'Extend [[bar_005]] to 8 bars. ', 'thin out': 'Take [[phrase_006]]. ', 'double up': 'Take [[phrase_006]]. ', 'keep': 'Take [[phrase_006]]. ', 'delete': 'Take [[phrase_006]]. ', 'copy': 'Take [[phrase_006]]. ', 'move': 'Take [[phrase_006]]. ', 'bar replaced': 'Extend [[bar_005]] to 12 bars. ', 'threshold': 'Mix [[bar_005]] and [[bar_006]]. ', 'ghost notes': 'Mix [[bar_005]] and [[bar_006]]. ',
     'together': 'Play [[phrase_006]] on the [[rock]] kit. ', 'then play': 'Play [[arr_001]] for 8 bars. ', 'repeat that': 'Play [[arr_001]] for 8 bars. ', 'volume': 'Play [[phrase_006]] on the [[rock]] kit. Play [[phrase_010]] on the [[latin]] kit. ', 'mute': 'Play [[phrase_006]] on the [[rock]] kit. Play [[phrase_010]] on the [[latin]] kit. ', 'only': 'Play [[phrase_006]] on the [[rock]] kit. Play [[phrase_010]] on the [[latin]] kit. ',
   };
   for (const v of live) {

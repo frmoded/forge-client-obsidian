@@ -24,7 +24,7 @@ test('a full mix validates and comes back as is; only kind, a and b are required
   assert.deepEqual(validatePhrase({ kind: 'mix', a: 'bar_001', b: 'bar_002' }), { ok: true, value: { kind: 'mix', a: 'bar_001', b: 'bar_002', weight: 0.5, threshold: 0.5, ghost: false } });
   assert.deepEqual(MIX_DEFAULTS, { weight: 0.5, threshold: 0.5, ghost: false });
   // 2026-10-26-0900, deliberate: a mix may carry mode, order and seed (path mode); a note that has none reads back exactly as above (phrase-mix-path-core.test.ts)
-  assert.deepEqual([...MIX_KEYS], ['kind', 'a', 'b', 'weight', 'threshold', 'ghost', 'mode', 'order', 'seed']);
+  assert.deepEqual([...MIX_KEYS], ['kind', 'a', 'b', 'weight', 'threshold', 'ghost', 'mode', 'order', 'seed', 'ops']);   // 2026-11-19-0980 (deliberate): `ops` (the structure steps after a head) is a new key of every head
 });
 
 test('the same bar twice is a valid mix (the command falls back to it when there is only one bar)', () => {
@@ -78,12 +78,12 @@ test('the extend phrase is untouched: the same value back, the same refusal text
   assert.deepEqual(validatePhrase(FULL), { ok: true, value: FULL });
   assert.deepEqual(validatePhrase({ kind: 'extend', source: 'bar_001' }), { ok: true, value: { kind: 'extend', source: 'bar_001', bars: 4, style: 'repeat_with_fills', tempo_change_pct: 0 } });
   // M9 (drain 2026-10-23-0330), deliberate: `overrides` is a field of an extend now, so the refusal text lists it and PHRASE_KEYS has it
-  assert.deepEqual(validatePhrase({ ...FULL, swing: 3 }), { ok: false, message: 'Unexpected field "swing" (a phrase holds only kind, source, bars, style, tempo_change_pct, overrides).' });
-  assert.deepEqual([...PHRASE_KEYS], ['kind', 'source', 'bars', 'style', 'tempo_change_pct', 'overrides']);
+  assert.deepEqual(validatePhrase({ ...FULL, swing: 3 }), { ok: false, message: 'Unexpected field "swing" (a phrase holds only kind, source, bars, style, tempo_change_pct, overrides, ops).' });   // 2026-11-19-0980 (deliberate): `ops` (the structure steps after a head) is a new key of every head
+  assert.deepEqual([...PHRASE_KEYS], ['kind', 'source', 'bars', 'style', 'tempo_change_pct', 'overrides', 'ops']);   // 2026-11-19-0980 (deliberate): `ops` (the structure steps after a head) is a new key of every head
   const mixedUp = validatePhrase({ ...FULL, weight: 0.5 });
   assert.equal(mixedUp.ok, false);
   if (mixedUp.ok === false) assert.match(mixedUp.message, /weight/);
-  assert.deepEqual(validatePhrase({ ...MIX, swing: 3 }), { ok: false, message: 'Unexpected field "swing" (a mix holds only kind, a, b, weight, threshold, ghost, mode, order, seed).' });   // 2026-10-26-0900, deliberate: mode, order, seed
+  assert.deepEqual(validatePhrase({ ...MIX, swing: 3 }), { ok: false, message: 'Unexpected field "swing" (a mix holds only kind, a, b, weight, threshold, ghost, mode, order, seed, ops).' });   // 2026-10-26-0900, deliberate: mode, order, seed
 });
 
 // ---- the note -------------------------------------------------------------------------------------------------------------------------------------------------------------------------

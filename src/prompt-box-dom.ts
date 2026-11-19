@@ -49,7 +49,7 @@ export interface PromptBoxPorts {
     /** 2026-11-19-0970: items AFTER "Insert a link to a note" (a list note's "Undo last sentence" and "Redo"); the New actions stay first and the link stays where it was. */
     trailing?: readonly ComposerMenuItem[];
   };
-  /** 2026-11-19-0970 (the list model): Cmd/Ctrl+Z in an EMPTY text area, and Shift+Cmd/Ctrl+Z (redo). Absent = the key is the browser's own (a phrase, a bar). */
+  /** 2026-11-19-0970 (the list model): Cmd/Ctrl+Z in an EMPTY text area, and Shift+Cmd/Ctrl+Z (redo). Absent = the key is the browser's own (a bar, a note that is not a list; a phrase, an arrangement and a composition have it since 2026-11-19-0980). */
   undo?(): void | Promise<void>;
   redo?(): void | Promise<void>;
   /** The sentences sent from this note (per note, kept in memory by the controller), oldest first. */

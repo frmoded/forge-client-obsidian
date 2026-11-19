@@ -91,6 +91,6 @@ for (const edition of ['lean', 'music'] as const) {
   });
 
   test(`[${edition}] MECHANISM PIN (if the design moves this SHOULD go red — reassess, do not just rewrite): the phrase tab's control write passes the note's name, so the derived parts follow the json`, () => {
-    assert.match(code('phrase-view.ts'), /applyPhraseWrite\(text, params, file\.basename\)/);
+    assert.match(code('phrase-view.ts'), /writePhraseStrip\(text, file\.basename, params, this\.vaultNames\(\)\)/);       // 2026-11-19-0980 (deliberate): the strip's write still passes the note's name (so the derived parts follow the json), and now goes through the LIST writer (a slider writes or replaces a modifier line or the head) instead of replacing the Description with one sentence
   });
 }

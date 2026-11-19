@@ -13,6 +13,7 @@ import { computeFacetStates, FacetState, suffixTextForState } from './facet-stat
 import { facetHashSync } from './facet-sync-hash-core.ts';
 import { extractDescription, extractRecipeSection } from './v2-note-core.ts';
 import { parseFrontmatter } from './rhythm-edit-core.ts';
+import { asListNote } from './test-support/phrase-list-fixtures.ts';
 
 const VAULT = { bars: ['bar_001', 'bar_002', 'bar_007'], phrases: ['phrase_001', 'phrase_003'], arrangements: ['arr_001'], compositions: [], kits: ['rock', 'latin'] };
 const MORPH: PhraseParams = { kind: 'morph', a: 'bar_001', b: 'bar_002', bars: 8, order: 'musical', seed: 0 };
@@ -171,7 +172,7 @@ test('Revert to generated: the grammar\'s Python from the json cache, every deri
   const custom = asCustom(withPython(n, (py) => `${py}\n  print('x')`));
   const r = revertToGeneratedText(custom, 'phrase_003', 'phrase');
   assert.ok(r.ok, JSON.stringify(r)); if (!r.ok) return;
-  assert.equal(r.text, n, 'byte for byte the note the controls made');
+  assert.equal(r.text, asListNote(n, 'phrase_003'), 'byte for byte the note the controls made'); // 2026-11-19-0980 (deliberate): a phrase's Description is a numbered list now: the note a write leaves is the list note
   assert.equal(isCustomNote(r.text), false);
   assert.equal(field(r.text, CUSTOM_KEY), undefined);
   assert.equal(field(r.text, PYTHON_SOURCE_KEYS[0]), undefined);
@@ -181,7 +182,7 @@ test('Revert to generated: the grammar\'s Python from the json cache, every deri
   // the plain Revert of a Python edit drops the edit too
   const edited = withPython(n, (py) => py.replace('bars=8', 'bars=6'));
   const back = revertDescriptionText(edited, 'phrase_003', 'phrase');
-  assert.ok(back.ok && back.text === n);
+  assert.ok(back.ok && back.text === asListNote(n, 'phrase_003'));       // 2026-11-19-0980 (deliberate): the plain Revert writes the list note, as every write of a phrase's Description does now
 });
 
 test('the same for an ARRANGEMENT (a track muted in the Python maps back; an extra statement makes it custom) and a COMPOSITION (a section\'s length changed maps back; a loop makes it custom)', () => {

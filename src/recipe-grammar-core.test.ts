@@ -171,7 +171,7 @@ test('REFUSED: what the numbers and the meaning forbid', () => {
   assert.match(bad('Take [[bar_001]] and [[bar_002]].\nMix them as a path of single-hit changes from the first to the second, in musical order.').message, /Keep the state at weight/);
   assert.match(bad('Take [[bar_001]] and [[bar_002]].\nMix them as a path of single-hit changes from the first to the second, in musical order.\nKeep the state at weight 0.5 (1 is all of [[bar_002]], 0 is all of [[bar_001]]).').message, /Expected \[\[bar_001\]\] for the weight 1/);
   assert.match(bad('Take [[bar_001]] and [[bar_002]].').message, /Morph from the first to the second/);
-  assert.match(bad('Take [[phrase_001]].').message, /at least one change/);
+  assert.deepEqual(ok('Take [[phrase_001]].'), { kind: 'transform', source: 'phrases/phrase_001', ops: [] }); // 2026-11-19-0980 (deliberate): `Take [[x]].` alone is a copy of x now; it was refused ("at least one change")
   assert.match(bad('Play [[phrase_001]] on the [[rock]] kit.').message, /Together/);
 });
 
@@ -279,7 +279,7 @@ test('what a short or odd Recipe says, exactly and where: nothing at all, only w
   assert.deepEqual(bad(''), { message: 'Expected a Recipe (its first step is Take or Play), but found nothing.', line: 1, column: 1 });
   assert.deepEqual(bad('   \n  '), { message: 'Expected a Recipe (its first step is Take or Play), but found nothing.', line: 1, column: 1 });
   assert.deepEqual(bad(',foo'), { message: `I do not know the step ','. A step starts with ${RECIPE_OPENERS_TEXT}.`, line: 1, column: 1 });
-  assert.deepEqual(bad('Take [[phrase_001]].'), { message: 'Expected at least one change after "Take" (Thin out or Double up), but found none.', line: 1, column: 20 });
+  assert.deepEqual(ok('Take [[phrase_001]].'), { kind: 'transform', source: 'phrases/phrase_001', ops: [] }); // 2026-11-19-0980 (deliberate): `Take [[x]].` alone is a copy of x now; it was refused ("at least one change") (the test name's "a take with nothing after it" is a copy)
   const pathStep = 'Mix them as a path of single-hit changes from the first to the second, in musical order';
   assert.deepEqual(bad(`Take [[bar_001]] and [[bar_002]].\n${pathStep}.`), { message: 'Expected "Keep the state at weight N (...)." after the path, but found the end of the Recipe.', line: 2, column: pathStep.length + 1 });
   const step = 'Thin out bar 1: remove half of the hits, keeping the strongest beats.';
