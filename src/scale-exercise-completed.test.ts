@@ -10,7 +10,7 @@ import { test } from 'node:test';
 import { Window } from 'happy-dom';
 
 import { audioStub } from './test-support/web-audio-stub.ts';
-import { EXERCISE_DIR } from './test-support/scale-exercise-dir.ts';
+import { EXERCISE_DIR, rulesOn } from './test-support/scale-exercise-dir.ts';
 import { pureOf, seeded } from './test-support/interval-ear-core-checks.ts';
 
 const DIR = EXERCISE_DIR;                                   // the bundled vault, or the vault source when SCALE_EXERCISE_VAULT is set (src/test-support/scale-exercise-dir.ts)
@@ -44,8 +44,8 @@ test('the words: "Completed 3 of 12" for a single-scale file, the scales and ton
 
 // ---- the pages: real DOM, real clicks ---------------------------------------------------------------------------------------------------------------------------------------
 // ONE driver for both kinds of page: the SIMPLE files (no #levels) are driven by tapping the slots of the shelf, the FULL files by their selects and level buttons.
-function open(file: string, seed = 11) {
-  const h = read(file); const stub = audioStub(); const errors: string[] = []; const win: any = new Window({ url: 'http://localhost/' });
+function open(file: string, seed = 11, rules = false) {      // 2026-11-19-0994 (deliberate): rules = true opens the page with its two rule flags turned ON (a simple page failing after 3 wrong taps; see rulesOn)
+  const h = rules ? rulesOn(read(file)) : read(file); const stub = audioStub(); const errors: string[] = []; const win: any = new Window({ url: 'http://localhost/' });
   win.console.error = (...a: unknown[]) => { errors.push(a.map(String).join(' ')); }; win.AudioContext = stub.Ctx; win.Float32Array = Float32Array; win.__earRandom = seeded(seed);
   win.__schedule = () => 1; win.__unschedule = () => {};
   const m = /<script>([\s\S]*?)<\/script>/.exec(h)!; win.document.write(h.replace(m[0], '')); win.eval(m[1]);
@@ -82,7 +82,7 @@ for (const [f, n] of FILES) {
 }
 
 test('scale_build_major (slots) and the FULL major page (selects and levels): building a scale completes its tonic (the line and its slot fill in); the same pair again counts once; failing it later does not uncount; another home note is another pair', () => {
-  const p = open('scale_build_major.html'); p.start(7); p.finish();
+  const p = open('scale_build_major.html', 11, true); p.start(7); p.finish();
   assert.equal(p.text('completed'), 'Completed 1 of 12'); assert.equal(p.done(), 1); assert.ok(p.homes()[7].classList.contains('done')); assert.equal(p.homes()[7].querySelector('.nm').textContent, 'G major');
   p.start(7); assert.equal(p.text('completed'), 'Completed 1 of 12', '2026-11-19-0955: a tap on the slot of a completed key SHOWS its scale (it used to restart the build): it is not built, or counted, again'); assert.match(p.text('prompt'), /^Exercise done: you built G major/);
   p.start(4); p.fail(); assert.match(p.text('prompt'), /^Exercise over/); assert.equal(p.text('completed'), 'Completed 1 of 12', 'a failed attempt of another key does not uncount a completed pair'); assert.ok(p.homes()[7].classList.contains('done'), 'its slot stays filled');

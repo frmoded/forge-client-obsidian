@@ -14,7 +14,7 @@ import { test } from 'node:test';
 import { Window } from 'happy-dom';
 
 import { audioStub } from './test-support/web-audio-stub.ts';
-import { EXERCISE_DIR } from './test-support/scale-exercise-dir.ts';
+import { EXERCISE_DIR, rulesOn } from './test-support/scale-exercise-dir.ts';
 import { pureOf, seeded } from './test-support/interval-ear-core-checks.ts';
 
 const DIR = EXERCISE_DIR;                                   // the bundled vault, or the vault source when SCALE_EXERCISE_VAULT is set
@@ -35,8 +35,8 @@ const ST = (() => { const m = /var ST = \{ half: ([\d.]+), top: (\d+), bottom: (
 const ACC: Record<string, number> = { '♯': 1, '♭': -1, '×': 2, '♭♭': -2 };
 
 // ---- the pages: real DOM, real clicks (one driver for both groups of files) ---------------------------------------------------------------------------------------------------------
-function open(file: string) {
-  const h = read(file); openedSource = h; const stub = audioStub(); const errors: string[] = []; const win: any = new Window({ url: 'http://localhost/' });
+function open(file: string, rules = false) {      // 2026-11-19-0994 (deliberate): rules = true opens the page with its two rule flags turned ON (the older rules: a failed build, the crosses of a finished view, the step chips; see rulesOn)
+  const h = rules ? rulesOn(read(file)) : read(file); openedSource = h; const stub = audioStub(); const errors: string[] = []; const win: any = new Window({ url: 'http://localhost/' });
   win.console.error = (...a: unknown[]) => { errors.push(a.map(String).join(' ')); }; win.AudioContext = stub.Ctx; win.Float32Array = Float32Array; win.__earRandom = seeded(7);
   win.__schedule = () => 1; win.__unschedule = () => {};
   const m = /<script>([\s\S]*?)<\/script>/.exec(h)!; win.document.write(h.replace(m[0], '')); win.eval(m[1]);
@@ -197,7 +197,7 @@ for (const f of FULL) {
 // ---- 4. failing, surviving, restarting, Reset ----------------------------------------------------------------------------------------------------------------------------------------
 for (const f of FIVE) {
   test(`${f}: a FAILED build leaves its slot empty and tappable; a completed slot survives starting another tonic, failing another one, and is tappable (it shows its finished scale and keeps its mini score); a failed key built later fills`, () => {
-    const p = open(f); const scale = p.scale(); const n = p.x.exStart(0, scale, 'medium').notes.length;
+    const p = open(f, true); const scale = p.scale(); const n = p.x.exStart(0, scale, 'medium').notes.length;
     p.start(7); p.fail(); assert.match(p.text('prompt'), /^Exercise over/); same(p.done(), [], 'a failed build fills nothing'); assert.equal(p.slots()[7].querySelector('svg').children.length, 0); assert.ok(!p.slots()[7].classList.contains('done')); assert.equal(p.slots()[7].querySelector('.nm').textContent, p.x.tonicName(7, scale), 'the slot still says only the tonic');
     assert.equal(p.slots()[7].disabled, false, 'tappable'); p.start(7); assert.equal(p.heads(), 1, 'tapping the failed slot starts it fresh'); assert.match(p.text('prompt'), /^Exercise: build /);
     p.start(2); p.finish(); same(p.done(), [2]); const before = JSON.stringify(miniNotes(p.slots()[2])); assert.ok(before.length > 10);
@@ -267,7 +267,7 @@ const mainArea = (p: Page): string => JSON.stringify({ keys: [...p.doc.querySele
 const lettersOf = (p: Page): string[] => [...p.doc.querySelectorAll('#letters .letter')].map((l: any) => l.textContent.trim());
 for (const f of FIVE) {
   test(`${f}: a tap on the slot of a COMPLETED tonic shows its finished scale in the main staff exactly as at the end of its build (eight notes with their accidentals, letters, steps, the marks of its keys, Play on); no restart, the count unchanged`, () => {
-    const p = open(f); const scale = p.scale(); const total = p.x.SCALES.length * 12, n = p.x.exStart(0, scale, 'medium').notes.length;
+    const p = open(f, true); const scale = p.scale(); const total = p.x.SCALES.length * 12, n = p.x.exStart(0, scale, 'medium').notes.length;
     p.start(2); const mo = p.model(); const wrong = (() => { for (let k = mo.notes[0] + 1; k < mo.notes[mo.notes.length - 1]; k++) if (mo.notes.indexOf(k) < 0) return k; throw new Error('no wrong key'); })();
     p.click(p.key(wrong)); p.finish(); same(p.done(), [2]); const atTheEnd = mainArea(p), count = p.text('completed'); assert.match(count, new RegExp(`^Completed 1 of ${total}`)); assert.equal(p.heads(), n); assert.equal(p.doc.querySelectorAll('#staff .head.ghost').length, 0);
     p.start(9); p.click(p.key(p.x.exStart(9, scale, 'medium').notes[2])); assert.equal(p.heads(), 2, 'a build of another tonic is under way'); assert.notEqual(mainArea(p), atTheEnd);
@@ -295,7 +295,7 @@ for (const f of FIVE) {
   });
 
   test(`${f}: a tap on a completed slot while ANOTHER build is under way puts that build down and shows the completed scale; from a failed screen it shows the completed one; the abandoned tonic is neither completed nor counted and starts afresh when its slot is tapped; a completed scale failed later is shown as it was built`, () => {
-    const p = open(f); const scale = p.scale(); const total = p.x.SCALES.length * 12, n = p.x.exStart(0, scale, 'medium').notes.length;
+    const p = open(f, true); const scale = p.scale(); const total = p.x.SCALES.length * 12, n = p.x.exStart(0, scale, 'medium').notes.length;
     p.start(4); p.finish(); const four = mainArea(p); p.start(6); p.click(p.key(p.x.exStart(6, scale, 'medium').notes[1])); p.click(p.key(p.x.exStart(6, scale, 'medium').notes[2])); assert.equal(p.heads(), 3, 'a half-built G');
     p.start(4); assert.equal(mainArea(p), four, 'the completed scale is shown, the half build of the other tonic is put down'); same(p.done(), [4]); assert.match(p.text('completed'), new RegExp(`^Completed 1 of ${total}`)); assert.ok(!p.slots()[6].classList.contains('done') && !p.slots()[6].classList.contains('current'));
     p.start(6); assert.equal(p.heads(), 1, 'the abandoned tonic starts afresh: nothing of the half build is left'); assert.equal(p.doc.querySelectorAll('.key.lit:not(.tonic)').length, 0); assert.match(p.text('prompt'), /^Exercise: build /);
@@ -319,7 +319,7 @@ test('the many-scale files: a completed slot of the CHOSEN scale shows its scale
 
 test('the pure part: exKeepFinished keeps the finished state of a BUILT pair (the first one, never a failed one, never changing its argument); exFinishedView says what a tap on a completed slot shows; the words of the view; both cores say it the same way', () => {
   for (const f of FIVE) {
-    const x = pureOf(scriptOf(read(f))); const sc = x.SCALES[0]; assert.equal(typeof x.exKeepFinished, 'function', `${f}: exKeepFinished`); assert.equal(typeof x.exFinishedView, 'function', `${f}: exFinishedView`);
+    const x = pureOf(scriptOf(rulesOn(read(f)))); const sc = x.SCALES[0]; assert.equal(typeof x.exKeepFinished, 'function', `${f}: exKeepFinished`); assert.equal(typeof x.exFinishedView, 'function', `${f}: exFinishedView`);
     const built = (t: number, wrongs: number) => { let s = x.exStart(t, sc, 'medium'); let w = 0; for (let k = s.notes[0] + 1; w < wrongs; k++) if (s.notes.indexOf(k) < 0) { s = x.exTap(s, k).state; w++; } for (const m of x.exTargets(s)) s = x.exTap(s, m).state; return s; };
     const b2 = built(2, 1), none = {}; assert.equal(b2.outcome, 'built'); const kept = x.exKeepFinished(none, b2); assert.equal(Object.keys(none).length, 0, 'the argument is not changed'); assert.equal(x.exFinishedView(kept, 2, sc), b2, 'the finished state itself'); assert.equal(x.exFinishedView(kept, 3, sc), null); assert.equal(x.exFinishedView(kept, 2, 'no_such_scale'), null);
     const again = x.exKeepFinished(kept, built(2, 0)); assert.equal(x.exFinishedView(again, 2, sc), b2, 'the first completion stays');

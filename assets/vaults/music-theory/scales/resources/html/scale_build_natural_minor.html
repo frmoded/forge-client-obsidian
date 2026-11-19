@@ -96,8 +96,13 @@
   "use strict";
   // ==== config BEGIN (2026-11-17-2003): the scales this exercise offers: the ONLY lines that differ between the scale exercise files (and the <title>); a test pins everything else identical ====
   var SCALES = ["natural_minor"];
+  // 2026-11-19-0994 - the two RULES of this variant, as flags (the generator's FILES entries carry the values; src/scale-build-no-count-0994.test.ts pins both ways).
+  // COUNT_WRONG_TAPS: true = the older rule (the THIRD wrong tap ends the build as failed, "Wrong taps: n of 3"); false = wrong taps are not counted: no limit, no "gaveup", no counter text anywhere, a wrong tap keeps its quiet mark and the plain hint "Not in the scale."; a pair is completed when it is built, and neither its end screen nor its finished view shows wrong-tap marks.
+  // SHOW_STEP_CHIPS: true = the W W H row (#chips) under the staff once the build ends; false = the row is not made at all (the letters sit directly under the staff).
+  var COUNT_WRONG_TAPS = false;
+  var SHOW_STEP_CHIPS = false;
   // ==== config END ====================================================================================================================
-  // 2026-11-18-0930 - the SCALE EXERCISE, simple variant (scale_build_major, scale_build_natural_minor): build a scale on the piano, with the staff filling in beside it. NO levels, NO New exercise, NO Random: one rule. The twelve tonics of the SHELF under the build area are the chooser; tapping one starts that key at once, a fresh build (a tap on the slot of the current key, a failed one or a new one); a tap on the slot of a COMPLETED key shows its finished scale instead (2026-11-19-0955: see pick). On first open nothing is started ("Pick a tonic (home note)."). The tonic is marked; tap the other notes of the scale on the keys, in any order, up to the octave. Each right key lights and puts its note on the treble staff with the scale's proper spelling; a wrong key is marked and puts nothing on the staff. The THIRD wrong tap ends the build as failed (the key is not counted); all notes found within 3 wrong taps = completed (counted once per key, kept when the key is failed later). When the build ends (completed, or failed) the whole scale is on the staff (the notes you missed dashed), the letters and the whole and half steps appear (they are the answer, so only now), the answer stays on screen until you tap a slot, and Play plays the scale up.
+  // 2026-11-18-0930 - the SCALE EXERCISE, simple variant (scale_build_major, scale_build_natural_minor): build a scale on the piano, with the staff filling in beside it. NO levels, NO New exercise, NO Random: one rule. The twelve tonics of the SHELF under the build area are the chooser; tapping one starts that key at once, a fresh build (a tap on the slot of the current key, a failed one or a new one); a tap on the slot of a COMPLETED key shows its finished scale instead (2026-11-19-0955: see pick). On first open nothing is started ("Pick a tonic (home note)."). The tonic is marked; tap the other notes of the scale on the keys, in any order, up to the octave. Each right key lights and puts its note on the treble staff with the scale's proper spelling; a wrong key is marked and puts nothing on the staff. With COUNT_WRONG_TAPS on (the older rule) the THIRD wrong tap ends the build as failed (the key is not counted); all notes found within 3 wrong taps = completed (counted once per key, kept when the key is failed later); with it off (2026-11-19-0994: both single-scale files) wrong taps are not counted at all: the build ends only when every note is found. When the build ends (completed, or failed) the whole scale is on the staff (the notes you missed dashed), the letters (and with SHOW_STEP_CHIPS the whole and half steps) appear (they are the answer, so only now), the answer stays on screen until you tap a slot, and Play plays the scale up.
   // 2026-11-19-0938 - the SHELF: twelve slots, one per tonic, in a fixed CSS grid (the room is reserved from the start, so the page has ONE height). An unbuilt slot is a quiet outline with the tonic's name; a COMPLETED build (all notes found within the 3 wrong taps) fills its slot with a MINI SCORE of the scale (drawn by the same `drawStaff` as the main staff: see drawMini) and the name under it ("G major"); a failed build leaves its slot empty and tappable; a completed slot stays until Reset or reload and is tappable (it shows its finished scale in the main staff: the main staff and the mini score are the same scale).
   // It looks like the Scales hub player (scale_player.html) and shares its blocks, byte for byte (pinned by a test): the scale core, the piano voice and the scale view (strip and staff). The exercise core is the one of the three other exercise files minus the level machinery (src/scale-build-simple.test.ts pins both). Memory only: the sandboxed page has no storage.
   // ---- pure functions (no DOM; the node harness exports them) ------------------------------------------------------------------------------------------
@@ -200,21 +205,21 @@
   // ==== scale core END =============================================================================================================================
   // ==== exercise core BEGIN (2026-11-18-0930, simple variant) ======================================================================================
   // The state of one exercise, pure. `notes` are the midis of the scale from the tonic up to its octave (the tonic placed from C4, the same as the player); the tonic is given and the octave note is not asked, so the notes to find are `notes` without its ends.
-  // ONE rule: the third wrong tap ends the build as failed.
+  // ONE rule: the third wrong tap ends the build as failed (only when COUNT_WRONG_TAPS is on; 2026-11-19-0994: off = no limit, wrong taps are only marked).
   var EX_WRONG_TAPS = 3;
   function exCopy(s, patch) { var o = {}, k; for (k in s) o[k] = s[k]; for (k in patch) o[k] = patch[k]; return o; }
   // A fresh exercise: phase "building" until it is built or the wrong taps run out ("done"). `left` = the wrong taps still allowed.
-  function exStart(tonic, scaleId) { return { phase: "building", tonic: tonic, scale: scaleId, notes: scaleMidis(tonic, scaleId, "up", BASE), left: EX_WRONG_TAPS, found: [], wrong: [], outcome: null }; }
+  function exStart(tonic, scaleId) { return { phase: "building", tonic: tonic, scale: scaleId, notes: scaleMidis(tonic, scaleId, "up", BASE), left: EX_WRONG_TAPS, found: [], wrong: [], missed: false, outcome: null }; }
   function exTargets(s) { return s.notes.slice(1, s.notes.length - 1); }
-  // One tapped key. Ignored: the exercise is over, the tonic, the octave note, a key outside the octave above the tonic, a key already marked. A key of the scale is found (free); another key is a wrong tap; the last note found builds it; the third wrong tap ends it.
+  // One tapped key. Ignored: the exercise is over, the tonic, the octave note, a key outside the octave above the tonic, a key already marked. A key of the scale is found (free); another key is a wrong tap; the last note found builds it; the third wrong tap ends it (COUNT_WRONG_TAPS off: it never does: `left` stays, the wrong key is only marked, `missed` says the last tap was wrong; the build that completes CLEARS its wrong taps: the quiet marks live during the build only, so the end screen and the finished view of the slot, which are the same state, show none).
   function exTap(s, midi) {
     if (s.phase !== "building" || midi <= s.notes[0] || midi >= s.notes[s.notes.length - 1] || s.found.indexOf(midi) >= 0 || s.wrong.indexOf(midi) >= 0) return { state: s, event: "ignored" };
     if (exTargets(s).indexOf(midi) >= 0) {
       var found = s.found.concat([midi]), built = found.length === exTargets(s).length;
-      return { state: exCopy(s, { phase: built ? "done" : "building", found: found, outcome: built ? "built" : null }), event: built ? "built" : "right" };
+      return { state: exCopy(s, { phase: built ? "done" : "building", found: found, wrong: built && !COUNT_WRONG_TAPS ? [] : s.wrong, missed: false, outcome: built ? "built" : null }), event: built ? "built" : "right" };
     }
-    var wrong = s.wrong.concat([midi]), left = s.left - 1;
-    return { state: exCopy(s, { phase: left <= 0 ? "done" : "building", wrong: wrong, left: Math.max(0, left), outcome: left <= 0 ? "gaveup" : null }), event: left <= 0 ? "gaveup" : "wrong" };
+    var wrong = s.wrong.concat([midi]), left = COUNT_WRONG_TAPS ? s.left - 1 : s.left, over = COUNT_WRONG_TAPS && left <= 0;
+    return { state: exCopy(s, { phase: over ? "done" : "building", wrong: wrong, missed: true, left: Math.max(0, left), outcome: over ? "gaveup" : null }), event: over ? "gaveup" : "wrong" };
   }
   function exRemaining(s) { return exTargets(s).length - s.found.length; }
   // The octave note is the tonic again: its spelling is the tonic's, one octave up (the player's `withOctave`).
@@ -230,7 +235,8 @@
   }
   // The words. An exercise, never a test. Nothing is started on first open (state null): "Pick a tonic (home note)."
   function exTitle(s) { return scaleTitle(s.tonic, s.scale); }
-  function exWrongText(s) { return s ? "Wrong taps: " + s.wrong.length + " of " + EX_WRONG_TAPS : ""; }
+  function exWrongText(s) { return s && COUNT_WRONG_TAPS ? "Wrong taps: " + s.wrong.length + " of " + EX_WRONG_TAPS : ""; }
+  function exCountTail(s) { return COUNT_WRONG_TAPS ? " " + exWrongText(s) + "." : ""; }               // the count at the end of an announcement: nothing at all when wrong taps are not counted
   function exPrompt(s) {
     if (!s) return "Pick a tonic (home note).";
     if (s.phase === "building") return "Exercise: build " + exTitle(s) + ". Tap the other " + exTargets(s).length + " notes on the keys, in any order.";
@@ -239,15 +245,16 @@
   function exHint(s) {
     if (!s) return "";
     if (s.phase !== "building") return "Press Play to hear it.";
+    if (!COUNT_WRONG_TAPS && s.missed) return "Not in the scale.";                                  // 2026-11-19-0994: the quiet hint after a wrong tap, until the next right one
     return exRemaining(s) + " to find";
   }
   function exAnnounce(s, event) {
-    if (event === "start") return "Exercise: build " + scaleWords(s.tonic, s.scale) + ". The tonic is marked. " + exWrongText(s) + ".";
+    if (event === "start") return "Exercise: build " + scaleWords(s.tonic, s.scale) + ". The tonic is marked." + exCountTail(s);
     if (event === "show") return "Showing the scale you built: " + scaleWords(s.tonic, s.scale) + ". Press Play to hear it.";
     if (event === "right") return "That note is in the scale. " + exRemaining(s) + " to find.";
-    if (event === "wrong") return "Not in the scale. " + exWrongText(s) + ".";
+    if (event === "wrong") return "Not in the scale." + exCountTail(s);
     if (event === "built") return "You built " + scaleWords(s.tonic, s.scale) + ". Press Play to hear it.";
-    if (event === "gaveup") return "Out of wrong taps. " + exWrongText(s) + ". The scale is " + scaleWords(s.tonic, s.scale) + ". Press Play to hear it.";
+    if (event === "gaveup") return "Out of wrong taps." + exCountTail(s) + " The scale is " + scaleWords(s.tonic, s.scale) + ". Press Play to hear it.";
     return "";
   }
   function exKeyName(m) { return ["C", "C sharp", "D", "D sharp", "E", "F", "F sharp", "G", "G sharp", "A", "A sharp", "B"][((m % 12) + 12) % 12] + " " + (Math.floor(m / 12) - 1); }
@@ -371,7 +378,7 @@
   // ==== piano voice END ===========================================================================================================================
   if (typeof document === "undefined") {           // node test harness
     module.exports = { LOW: LOW, HIGH: HIGH, BASE: BASE, STEP_SECONDS: STEP_SECONDS, SCALES: SCALES, SC_SCALES: SC_SCALES, scaleNotes: scaleNotes, spellScale: spellScale, scaleTitle: scaleTitle, scaleWords: scaleWords, tonicName: tonicName, recipeOf: recipeOf, noteName: noteName, noteWords: noteWords, scScale: scScale, exWithOctave: exWithOctave, scaleMidis: scaleMidis,
-      EX_WRONG_TAPS: EX_WRONG_TAPS, exStart: exStart, exTargets: exTargets, exTap: exTap, exRemaining: exRemaining, exStaffNotes: exStaffNotes, exTitle: exTitle, exPrompt: exPrompt, exHint: exHint, exAnnounce: exAnnounce, exKeyName: exKeyName, exPlayPlan: exPlayPlan, exWrongText: exWrongText,
+      EX_WRONG_TAPS: EX_WRONG_TAPS, exStart: exStart, exTargets: exTargets, exTap: exTap, exRemaining: exRemaining, exStaffNotes: exStaffNotes, exTitle: exTitle, exPrompt: exPrompt, exHint: exHint, exAnnounce: exAnnounce, exKeyName: exKeyName, exPlayPlan: exPlayPlan, exWrongText: exWrongText, COUNT_WRONG_TAPS: COUNT_WRONG_TAPS, SHOW_STEP_CHIPS: SHOW_STEP_CHIPS,
       exPairKey: exPairKey, exCompletedAdd: exCompletedAdd, exCompletedCount: exCompletedCount, exTotal: exTotal, exAllDone: exAllDone, exHomesDone: exHomesDone, exCompletedText: exCompletedText, exMiniScore: exMiniScore, exKeepFinished: exKeepFinished, exFinishedView: exFinishedView, midiToHz: midiToHz, isBlack: isBlack, pianoVoice: pianoVoice, pianoBus: pianoBus, PIANO_OSC_PER_NOTE: PIANO_OSC_PER_NOTE };
     return;
   }
@@ -447,11 +454,14 @@
     svg.removeAttribute("aria-label");
   }
   var slots = [];
+  // 2026-11-19-0994 - what a flag turns off is not made at all (an empty element would still hold a gap): no counter span beside Reset, no W W H row between the staff and the letters. The room of the rows that stay is reserved by their own CSS, so the page has one height in every state.
+  if (!COUNT_WRONG_TAPS && $("wrongs")) $("wrongs").parentNode.removeChild($("wrongs"));
+  if (!SHOW_STEP_CHIPS && $("chips")) $("chips").parentNode.removeChild($("chips"));
   function render(announce) {
     var building = !!state && state.phase === "building", done = !!state && !building;
     var k, g, ts, j;
     for (k in keys) { g = keys[k]; ts = g.querySelectorAll("text"); for (j = 0; j < ts.length; j++) g.removeChild(ts[j]); g.setAttribute("class", "key " + (isBlack(+k) ? "black" : "white") + (building ? "" : " idle")); }
-    var chips = $("chips"), letters = $("letters"); chips.textContent = ""; letters.textContent = "";
+    var chips = $("chips"), letters = $("letters"); if (chips) chips.textContent = ""; letters.textContent = "";
     if (!state) { drawStaff([], []); staff.setAttribute("aria-label", "Treble staff"); }
     else {
       var last = state.notes.length - 1;
@@ -462,13 +472,13 @@
       if (soundingIndex >= 0 && keys[state.notes[soundingIndex]]) keys[state.notes[soundingIndex]].classList.add("sounding");
       drawStaff(exStaffNotes(state), state.notes);
       if (done) {
-        recipeOf(state.scale, "up").forEach(function (c) { var s = document.createElement("span"); s.className = "chip " + (c === "W" ? "w" : c === "H" ? "h" : "t"); s.setAttribute("role", "listitem"); s.setAttribute("aria-description", c === "W" ? "whole step: 2 half steps" : c === "H" ? "half step: 1 half step" : "3 half steps"); s.textContent = c; chips.appendChild(s); });
+        if (chips) recipeOf(state.scale, "up").forEach(function (c) { var s = document.createElement("span"); s.className = "chip " + (c === "W" ? "w" : c === "H" ? "h" : "t"); s.setAttribute("role", "listitem"); s.setAttribute("aria-description", c === "W" ? "whole step: 2 half steps" : c === "H" ? "half step: 1 half step" : "3 half steps"); s.textContent = c; chips.appendChild(s); });
         spellScale(state.tonic, state.scale, "up").forEach(function (n, idx) { var b = document.createElement("span"); b.className = "letter" + (idx === 0 ? " tonic" : "") + (idx === soundingIndex ? " sounding" : ""); b.setAttribute("role", "listitem"); b.setAttribute("aria-label", noteWords(n)); b.textContent = noteName(n); letters.appendChild(b); });
       }
     }
     $("prompt").textContent = exPrompt(state); $("hint").textContent = exHint(state);
     $("play").disabled = !done;
-    $("wrongs").textContent = exWrongText(state);
+    if ($("wrongs")) $("wrongs").textContent = exWrongText(state);
     $("completed").textContent = exCompletedText(completed, SCALES);
     exHomesDone(completed, scaleId).forEach(function (d, t) {
       var c = slots[t], cur = !!state && state.tonic === t, made = d ? scaleId + ":" + t : "";

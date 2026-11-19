@@ -1,4 +1,5 @@
-// 2026-11-18-0930 - the two SIMPLE scale build exercises (scale_build_major, scale_build_natural_minor: no levels, no New exercise, no Random; the twelve tonic slots of the SHELF are the chooser; one rule of 3 wrong taps) in real headless Chrome, in the SHIPPED mount:
+// 2026-11-19-0994 - MOVED VERDICTS (not run yet: the supervisor measures in real Chrome): `_real_thirdWrongEnds` is now `_real_noLimit` (three and then ALL the wrong keys of the octave leave the build under way: prompt "Exercise: build", no dashed notes, no revealed keys, no letters, Play off, hint exactly "Not in the scale.", no #wrongs element); `_real_notCounted` is now `_real_nothingCompletedByWrongTaps` (wrong taps change neither the count nor the shelf); `_real_failedLeavesEmpty` is now `_real_slotEmptyWhileBuilding`; `_real_retry` now taps the slot of the build under way and expects a fresh build with no wrong marks and the hint "6 to find"; new `_real_noStepChips` (no #chips element in any state sampled); `_real_built` and `_real_completedTapShows` expect NO #chips chips (letters only); `_real_built` now also expects NO wrong-tap mark (`.key.wrong` is 0) on the end screen of the build, and `_real_completedTapShows` none on the finished view; `_completedTapShowsTheScale` (1b) compares the finished view with the end of its build strictly, as before (supervisor follow-up: the build that completes CLEARS its wrong-tap marks, so the end screen has none either: verdict part `wrongAtEnd === 0 && wrongShown === 0`; the build still took one wrong tap, whose quiet mark and hint live during the build only); `_freshSaysPickATonic` unchanged; `_realPlay_failed_soundsEveryNote` is now `_realPlay_afterWrongTaps_soundsEveryNote` (a second tonic, built after 3 wrong taps; the old one tapped the slot of a completed key); the resting-pointer state `failed` is now `wrongTaps` (three wrong taps, build under way). The ONE-height verdicts (`_oneHeightInEveryState`, `_shelf_oneHeight...`) now also prove that the removed W W H row left no gap: the content height is ONE number and SMALLER than before by the chips row (about 27 px: its 24 px min-height + its 3 px margin; the letters row keeps its own 3 px margin and 28 px); the embed heights in the two notes are set from the new numbers.
+// 2026-11-18-0930 - the two SIMPLE scale build exercises (scale_build_major, scale_build_natural_minor: no levels, no New exercise, no Random; the twelve tonic slots of the SHELF are the chooser; wrong taps NOT counted (2026-11-19-0994: no limit, no gave-up state), and no W W H row) in real headless Chrome, in the SHIPPED mount:
 // a blob: URL inside <iframe sandbox="allow-scripts">, at 800 px and at 360 px wide. (scripts/dev/measure-scale-exercises.mjs drives selects and levels and cannot drive these two.) Measured, with REAL mouse clicks on the slots and the keys
 // (DevTools Input.dispatchMouseEvent at the real box of each one):
 //   - the CONTENT HEIGHT (the body's own height) in EVERY state: fresh ("Pick a tonic (home note)."), and for each of the 12 tonics: started, 3 wrong taps (failed, not counted), started again (a failed key is retried), one found, built (completed, slot filled),
@@ -98,36 +99,36 @@ for (const f of FILES.filter((x) => !only || x.file.includes(only))) {
     await g.shot(`${tag}-shelf-0-empty`, h0);
     await g.press('.key[data-midi="64"]'); verdict[`${tag}_freshKeyTapIgnored`] = (await g.count('.key.lit, .key.wrong, #staff .head')) === 0 && (await g.hz()).length === 0;
     await sample('fresh');
-    let ok = { slotStarts: true, thirdWrongEnds: true, notCounted: true, retry: true, built: true, fillKept: true, completedTapShows: true, secondTapChangesNothing: true, failedLeavesEmpty: true, miniKeptWhileBuilt: true, miniOfTheScale: true, survives: true };
+    let ok = { slotStarts: true, noLimit: true, nothingCompletedByWrongTaps: true, retry: true, built: true, fillKept: true, completedTapShows: true, secondTapChangesNothing: true, slotEmptyWhileBuilding: true, noStepChips: true, miniKeptWhileBuilt: true, miniOfTheScale: true, survives: true };
     for (let t = 0; t < 12; t++) {
-      const ms = midisOf(f.steps, t), targets = ms.slice(1, -1), wrongs = wrongKeysOf(ms).slice(0, 3); const chip = slot(t);
+      const ms = midisOf(f.steps, t), targets = ms.slice(1, -1), allWrongs = wrongKeysOf(ms), wrongs = allWrongs.slice(0, 3); const chip = slot(t);
       // a new key: its slot starts it at once
       await g.press(chip); await sample(`t${t}_started`);
-      ok.slotStarts &&= (await g.probe(`document.querySelector('.slot.current') && [].indexOf.call(document.querySelectorAll('#shelf .slot'), document.querySelector('.slot.current'))`)) === t && (await g.count('.key.tonic')) === 1 && (await g.probe(`document.querySelector('.key.tonic').getAttribute('data-midi')`)) === String(ms[0]) && (await g.text('wrongs')) === 'Wrong taps: 0 of 3' && (await g.text('prompt')).startsWith('Exercise: build ') && (await g.count('#staff .head')) === 1;
-      // the third wrong tap ends it as failed: the answer is shown, the key is not counted
-      for (const [i, k] of wrongs.entries()) { await g.press(`.key[data-midi="${k}"]`); if (i === 1) { ok.thirdWrongEnds &&= (await g.text('wrongs')) === 'Wrong taps: 2 of 3' && (await g.probe(`document.getElementById('play').disabled`)) === true; await sample(`t${t}_twoWrong`); } }
-      await sample(`t${t}_gaveUp`);
-      ok.thirdWrongEnds &&= (await g.text('wrongs')) === 'Wrong taps: 3 of 3' && (await g.text('prompt')).startsWith('Exercise over') && (await g.count('#staff .head')) === ms.length && (await g.count('#staff .head.ghost')) === targets.length && (await g.count('.key.reveal')) === targets.length && (await g.count('#letters .letter')) === ms.length - 1 && (await g.count('#chips .chip')) === ms.length - 1 && (await g.probe(`document.getElementById('play').disabled`)) === false;
-      ok.notCounted &&= (await g.text('completed')) === `Completed ${completedN} of 12` && (await g.count(`#shelf .slot.done`)) === completedN;
-      ok.failedLeavesEmpty &&= (await g.probe(`(function () { var e = document.querySelector(${JSON.stringify(chip)}); return !e.classList.contains('done') && e.querySelector('svg').children.length === 0; })()`)) === true;       // a failed build leaves its slot empty (and tappable: the next press starts it)
-      await g.press(`.key[data-midi="${targets[0]}"]`); ok.thirdWrongEnds &&= (await g.count('#staff .head')) === ms.length && (await g.count('.key.lit:not(.tonic)')) === 0;       // a key after the end is ignored
-      // a failed key is retried by tapping its chip: a fresh build; one found; then all found within the wrong taps
-      await g.press(chip); ok.retry &&= (await g.text('wrongs')) === 'Wrong taps: 0 of 3' && (await g.count('#staff .head')) === 1 && (await g.count('.key.wrong, .key.reveal')) === 0 && (await g.text('prompt')).startsWith('Exercise: build ');
+      ok.slotStarts &&= (await g.probe(`document.querySelector('.slot.current') && [].indexOf.call(document.querySelectorAll('#shelf .slot'), document.querySelector('.slot.current'))`)) === t && (await g.count('.key.tonic')) === 1 && (await g.probe(`document.querySelector('.key.tonic').getAttribute('data-midi')`)) === String(ms[0]) && (await g.count('#wrongs')) === 0 && (await g.text('hint')) === '6 to find' && (await g.text('prompt')).startsWith('Exercise: build ') && (await g.count('#staff .head')) === 1;
+      // 2026-11-19-0994: wrong taps are NOT counted: the first three, and then ALL the wrong keys of the octave, leave the build under way (no failed state, no dashed notes, no revealed keys, Play off), each with its quiet mark and the hint "Not in the scale."
+      for (const [i, k] of allWrongs.entries()) { await g.press(`.key[data-midi="${k}"]`); if (i === 1) { ok.noLimit &&= (await g.text('hint')) === 'Not in the scale.' && (await g.probe(`document.getElementById('play').disabled`)) === true; await sample(`t${t}_twoWrong`); } if (i === 2) await sample(`t${t}_threeWrong`); }
+      await sample(`t${t}_allWrong`);
+      ok.noLimit &&= (await g.text('hint')) === 'Not in the scale.' && (await g.count('#wrongs')) === 0 && (await g.text('prompt')).startsWith('Exercise: build ') && (await g.count('#staff .head')) === 1 && (await g.count('#staff .head.ghost')) === 0 && (await g.count('.key.reveal')) === 0 && (await g.count('.key.wrong')) === allWrongs.length && (await g.count('#letters .letter')) === 0 && (await g.count('.key.idle')) === 0 && (await g.probe(`document.getElementById('play').disabled`)) === true;
+      ok.noStepChips &&= (await g.count('#chips')) === 0;
+      ok.nothingCompletedByWrongTaps &&= (await g.text('completed')) === `Completed ${completedN} of 12` && (await g.count(`#shelf .slot.done`)) === completedN;
+      ok.slotEmptyWhileBuilding &&= (await g.probe(`(function () { var e = document.querySelector(${JSON.stringify(chip)}); return !e.classList.contains('done') && e.querySelector('svg').children.length === 0; })()`)) === true;       // the slot stays empty (and tappable) until the build is done
+      // a tap on the slot of the build under way restarts it: a fresh build, no wrong marks; then one wrong tap on the way, one found, then all found
+      await g.press(chip); ok.retry &&= (await g.text('hint')) === '6 to find' && (await g.count('#staff .head')) === 1 && (await g.count('.key.wrong, .key.reveal')) === 0 && (await g.text('prompt')).startsWith('Exercise: build ');
       await sample(`t${t}_retry`);
-      await g.press(wrongs.length ? `.key[data-midi="${wrongs[0]}"]` : chip);                      // one wrong tap on the way (the build still completes within 3)
+      await g.press(`.key[data-midi="${wrongs[0]}"]`);
       await g.press(`.key[data-midi="${targets[0]}"]`); await sample(`t${t}_oneFound`);
       for (const m of targets.slice(1)) await g.press(`.key[data-midi="${m}"]`);
       completedN++; await sample(`t${t}_built`);
       ok.miniOfTheScale &&= (await g.probe(`(function () { var e = document.querySelector(${JSON.stringify(chip)}), v = e.querySelector('svg'); return e.classList.contains('done') && v.querySelectorAll('.head').length === ${ms.length} && /${f.scale === 'major' ? 'major' : 'natural minor'}$/.test(e.querySelector('.nm').textContent); })()`)) === true;
       if (completedN === 6) await g.shot(`${tag}-shelf-6-six`, h0); if (completedN === 12) await g.shot(`${tag}-shelf-12-twelve`, h0);
-      ok.built &&= (await g.text('completed')) === (completedN === 12 ? 'All twelve built.' : `Completed ${completedN} of 12`) && (await g.probe(`document.querySelector(${JSON.stringify(chip)}).classList.contains('done')`)) === true && (await g.text('prompt')).startsWith('Exercise done') && (await g.count('#staff .head')) === ms.length && (await g.count('#staff .head.ghost')) === 0 && (await g.probe(`document.getElementById('play').disabled`)) === false;
+      ok.built &&= (await g.text('completed')) === (completedN === 12 ? 'All twelve built.' : `Completed ${completedN} of 12`) && (await g.probe(`document.querySelector(${JSON.stringify(chip)}).classList.contains('done')`)) === true && (await g.text('prompt')).startsWith('Exercise done') && (await g.count('#staff .head')) === ms.length && (await g.count('#staff .head.ghost')) === 0 && (await g.count('#chips')) === 0 && (await g.count('.key.wrong')) === 0 && (await g.count('#letters .letter')) === ms.length - 1 && (await g.probe(`document.getElementById('play').disabled`)) === false;
       // 2026-11-19-0955: the slot of a completed key SHOWS its finished scale in the main staff (it used to restart the build) and keeps its fill; the count does not change; a second tap changes nothing
       await g.press(chip); await sample(`t${t}_shown`);
-      ok.completedTapShows &&= (await g.count('#staff .head')) === ms.length && (await g.count('#staff .head.ghost')) === 0 && (await g.text('prompt')).startsWith('Exercise done') && (await g.count('#letters .letter')) === ms.length - 1 && (await g.count('#chips .chip')) === ms.length - 1 && (await g.probe(`document.getElementById('play').disabled`)) === false && (await g.count('.key.idle')) === 25 && (await g.text('completed')) === (completedN === 12 ? 'All twelve built.' : `Completed ${completedN} of 12`);
+      ok.completedTapShows &&= (await g.count('#staff .head')) === ms.length && (await g.count('#staff .head.ghost')) === 0 && (await g.text('prompt')).startsWith('Exercise done') && (await g.count('#letters .letter')) === ms.length - 1 && (await g.count('#chips')) === 0 && (await g.count('.key.wrong')) === 0 && (await g.probe(`document.getElementById('play').disabled`)) === false && (await g.count('.key.idle')) === 25 && (await g.text('completed')) === (completedN === 12 ? 'All twelve built.' : `Completed ${completedN} of 12`);
       ok.fillKept &&= (await g.probe(`document.querySelector(${JSON.stringify(chip)}).classList.contains('done') && document.querySelector(${JSON.stringify(chip)}).classList.contains('current')`)) === true;
       ok.miniKeptWhileBuilt &&= (await g.count(`${chip} svg .head`)) === ms.length;                   // the completed slot keeps its mini score while it is shown
       { const before = await g.probe(hashOf); await g.press(chip); ok.secondTapChangesNothing &&= (await g.probe(hashOf)) === before; }
-      for (let u = 0; u < t; u++) ok.survives &&= (await g.count(`${slot(u)}.done svg .head`)) === ms.length;      // every slot filled before this key is still filled, with its mini score, while this one was built and failed
+      for (let u = 0; u < t; u++) ok.survives &&= (await g.count(`${slot(u)}.done svg .head`)) === ms.length;      // every slot filled before this key is still filled, with its mini score, while this one was built (with all its wrong taps)
     }
     for (const [k, v] of Object.entries(ok)) verdict[`${tag}_real_${k}`] = v;
     verdict[`${tag}_allTwelveBuilt`] = (await g.text('completed')) === 'All twelve built.' && (await g.count('#shelf .slot.done')) === 12;
@@ -147,31 +148,32 @@ for (const f of FILES.filter((x) => !only || x.file.includes(only))) {
     {
       const c = await mount(f.file, width); const embed1b = Math.max(...hs, h0); await c.setHeight(embed1b); const tag1b = `${tag}_completedTapShowsTheScale`;
       const D = 2, E = 9, mD = midisOf(f.steps, D), tD = mD.slice(1, -1), wD = wrongKeysOf(mD)[0], mE = midisOf(f.steps, E);
-      const area = () => c.probe(`JSON.stringify({ keys: [].map.call(document.querySelectorAll('#strip .key'), function (k) { var m = k.querySelector('text.mark'); return k.getAttribute('data-midi') + ' ' + k.getAttribute('class') + ' ' + (m ? m.textContent : ''); }), staff: document.getElementById('staff').innerHTML, letters: document.getElementById('letters').innerHTML, chips: document.getElementById('chips').innerHTML, prompt: document.getElementById('prompt').textContent, hint: document.getElementById('hint').textContent, wrongs: document.getElementById('wrongs').textContent, play: document.getElementById('play').disabled })`);
+      const area = () => c.probe(`JSON.stringify({ keys: [].map.call(document.querySelectorAll('#strip .key'), function (k) { var m = k.querySelector('text.mark'); return k.getAttribute('data-midi') + ' ' + k.getAttribute('class') + ' ' + (m ? m.textContent : ''); }), staff: document.getElementById('staff').innerHTML, letters: document.getElementById('letters').innerHTML, chips: (document.getElementById('chips') || { innerHTML: '' }).innerHTML, prompt: document.getElementById('prompt').textContent, hint: document.getElementById('hint').textContent, wrongs: (document.getElementById('wrongs') || { textContent: '' }).textContent, play: document.getElementById('play').disabled })`);
       const accs = (sel) => c.probe(`[].map.call(document.querySelectorAll(${JSON.stringify(sel)}), function (a) { return a.textContent; }).join('')`);
       await c.press(slot(D)); await c.press(`.key[data-midi="${wD}"]`); for (const m of tD) await c.press(`.key[data-midi="${m}"]`);
-      const atTheEnd = await area(), countEnd = await c.text('completed'), hEnd = await c.height();
+      const wrongAtEnd = await c.count('.key.wrong'), atTheEnd = await area(), countEnd = await c.text('completed'), hEnd = await c.height();
       await c.press(slot(E)); await c.press(`.key[data-midi="${mE[2]}"]`); const half = await c.height(), underWay = (await c.count('#staff .head')) === 2;
       await c.press(slot(D)); await sleep(150);
-      const shown = await area(), h1 = await c.height(), count1 = await c.text('completed'), shownDom = await c.probe(hashOf);
+      const wrongShown = await c.count('.key.wrong'), shown = await area(), h1 = await c.height(), count1 = await c.text('completed'), shownDom = await c.probe(hashOf);
       const miniAcc = await accs(`${slot(D)} svg .acc`), mainAcc = await accs('#staff .acc'), miniHeads = await c.count(`${slot(D)} svg .head`);
       await c.shot(`${tag}-completedTapShows`, embed1b);
       await c.press(slot(D)); const h2 = await c.height(), sameAgain = (await c.probe(hashOf)) === shownDom;
       await c.press(slot(E)); const restarted = (await c.count('#staff .head')) === 1 && (await c.text('prompt')).startsWith('Exercise: build ');
-      verdict[tag1b] = underWay && shown === atTheEnd && count1 === countEnd && countEnd === 'Completed 1 of 12' && sameAgain && restarted
+      verdict[tag1b] = underWay && wrongAtEnd === 0 && wrongShown === 0 && (await c.count('#chips')) === 0 && shown === atTheEnd && count1 === countEnd && countEnd === 'Completed 1 of 12' && sameAgain && restarted
         && miniHeads === mD.length && miniAcc === mainAcc && (await c.count(`${slot(D)}.done`)) === 1 && (await c.count(`${slot(E)}.done`)) === 0 && (await c.count('#shelf .slot.done')) === 1
         && hEnd === half && half === h1 && h1 === h2 && h2 === embed1b && (await c.vScroll()) <= 0 && (await c.errs()).length === 0;
       numbers[`${tag}_completedTapShows`] = { hEnd, half, afterTap: h1, afterSecondTap: h2, count: count1, accidentals: mainAcc };
       c.page.close();
     }
 
-    // ---- 2. a real Play (completed and failed builds), the pitches through the real Web Audio graph
+    // ---- 2. a real Play (a completed build, and a build after three wrong taps), the pitches through the real Web Audio graph
     const r = await mount(f.file, width); const embed = Math.max(...hs, h0); await r.setHeight(embed);
-    const ms = midisOf(f.steps, 0), targets = ms.slice(1, -1), wrongs = wrongKeysOf(ms).slice(0, 3);
     await r.press('#shelf .slot:nth-child(1)');
     await r.clearHz(); await r.press('#play'); await sleep(400); verdict[`${tag}_realPlayOffWhileBuilding`] = (await r.hz()).length === 0;
-    for (const how of ['completed', 'failed']) {
-      if (how === 'completed') for (const m of targets) await r.press(`.key[data-midi="${m}"]`); else { await r.press('#shelf .slot:nth-child(1)'); for (const k of wrongs) await r.press(`.key[data-midi="${k}"]`); }
+    for (const [how, t] of [['completed', 0], ['afterWrongTaps', 1]]) {      // 2026-11-19-0994: there is no failed build: the second is a second tonic built after three wrong taps
+      const ms = midisOf(f.steps, t), targets = ms.slice(1, -1), wrongs = wrongKeysOf(ms).slice(0, 3);
+      if (how === 'afterWrongTaps') { await r.press(`#shelf .slot:nth-child(${t + 1})`); for (const k of wrongs) await r.press(`.key[data-midi="${k}"]`); }
+      for (const m of targets) await r.press(`.key[data-midi="${m}"]`);
       await sleep(300); await r.clearHz(); await r.press('#play'); await sleep(Math.round((ms.length * 0.45 + 1) * 1000));
       const hz = await r.hz(); const per = hz.length / ms.length;
       verdict[`${tag}_realPlay_${how}_soundsEveryNote`] = Number.isInteger(per) && per >= 1 && per <= 40 && hz.filter((_, i) => i % per === 0).map(pitchOf).join() === ms.join();
@@ -186,7 +188,7 @@ for (const f of FILES.filter((x) => !only || x.file.includes(only))) {
       fresh: async () => { await r.press('#reset'); },
       halfBuilt: async () => { await r.press('#shelf .slot:nth-child(3)'); await r.press(`.key[data-midi="${midisOf(f.steps, 2)[2]}"]`); await r.press(`.key[data-midi="${wrongKeysOf(midisOf(f.steps, 2))[0]}"]`); },
       completed: async () => { await r.press('#shelf .slot:nth-child(5)'); for (const m of midisOf(f.steps, 4).slice(1, -1)) await r.press(`.key[data-midi="${m}"]`); },
-      failed: async () => { await r.press('#shelf .slot:nth-child(8)'); for (const k of wrongKeysOf(midisOf(f.steps, 7)).slice(0, 3)) await r.press(`.key[data-midi="${k}"]`); },
+      wrongTaps: async () => { await r.press('#shelf .slot:nth-child(8)'); for (const k of wrongKeysOf(midisOf(f.steps, 7)).slice(0, 3)) await r.press(`.key[data-midi="${k}"]`); },
     };
     let rest = true, restUnstable = 0, moved = 0;
     for (const [state, setup] of Object.entries(setups)) {

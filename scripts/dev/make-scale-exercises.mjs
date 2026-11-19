@@ -3,6 +3,7 @@
 //   scripts/dev/templates/scale-exercise.template.html  +  the player's `scale core`, `piano voice` and `scale view` blocks  ->  scale_build_modes_and_minor / _other_scales and scale_ear_build_the_scale (.html)   (levels, New exercise, Random, tonic and scale selects)
 //   scripts/dev/templates/scale-exercise-simple.template.html  + the same three blocks                               ->  scale_build_major / _natural_minor (.html)                                          (2026-11-18-0930, the SIMPLE variant: no levels, no New exercise, no Random; the twelve tonic slots are the chooser; one rule: 3 wrong taps)
 // 2026-11-19-0938: both templates carry the SHELF (twelve slots, one per tonic, a completed build fills its slot with a mini score drawn by the shared drawStaff); src/scale-shelf.test.ts pins it.
+// 2026-11-19-0994: the SIMPLE template's `config` block also carries two RULE FLAGS, `COUNT_WRONG_TAPS` and `SHOW_STEP_CHIPS`; each simple FILES entry states both (`countWrongTaps`, `showStepChips`; both false in scale_build_major and scale_build_natural_minor: wrong taps are not counted, the W W H row is not drawn). The FULL template has no flags: its three files do not change.
 // Within a group the files differ only by their `config` block (the scales they offer) and their <title>; src/scale-build-exercise.test.ts and src/scale-build-simple.test.ts pin that and the three shared blocks (byte-identical with scale_player.html in all five).
 //   node scripts/dev/make-scale-exercises.mjs [--vault ~/projects/music-theory] [--also <another vault root, e.g. assets/vaults/music-theory>]...
 import fs from 'node:fs';
@@ -30,15 +31,18 @@ function block(name) {
 const prelude = (() => { const a = player.indexOf('  var BASE = 60, LOW'); const i = player.indexOf('  function isBlack', a); return player.slice(a, player.indexOf('\n', i)).replace(/^  /, '').replace('STEP_SECONDS = 0.45', 'STEP_SECONDS = 0.45'); })();
 
 const FILES = [
-  { file: 'scale_build_major.html', title: 'Exercise: build the major scale', scales: ['major'], template: 'simple' },
-  { file: 'scale_build_natural_minor.html', title: 'Exercise: build the natural minor scale', scales: ['natural_minor'], template: 'simple' },
+  { file: 'scale_build_major.html', title: 'Exercise: build the major scale', scales: ['major'], template: 'simple', countWrongTaps: false, showStepChips: false },
+  { file: 'scale_build_natural_minor.html', title: 'Exercise: build the natural minor scale', scales: ['natural_minor'], template: 'simple', countWrongTaps: false, showStepChips: false },
   { file: 'scale_build_modes_and_minor.html', title: 'Exercise: build modes and minor scales', scales: ['ionian', 'dorian', 'phrygian', 'lydian', 'mixolydian', 'aeolian', 'locrian', 'natural_minor', 'harmonic_minor', 'melodic_minor'], template: 'full' },
   { file: 'scale_build_other_scales.html', title: 'Exercise: build pentatonic, blues and symmetric scales', scales: ['major_pentatonic', 'minor_pentatonic', 'blues', 'whole_tone', 'diminished_wh', 'diminished_hw'], template: 'full' },
   { file: 'scale_ear_build_the_scale.html', title: 'Exercise: build a scale', scales: ['major', 'natural_minor', 'harmonic_minor', 'dorian', 'mixolydian', 'major_pentatonic', 'minor_pentatonic'], template: 'full' },
 ];
+const flag = (f, name) => { if (typeof f[name] !== 'boolean') throw new Error(`${f.file}: the simple template needs ${name} (true or false)`); return String(f[name]); };
 const fill = (t, f) => t
   .replace('@@TITLE@@', () => f.title)
   .replace('@@SCALES@@', () => `[${f.scales.map((s) => JSON.stringify(s)).join(', ')}]`)
+  .replace('@@COUNT_WRONG_TAPS@@', () => flag(f, 'countWrongTaps'))                                                // only the simple template has the placeholder
+  .replace('@@SHOW_STEP_CHIPS@@', () => flag(f, 'showStepChips'))
   .replace('@@PRELUDE@@', () => prelude)
   .replace('@@SCALE_CORE@@', () => block('scale core'))
   .replace('@@PIANO_VOICE@@', () => block('piano voice'))

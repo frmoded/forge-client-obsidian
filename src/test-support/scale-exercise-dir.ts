@@ -6,3 +6,8 @@ import { fileURLToPath } from 'node:url';
 
 const root = process.env.SCALE_EXERCISE_VAULT ? path.resolve(process.env.SCALE_EXERCISE_VAULT.replace(/^~(?=$|\/)/, os.homedir())) : path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../assets/vaults/music-theory');
 export const EXERCISE_DIR = path.join(root, 'scales/resources/html');
+
+/** 2026-11-19-0994: the two single-scale files (the SIMPLE template) carry two rule flags in their config block, both false there (wrong taps not counted, no W W H row). The older rules (3 wrong taps end the build as failed, "Wrong taps: n of 3", the step chips) are still in the template behind the flags: this turns both on in a page's source, so the old pins keep covering them. A page without the flags (the FULL files) comes back unchanged. */
+export function rulesOn(html: string): string {
+  return html.replace('var COUNT_WRONG_TAPS = false;', 'var COUNT_WRONG_TAPS = true;').replace('var SHOW_STEP_CHIPS = false;', 'var SHOW_STEP_CHIPS = true;');
+}

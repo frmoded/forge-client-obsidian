@@ -2,6 +2,7 @@
 // No levels, no New exercise, no Random, no selects. ONE rule (the former medium): the THIRD wrong tap ends the build as failed (the answer is shown, the key is not counted); all notes found within 3 wrong taps = completed. The twelve tonic slots of the shelf are
 // the chooser: a tap on a slot starts that key at once, a FRESH build (a tap on the slot of the current key, a failed one or a new one restarts it; the answer of a finished build stays on screen until a slot is tapped). 2026-11-19-0955: the slot of a COMPLETED key shows its finished scale instead (src/scale-shelf.test.ts, section 4b). On first open nothing is
 // started: "Pick a tonic (home note)." A completed slot stays filled. Reset clears the count AND the build on screen. The three FULL build files (modes and minor, other scales, ear build the scale) are pinned by hash below (a deliberate change of one updates its line).
+// 2026-11-19-0994 (deliberate): the two files no longer count wrong taps and no longer draw the W W H row: two flags in their config block, both false (src/scale-build-no-count-0994.test.ts pins the files as they are). The tests below that pin the OLDER rule (3 wrong taps = failed, "Wrong taps: n of 3", the chips) now open the page with the flags turned on (`open(f, true)`, `g(f, true)`: rulesOn in src/test-support/scale-exercise-dir.ts): the template still has that behaviour behind the flags. The others (controls, first open, the words, no hover, the look, the shared blocks, the generator) read the files as they are.
 // 2026-11-19-0938: the twelve chips at the top became the SHELF of twelve slots under the build area (a completed build fills its slot with a mini score): the shelf itself is pinned in src/scale-shelf.test.ts, here the slots are the chooser and the fills.
 // Pinned here: the controls are gone; first open; a slot starts a build; the one rule through real clicks; fills; Reset; all twelve; Play; the words; no hover and no tooltip; the shared blocks; the pure core; the three FULL files pinned by hash; the generator.
 // How TALL the two files are (no vertical scroll at 800 and 360 px, every state) is measured in real Chrome: scripts/dev/measure-scale-build-simple.mjs. The FULL files' flows are in src/scale-build-exercise.test.ts; the completed count in src/scale-exercise-completed.test.ts.
@@ -16,7 +17,7 @@ import { test } from 'node:test';
 import { Window } from 'happy-dom';
 
 import { audioStub } from './test-support/web-audio-stub.ts';
-import { EXERCISE_DIR } from './test-support/scale-exercise-dir.ts';
+import { EXERCISE_DIR, rulesOn } from './test-support/scale-exercise-dir.ts';
 import { pureOf } from './test-support/interval-ear-core-checks.ts';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
@@ -34,15 +35,15 @@ const read = (f: string): string => fs.readFileSync(path.join(DIR, f), 'utf8');
 const scriptOf = (h: string): string => /<script>([\s\S]*?)<\/script>/.exec(h)![1];
 const block = (h: string, name: string): string => { const a = h.indexOf(`  // ==== ${name} BEGIN`), e = h.indexOf(`  // ==== ${name} END`); assert.ok(a > 0 && e > a, `no "${name}" block`); return h.slice(a, h.indexOf('\n', e)); };
 const player = read('scale_player.html');
-const g = (f: string) => pureOf(scriptOf(read(f)));
+const g = (f: string, rules = false) => pureOf(scriptOf(rules ? rulesOn(read(f)) : read(f)));
 /** the source without comments (the words and the controls are judged on what runs and what shows) */
 const codeOf = (h: string): string => h.replace(/<!--[\s\S]*?-->/g, '').replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:"'])\/\/[^\n]*/g, '$1');
 /** the page's OWN code: without the three blocks shared with the player (the piano voice has a `level` of its own: the loudness) */
 const ownCodeOf = (h: string): string => codeOf(['scale core', 'piano voice', 'scale view'].reduce((t, n) => t.replace(block(h, n), ''), h));
 
 // ---- the pages: real DOM, real clicks ---------------------------------------------------------------------------------------------------------------------------------------
-function open(file: string) {
-  const h = read(file); const stub = audioStub(); const errors: string[] = []; const win: any = new Window({ url: 'http://localhost/' });
+function open(file: string, rules = false) {      // rules = true: the page with its two rule flags turned ON (the older rules: see rulesOn)
+  const h = rules ? rulesOn(read(file)) : read(file); const stub = audioStub(); const errors: string[] = []; const win: any = new Window({ url: 'http://localhost/' });
   const queue: Array<{ fn: () => void; ms: number }> = [];
   win.console.error = (...a: unknown[]) => { errors.push(a.map(String).join(' ')); }; win.AudioContext = stub.Ctx; win.Float32Array = Float32Array;
   win.__schedule = (fn: () => void, ms: number) => { queue.push({ fn, ms }); return queue.length; }; win.__unschedule = () => {};
@@ -109,7 +110,7 @@ for (const [f] of SIMPLE) {
 // ---- a slot starts a build at once ----------------------------------------------------------------------------------------------------------------------------------------
 for (const [f, scale] of SIMPLE) {
   test(`${f}: tapping a tonic slot of the shelf starts that key at once (all twelve): the prompt, the tonic on the strip and on the staff, "N to find", "Wrong taps: 0 of 3", the slot marked, the key announced`, () => {
-    const p = open(f);
+    const p = open(f, true);
     for (let t = 0; t < 12; t++) {
       p.chip(t); same(p.errors, []);
       assert.equal(p.current(), t); assert.equal(p.chips()[t].getAttribute('aria-current'), 'true'); assert.equal(p.doc.querySelectorAll('#shelf [aria-current]').length, 1);
@@ -127,7 +128,7 @@ for (const [f, scale] of SIMPLE) {
 }
 
 test('a slot tap in the middle of a build starts a fresh one of the new key (nothing of the old build is left on the keys, the staff or the count of wrong taps)', () => {
-  const p = open('scale_build_major.html'); p.chip(0); p.tap(62); p.tap(61); assert.equal(p.text('wrongs'), 'Wrong taps: 1 of 3'); assert.equal(p.heads(), 2);
+  const p = open('scale_build_major.html', true); p.chip(0); p.tap(62); p.tap(61); assert.equal(p.text('wrongs'), 'Wrong taps: 1 of 3'); assert.equal(p.heads(), 2);
   p.chip(7); assert.equal(p.current(), 7); assert.equal(p.heads(), 1); assert.equal(p.doc.querySelectorAll('.key.wrong, .key.lit:not(.tonic)').length, 0); assert.equal(p.text('wrongs'), 'Wrong taps: 0 of 3'); assert.equal(p.text('hint'), '6 to find');
   assert.ok(p.key(67).classList.contains('tonic'), 'G is the tonic now');
 });
@@ -135,7 +136,7 @@ test('a slot tap in the middle of a build starts a fresh one of the new key (not
 // ---- the one rule: 3 wrong taps ----------------------------------------------------------------------------------------------------------------------------------------------
 for (const [f, scale] of SIMPLE) {
   test(`${f}: the single rule, with real clicks: two wrong taps keep it going; the THIRD ends it as failed (the answer is shown, the missed notes dashed, the key is NOT counted, the slot does not fill); nothing after the end`, () => {
-    const p = open(f); p.chip(2); const wrongs = p.wrongKeys(); assert.ok(wrongs.length >= 3);
+    const p = open(f, true); p.chip(2); const wrongs = p.wrongKeys(); assert.ok(wrongs.length >= 3);
     p.tap(wrongs[0]); assert.equal(p.text('wrongs'), 'Wrong taps: 1 of 3'); assert.ok(p.key(wrongs[0]).classList.contains('wrong')); assert.equal(p.key(wrongs[0]).querySelector('text.mark')!.textContent, '×'); assert.equal(p.heads(), 1, 'a wrong tap puts nothing on the staff');
     assert.equal(p.text('sr'), 'Not in the scale. Wrong taps: 1 of 3.');
     p.tap(wrongs[1]); assert.equal(p.text('wrongs'), 'Wrong taps: 2 of 3'); assert.equal(p.playDisabled(), true, 'two wrong taps: still building'); assert.match(p.text('prompt'), /^Exercise: build /); assert.equal(p.doc.querySelectorAll('.key.idle').length, 0);
@@ -151,7 +152,7 @@ for (const [f, scale] of SIMPLE) {
 
   test(`${f}: the single rule: all notes found within 3 wrong taps = completed (counted once, its slot filled), with 0, 1 or 2 wrong taps on the way; the end shows the letters and the steps and turns Play on`, () => {
     for (const wrongCount of [0, 1, 2]) {
-      const p = open(f); p.chip(5); const wrongs = p.wrongKeys(); for (let i = 0; i < wrongCount; i++) p.tap(wrongs[i]);
+      const p = open(f, true); p.chip(5); const wrongs = p.wrongKeys(); for (let i = 0; i < wrongCount; i++) p.tap(wrongs[i]);
       const order = [...p.targets()].reverse(); order.forEach((m, i) => { p.tap(m); if (i < order.length - 1) assert.equal(p.playDisabled(), true); });
       assert.match(p.text('prompt'), /^Exercise done: you built /); assert.equal(p.text('wrongs'), `Wrong taps: ${wrongCount} of 3`); assert.equal(p.text('completed'), 'Completed 1 of 12'); same(p.done(), [5]);
       assert.equal(p.ghosts(), 0); assert.equal(p.heads(), 8); assert.equal(p.doc.querySelectorAll('#letters .letter').length, 7); assert.equal(p.doc.querySelectorAll('#chips .chip').length, 7); assert.equal(p.playDisabled(), false);
@@ -162,7 +163,7 @@ for (const [f, scale] of SIMPLE) {
 }
 
 test('a right key lights, is marked, and puts its note on the staff with the scale\'s spelling (F sharp for D major); a wrong key is marked and puts nothing on the staff; the tonic, the octave note and the keys outside the octave do nothing', () => {
-  const p = open('scale_build_major.html'); p.chip(2);                                // D major: D E F# G A B C# D
+  const p = open('scale_build_major.html', true); p.chip(2);                                // D major: D E F# G A B C# D
   assert.equal(p.text('prompt').startsWith('Exercise: build D major'), true);
   p.tap(66); assert.ok(p.key(66).classList.contains('lit')); assert.equal(p.key(66).querySelector('text.mark')!.textContent, '✓');
   assert.equal(p.heads(), 2); same(p.accs(), ['♯'], 'the F sharp has its sharp'); assert.equal(p.text('hint'), '5 to find');
@@ -175,7 +176,7 @@ test('a right key lights, is marked, and puts its note on the staff with the sca
 
 // ---- the slots: fills, restarts, retries ------------------------------------------------------------------------------------------------------------------------------------
 test('a completed slot stays filled: while another key is built, when it is tapped (it shows its finished scale: 2026-11-19-0955, it used to start a fresh build), and after another key is failed; the slot of the key on screen is marked current (border colour), the filled one keeps its fill', () => {
-  const p = open('scale_build_major.html'); p.chip(0); p.finish(); same(p.done(), [0]); assert.equal(p.text('completed'), 'Completed 1 of 12');
+  const p = open('scale_build_major.html', true); p.chip(0); p.finish(); same(p.done(), [0]); assert.equal(p.text('completed'), 'Completed 1 of 12');
   p.chip(4); same(p.done(), [0], 'another key is being built: C stays filled'); assert.equal(p.current(), 4); assert.equal(p.chips()[0].classList.contains('current'), false);
   p.fail(); assert.match(p.text('prompt'), /^Exercise over/); same(p.done(), [0]); assert.equal(p.text('completed'), 'Completed 1 of 12');
   p.chip(0); same(p.done(), [0], 'the slot of a completed key keeps its fill when it is tapped'); assert.equal(p.current(), 0); assert.ok(p.chips()[0].classList.contains('done') && p.chips()[0].classList.contains('current'));
@@ -185,7 +186,7 @@ test('a completed slot stays filled: while another key is built, when it is tapp
 });
 
 test('a tap on the slot of the CURRENT key restarts it (a finished build: its answer leaves the screen); a failed key can be tried again by tapping its slot and then completes', () => {
-  const p = open('scale_build_natural_minor.html'); p.chip(9); p.fail(); assert.match(p.text('prompt'), /^Exercise over/); assert.equal(p.heads(), 8); same(p.done(), []);
+  const p = open('scale_build_natural_minor.html', true); p.chip(9); p.fail(); assert.match(p.text('prompt'), /^Exercise over/); assert.equal(p.heads(), 8); same(p.done(), []);
   p.chip(9); assert.equal(p.heads(), 1, 'the answer left the screen'); assert.equal(p.doc.querySelectorAll('#letters .letter').length, 0); assert.equal(p.doc.querySelectorAll('.key.reveal, .key.wrong').length, 0); assert.equal(p.playDisabled(), true); assert.equal(p.text('wrongs'), 'Wrong taps: 0 of 3');
   p.finish(); same(p.done(), [9]); assert.equal(p.text('completed'), 'Completed 1 of 12'); assert.equal(p.chips()[9].querySelector('.nm').textContent, p.x.scaleTitle(9, 'natural_minor'), 'a completed slot says "A natural minor" under its mini score');
   p.chip(3); p.tap(p.targets()[0]); p.chip(3); assert.equal(p.heads(), 1, 'a restart in the middle of a build too');
@@ -193,7 +194,7 @@ test('a tap on the slot of the CURRENT key restarts it (a finished build: its an
 
 test('Reset clears the count AND the build on screen: back to "Pick a tonic (home note).", the slots unfilled and none current, the keys idle, Play off, the staff bare; the slots work again after it', () => {
   for (const [f] of SIMPLE) {
-    const p = open(f); p.chip(1); p.finish(); p.chip(6); p.finish(); p.chip(8); p.tap(p.wrongKeys()[0]); same(p.done(), [1, 6]); assert.equal(p.text('completed'), 'Completed 2 of 12');
+    const p = open(f, true); p.chip(1); p.finish(); p.chip(6); p.finish(); p.chip(8); p.tap(p.wrongKeys()[0]); same(p.done(), [1, 6]); assert.equal(p.text('completed'), 'Completed 2 of 12');
     p.click(p.doc.getElementById('reset'));
     assert.equal(p.text('completed'), 'Completed 0 of 12'); same(p.done(), []); assert.equal(p.current(), -1); assert.equal(p.text('prompt'), 'Pick a tonic (home note).'); assert.equal(p.text('wrongs'), ''); assert.equal(p.text('hint'), '');
     assert.equal(p.doc.querySelectorAll('.key.tonic, .key.lit, .key.wrong').length, 0); assert.equal(p.doc.querySelectorAll('.key.idle').length, 25); assert.equal(p.heads(), 0); assert.equal(p.playDisabled(), true); assert.equal(p.doc.querySelectorAll('#letters .letter, #chips .chip').length, 0);
@@ -214,7 +215,7 @@ test('all twelve completed says "All twelve built." (one gentle line), in both f
 for (const [f] of SIMPLE) {
   test(`${f}: Play after a build ends (completed or failed) still sounds the whole scale up with the piano voice (every note, the octave note too) and lights each note in turn; before that the button is off and does nothing`, () => {
     for (const how of ['completed', 'failed'] as const) {
-      const p = open(f); p.click(p.doc.getElementById('play')); assert.equal(p.stub.osc.length, 0, 'disabled: nothing sounds'); p.chip(0);
+      const p = open(f, true); p.click(p.doc.getElementById('play')); assert.equal(p.stub.osc.length, 0, 'disabled: nothing sounds'); p.chip(0);
       p.click(p.doc.getElementById('play')); assert.equal(p.stub.osc.length, 0, 'building: nothing sounds');
       if (how === 'completed') p.finish(); else p.fail();
       p.stub.osc.length = 0; p.queue.length = 0; p.click(p.doc.getElementById('play'));
@@ -275,12 +276,15 @@ test('the look and the height rules: no margin or padding on the page, no fixed 
 // ---- the shared blocks, the core, the three FULL files, the generator ----------------------------------------------------------------------------------------------------
 test('the scale core, the piano voice and the scale view are byte-identical with scale_player.html in both SIMPLE files (shared, not re-implemented); the exercise core is identical in the two, pure, and has no level machinery', () => {
   for (const name of ['scale core', 'piano voice', 'scale view']) { const ref = block(player, name); assert.ok(ref.length > 1500); for (const [f] of SIMPLE) assert.equal(block(read(f), name), ref, `${f}: ${name}`); }
+  // 2026-11-19-0994: the config block of the two SIMPLE files differs ONLY in the SCALES line (the two rule flags are lines of it, with the same values in both: false); the FULL files' config block has no flags
+  const cfg = (f: string): string[] => block(read(f), 'config').split('\n').filter((l) => !/^\s*var SCALES = /.test(l)); same(cfg(SIMPLE[0][0]), cfg(SIMPLE[1][0]), 'the config blocks of the two SIMPLE files differ only by the SCALES line'); assert.ok(cfg(SIMPLE[0][0]).includes('  var COUNT_WRONG_TAPS = false;') && cfg(SIMPLE[0][0]).includes('  var SHOW_STEP_CHIPS = false;'), 'both flags are config lines');
+  for (const f of Object.keys(FULL_SHA)) assert.doesNotMatch(block(read(f), 'config'), /COUNT_WRONG_TAPS|SHOW_STEP_CHIPS/, `${f}: no flag lines`);
   const a = block(read(SIMPLE[0][0]), 'exercise core'); assert.equal(block(read(SIMPLE[1][0]), 'exercise core'), a); assert.ok(a.length > 3500); assert.doesNotMatch(a, /document|window/, 'pure'); assert.doesNotMatch(a, /EX_LEVELS|exAttempts|exRandom|level/);
 });
 
 test('the pure core of the simple variant: ONE rule EX_WRONG_TAPS = 3; no levels, no scores, no random; exWrongText; the words for a page with nothing started', () => {
   for (const [f] of SIMPLE) {
-    const x = g(f); assert.equal(x.EX_WRONG_TAPS, 3);
+    const x = g(f, true); assert.equal(x.EX_WRONG_TAPS, 3);
     for (const gone of ['EX_LEVELS', 'EX_DEFAULT_LEVEL', 'exAttempts', 'exRandom', 'exEmptyScores', 'exTried', 'exBuilt', 'exCounterText', 'exBoardText']) assert.equal(x[gone], undefined, `${gone} is gone`);
     assert.equal(x.exPrompt(null), 'Pick a tonic (home note).'); assert.equal(x.exHint(null), ''); assert.equal(x.exWrongText(null), ''); same(x.exPlayPlan(null), []);
     const s0 = x.exStart(0, x.SCALES[0]); same([s0.phase, s0.left, s0.found, s0.wrong, s0.outcome], ['building', 3, [], [], null]); assert.equal(x.exWrongText(s0), 'Wrong taps: 0 of 3'); assert.equal(x.exHint(s0), '6 to find');
@@ -298,7 +302,7 @@ test('the pure core of the simple variant: ONE rule EX_WRONG_TAPS = 3; no levels
 test('every tonic of both SIMPLE files: the finished build puts on the staff exactly the player\'s spelling (one letter per degree) with the octave note; the staff never shows an answer early (only the tonic at the start; missed notes are ghosts at the end)', () => {
   const playerCore = pureOf(scriptOf(player));
   for (const [f, scale] of SIMPLE) {
-    const x = g(f);
+    const x = g(f, true);
     for (let t = 0; t < 12; t++) {
       let s = x.exStart(t, scale); const flags = (st: any): string => x.exStaffNotes(st).map((n: any) => (n.hidden ? 'h' : n.ghost ? 'g' : 'n')).join('');
       assert.equal(flags(s), 'nhhhhhhh'); const gone = x.exTap(s, s.notes[3]).state; assert.equal(flags(gone), 'nhhnhhhh');
