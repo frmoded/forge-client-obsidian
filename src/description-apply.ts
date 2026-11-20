@@ -33,7 +33,7 @@ import { listModel } from './list-model-selected.ts';       // 2026-11-19-0997: 
 import type { PromptBoxHandle } from './prompt-box-dom.ts';
 import { mountChatPanel, type ChatPanelHandle } from './chat-panel-dom.ts';
 import { append, expireOpen, fromOutcome, memoryStore, openSuggestion, resolveSuggestion, type DialogEntry, type DialogEvent, type DialogStore } from './dialog-core.ts';
-import { createUndoStack, defaultSeed, drawSeeds, linesOfParams, planAppend, replay, sentencesOfText, stopNotice, type ListStop, type Plan, type ReplayCtx, type UndoStack } from './sentence-list-core.ts';
+import { createUndoStack, defaultSeed, drawSeeds, isHeadLine, linesOfParams, planAppend, replay, sentencesOfText, stopNotice, type ListStop, type Plan, type ReplayCtx, type UndoStack } from './sentence-list-core.ts';
 import { listOfNote, writeListNote } from './sentence-list-note-core.ts';
 import { REDO_ID, REDO_LABEL, UNDO_ID, UNDO_LABEL } from './composer-core.ts';
 import { isEmptyNote } from './empty-note-core.ts';
@@ -592,11 +592,17 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     return { ok: true, disk: '' };
   }
   const duplicateArmed = (path: string): boolean => familyOfPath(path) === 'phrase' && (boxText(path) ?? '').trim() !== '';       // 2026-11-19-0992a: ANY text (it was armsDuplicate: only the word)
+  /** 2026-11-19-0999: does the phrase's list (as the note says it now) have a head line (Extend, Mix, Morph or Take)? A note that cannot be read says yes: the click then does what 0996b did. */
+  async function phraseHasHead(path: string): Promise<boolean> {
+    try { return listOf(await ports.read(path), 'phrase').some(isHeadLine); } catch (e) { console.error('[forge-duplicate] phraseHasHead: could not read the note', e); return true; }
+  }
   async function duplicateClick(path: string, noteId: string | null, bar?: number | null): Promise<{ ok: boolean; message: string }> {
     const box = [...boxes.values()].find((b) => b.path === path);
     if (box === undefined) return { ok: false, message: 'There is no composer open for this note.' };
     if (!duplicateArmed(path)) return { ok: false, message: 'The composer is empty: a click on a bar pins it.' };
-    if (listModel.duplicate.barWordVerb(box.handle.state().text) !== null) {                                                    // 2026-11-19-0996b: the text starts with a bar word (Duplicate, Copy, Move, Delete, Remove, Keep, Morph, Mix, Extend): the click says WHICH BAR (its number in the Score now), at the caret, no preview, no pin
+    const typed = box.handle.state().text;
+    const opensHead = listModel.duplicate.barWordVerb(typed) !== null && listModel.duplicate.barWordVerb(typed, false) === null;          // 2026-11-19-0999 (deliberate): Extend, Mix and Morph are a bar step only once the phrase has a head line; the six other verbs never read the note (this click stays synchronous for them)
+    if (listModel.duplicate.barWordVerb(typed, opensHead ? await phraseHasHead(path) : true) !== null) {                          // 2026-11-19-0996b: the text starts with a bar word (Duplicate, Copy, Move, Delete, Remove, Keep, Morph, Mix, Extend): the click says WHICH BAR (its number in the Score now), at the caret, no preview, no pin
       if (typeof bar !== 'number' || !Number.isInteger(bar) || bar < 1) {
         const message = 'I cannot tell which bar that is, so I cannot write its number.';
         say(path, { type: 'notice', message }); box.handle.focus();

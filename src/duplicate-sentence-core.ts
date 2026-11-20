@@ -31,11 +31,14 @@ export const withDuplicateLink = (text: string, name: string): string => `${Stri
 /** 2026-11-19-0992a (R1): what a click on a bar inserts into a composer that has ANY other text: the bar's link, ` [[bar_007]]` (no full stop). `before` is the text before the caret: one leading space unless there is nothing before the caret, or what is there already ends in white space or an opening bracket. */
 export const linkInsertion = (before: string, name: string): string => `${before === '' || /[\s(\[{]$/.test(before) ? '' : ' '}[[${name}]]`;
 
-/** 2026-11-19-0996b (BAR WORDS INSIDE A PHRASE): the words that make a click on a bar insert its POSITION instead of its note's link: the FIRST word of the composer's text (any case, whole word) is one of these. */
+/** 2026-11-19-0999: the three bar words that are ALSO the words a phrase's head opens with: they are a bar step only once the phrase has a head line. */
+export const HEAD_BAR_VERBS = ['morph', 'mix', 'extend'] as const;
+/** 2026-11-19-0996b (BAR WORDS INSIDE A PHRASE): the words that make a click on a bar insert its POSITION instead of its note's link: the FIRST word of the composer's text (any case, whole word) is one of these. `hasHead` (2026-11-19-0999): false = the phrase's list has no head line yet, so Extend, Mix and Morph are not bar words (null: the click gives the link); the default says there is one, as 0996b did. */
 export const BAR_WORD_VERBS = ['duplicate', 'copy', 'move', 'delete', 'remove', 'keep', 'morph', 'mix', 'extend'] as const;
-export function barWordVerb(text: string): (typeof BAR_WORD_VERBS)[number] | null {
+export function barWordVerb(text: string, hasHead: boolean = true): (typeof BAR_WORD_VERBS)[number] | null {
   const m = /^\s*([A-Za-z]+)(?![A-Za-z0-9_])/.exec(String(text ?? ''));
   const word = m === null ? '' : m[1].toLowerCase();
+  if (!hasHead && (HEAD_BAR_VERBS as readonly string[]).includes(word)) return null;          // 2026-11-19-0999 (deliberate): with no head line in the phrase yet, Extend, Mix and Morph open a HEAD (`Morph [[a]] into [[b]]`), and a click gives the note link; the other six never need a head
   return (BAR_WORD_VERBS as readonly string[]).includes(word) ? word as (typeof BAR_WORD_VERBS)[number] : null;
 }
 /** The bar's number in the Score now, from the provenance params of the element that was clicked (the lineage builders write `bar`, 1-based, as the selection menu reads it); a MIX is one bar and has none: bar 1; null = cannot tell. */

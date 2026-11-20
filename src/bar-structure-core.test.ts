@@ -102,18 +102,19 @@ test('the sentences are said in either case and spacing, and a list may use comm
   assert.deepEqual(ok('Take [[phrase_006]]. keep  BARS 1 to 2, bar 4 and bar 6.'), [keep([1, 2], [4, 4], [6, 6])]);
   assert.deepEqual(ok('Take [[phrase_006]]. Move bar 2 one bar LEFT.'), [move(-1, [2, 2])]);
   assert.deepEqual(ok('Take [[phrase_006]]. Delete bars three to four.'), [del([3, 4])]);
+  assert.deepEqual(ok('Take [[phrase_006]]. Keep bar 5 and bars 2 to 3.'), [keep([2, 3], [5, 5])]);       // 2026-11-19-0999 (deliberate): was refused ("Expected the bars in order ..."); any order is read and written sorted
 });
 
-test('REFUSED by the grammar, one sentence with a place: ranges out of order or touching, a structure step after a Thin out, no direction, junk after it', () => {
+test('REFUSED by the grammar, one sentence with a place: ranges that share a bar or touch, a structure step after a Thin out, no direction, junk after it', () => {
   const bad = (t: string) => { const r = parse(t, VAULT); assert.ok(!r.ok, t); return (r as { error: { message: string; line: number; column: number } }).error; };
-  assert.match(bad('Take [[phrase_006]]. Keep bar 5 and bars 2 to 3.').message, /^Expected the bars in order with at least one bar between ranges, but bars 2 to 3 comes after bar 5\.$/);
-  assert.match(bad('Take [[phrase_006]]. Delete bars 1 to 2 and bar 3.').message, /^Expected the bars in order with at least one bar between ranges, but bar 3 comes after bars 1 to 2\.$/);
+  assert.match(bad('Take [[phrase_006]]. Delete bars 1 to 2 and bar 3.').message, /^Expected at least one bar between ranges, but bar 3 comes right after bars 1 to 2: say bars 1 to 3\.$/);       // 2026-11-19-0999 (deliberate): the ranges are no longer "in order" (any order is read and sorted), so the touching ranges say what to write instead
+  assert.match(bad('Take [[phrase_006]]. Keep bars 3 to 5 and bar 4.').message, /^Expected each bar to be named once, but bar 4 is in both bars 3 to 5 and bar 4\.$/);       // 2026-11-19-0999 (deliberate): a real overlap is refused in words
   assert.match(bad('Take [[phrase_006]]. Thin out bar 1. Delete bar 2.').message, /^Expected "Delete" to come before any "Thin out" or "Double up"/);
   assert.match(bad('Take [[phrase_006]]. Move bar 2.').message, /^Expected "one bar left", "one bar right", "back" or "forward", but found the end of the sentence\.$/);       // 2026-11-19-0996b (deliberate): the driver's words are named too
   assert.match(bad('Take [[phrase_006]]. Move bar 2 two bars left.').message, /^Move takes one bar at a time\. Say "Move bar 2 one bar left\." twice\.$/);       // 2026-11-19-0996b (deliberate): read and refused with the sentence to say instead (it was "Expected ... but found two")
   assert.match(bad('Take [[phrase_006]]. Keep bars 3 to 5 please.').message, /^Expected the end of the sentence, but found "please"\.$/);
   assert.match(bad('Take [[phrase_006]]. Keep.').message, /^Expected "bar N" or "bars N to M"/);
-  const e = bad('Take [[phrase_006]]. Delete bar 9 and bar 4.');
+  const e = bad('Take [[phrase_006]]. Delete bar 9 and bars 7 to 9.');       // 2026-11-19-0999 (deliberate): was `Delete bar 9 and bar 4` (out of order, column 39); out of order is read now, so the place pinned is the range read last of two that share a bar
   assert.deepEqual([e.line, e.column], [1, 39]);
   // a density step AFTER the structure steps is fine, and a fork may follow
   assert.ok(parse('Take [[phrase_006]]. Delete bar 2. Thin out bar 1, by half, keeping the downbeat. Bar 2 is replaced by [[bar_001]].', VAULT).ok);

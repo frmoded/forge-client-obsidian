@@ -19,6 +19,19 @@
 //   morphBetweenByClicks             "Morph", a click on bar 2, a click on bar 3, then typed " across 5 bars", Enter, Enter: the last line is "Morph bars 2 and 3 across 5 bars, in musical order, and put them between bars 2 and 3."
 //   duplicateNoteLinkTypedStillWorks "Duplicate [[bar_009]]." typed, Enter: the preview "Copy [[bar_009]] to a new bar." (the 0992 note copy), Esc discards
 //   noRedAnywhereInTheDialog, noTooltipAnywhere, noHorizontalOverflow     as in measure-duplicate-bar.mjs
+// 2026-11-19-0999 (EXTENDED, not a new script; WRITTEN, NOT RUN by the builder: the supervisor runs it) - the click with no head yet, and bars clicked out of order. The stand-in note of every OLD verdict has a head (an Extend line), so NO old verdict moves
+// (morphBetweenByClicks still says bar N: the list has a head). New verdicts, each suffixed _<width>_<theme>:
+//   headlessExtendMixMorphClickGivesTheNoteLink   the note holds an EMPTY phrase (no head line; the Score stand-in still shows its 8 bars): "Extend", "Mix", "Morph" typed with real keys, a real click on each of the 8 bars: "<Verb> [[<note that made THAT bar>]]" (the 0992a link)
+//   headlessLinkClickNoPreviewNoPinNoWrite        after those 24 clicks focus is in the field every time, no live preview, nothing pinned, created or written
+//   headedExtendMixMorphClickGivesBarN            the note HAS a head (the usual stand-in): the same three words, the same eight clicks: "<Verb> bar N"
+//   headlessOtherSixStillGiveBarN                 the empty-phrase note, "Duplicate", "Copy", "Move", "Delete", "Remove", "Keep" typed, a click on bar 3 and on bar 6: "<Verb> bar 3", "<Verb> bar 6" (they need no head)
+//   headByClicksThenBarStep                       empty phrase: "Morph", click bar 2, " into", click bar 3, " over 5 bars, in musical order." Enter, Enter: the list is the ONE head line "Morph [[bar_005]] into [[bar_009]] over 5 bars, in musical order."; then "Morph" and a click on bar 4 says "Morph bar 4"
+//   outOfOrderClickFieldIsInClickOrder            "Delete", a real click on bar 5, then on bar 3: the field says "Delete bar 5 and bar 3"
+//   outOfOrderEnterPreviewsCanonical              Enter: the preview says "Delete bar 3 and bar 5." (a live preview, nothing written, the sentence service not asked)
+//   outOfOrderSecondEnterAppliesOneSortedLine     Enter again: the list's last line is "Delete bar 3 and bar 5.", exactly ONE process call, the composer empty
+//   outOfOrderCmdZTakesItBackInOneStep            a real Cmd+Z in the empty composer: the list is one line shorter again
+//   overlapAndTouchingAreRefusedInWords           "Delete bars 3 to 5 and bar 4" Enter: the dialog says "bar 4 is in both bars 3 to 5 and bar 4"; "Keep bar 4 and bar 3" Enter: "say bars 3 to 4."; no preview, nothing written, the service not asked
+// Screenshots (new): barwords-headless-<w>-<theme>.png (after "Extend [[bar_005]]" from a click, empty phrase), barwords-outoforder-<w>-<theme>.png (the canonical preview after bars 5 and 3).
 // HARNESS LESSONS (kept): every mount is a FRESH host element; no page global named like a read-only window property (never "closed", "name", "status"...); no backticks inside the page's template literal (this file's page text is one).
 // Screenshots: barwords-duplicate-<w>-<theme>.png (after "Duplicate bar 3 and bar 5"), barwords-refused-<w>-<theme>.png (the two-places refusal), barwords-applied-<w>-<theme>.png (after the apply).
 import fs from 'node:fs';
@@ -70,14 +83,14 @@ var PATH = 'phrases/phrase_020.md';
 var EXTEND = { kind: 'extend', source: 'bar_005', bars: 8, style: 'repeat_with_fills', tempo_change_pct: 0, overrides: { '3': 'bars/bar_009', '6': 'bars/bar_002' } };
 window.keys = [];
 document.addEventListener('keydown', function (e) { setTimeout(function () { window.keys.push({ key: e.key, meta: e.metaKey, prevented: e.defaultPrevented }); }, 0); }, false);
-window.setup = function (width) {
+window.setup = function (width, noHead) {
   if (window.ctl) window.ctl.dispose();
   if (window.layer) window.layer.dispose();
   window.shifted = 0; window.notes = new Map(); window.processCalls = 0; window.creates = []; window.trashed = []; window.opened = []; window.pinTold = []; window.serviceCalls = 0;
   var bar = cp.planNewBar({ existingBasenames: [], exists: function () { return false; } }).content;
   VAULT_BARS.forEach(function (n) { window.notes.set('bars/' + n + '.md', bar.split('bar_001').join(n)); });
   window.phraseText = cp.noteContentFor('phrase_020', EXTEND);
-  window.notes.set(PATH, window.phraseText);
+  window.notes.set(PATH, noHead ? cp.emptyPhraseNote('phrase_020') : window.phraseText);          // 2026-11-19-0999: noHead = a phrase with no head line (the Score stand-in still draws its 8 bars)
   var old = document.getElementById('host'); var host = document.createElement('div'); host.id = 'host'; old.parentNode.replaceChild(host, old);      // a NEW element per mount, as a new tab is
   host.className = ''; host.removeAttribute('style'); host.style.height = '640px'; host.style.width = width + 'px'; host.innerHTML = '';
   document.getElementById('frame').style.width = width + 'px';
@@ -156,7 +169,7 @@ const sayApplied = async (text) => { await typeText(text); await ENTER(); await 
 const lastNotice = () => ev(`(function () { var n = window.dialog().filter(function (d) { return d.kind === 'notice'; }); return n.length ? n[n.length - 1].text : ''; })()`);
 
 const EXPECT = ['bar_005', 'bar_005', 'bar_009', 'bar_005', 'bar_005', 'bar_002', 'bar_005', 'bar_005'];
-const mount = async (w) => { await ev(`setup(${w})`); await mounted(); await sleep(300); };
+const mount = async (w, noHead = false) => { await ev(`setup(${w}, ${noHead})`); await mounted(); await sleep(300); };
 
 for (const w of [800, 1100]) for (const theme of ['light', 'dark']) {
   const tag = `${w}_${theme}`;
@@ -231,6 +244,52 @@ for (const w of [800, 1100]) for (const theme of ['light', 'dark']) {
   await typeText('Duplicate [[bar_009]].'); await ENTER(); await sleep(300);
   verdict[`duplicateNoteLinkTypedStillWorks_${tag}`] = (await ev('suggestion()')) === 'Copy [[bar_009]] to a new bar.' && (await ev('livePreview()')) === true && (await ev('creates.length')) === 0;
   await ESC();
+
+  // ---- 2026-11-19-0999: the click with no head yet (Extend, Mix, Morph give the note link; once there is a head, bar N) ---------------------------------------------------------------------------------------------------
+  await mount(w, true);
+  const headless = {}, hfocus = [], hlive = [];
+  for (const word of ['Extend', 'Mix', 'Morph']) { headless[word] = []; for (let i = 1; i <= 8; i++) { await clearField(); await typeText(word); await clickBar(i); headless[word].push(await ev('fieldValue()')); hfocus.push(await ev('focusIsField()')); hlive.push(await ev('livePreview()')); if (word === 'Extend' && i === 1) await p.shot(path.join(OUT, `barwords-headless-${w}-${theme}.png`), { x: 0, y: 0, width: Math.min(w, 1100), height: 640 }); } }
+  numbers[`headless@${tag}`] = headless;
+  verdict[`headlessExtendMixMorphClickGivesTheNoteLink_${tag}`] = ['Extend', 'Mix', 'Morph'].every((word) => headless[word].length === 8 && headless[word].every((v, i) => v === `${word} [[${EXPECT[i]}]]`));
+  verdict[`headlessLinkClickNoPreviewNoPinNoWrite_${tag}`] = hfocus.length === 24 && hfocus.every((x) => x === true) && hlive.every((x) => x === false) && (await ev('creates.length')) === 0 && (await ev('pinned()')) === null && (await ev('pinTold.length')) === 0 && (await ev('processCalls')) === 0;
+  await mount(w);
+  const headed = {};
+  for (const word of ['Extend', 'Mix', 'Morph']) { headed[word] = []; for (let i = 1; i <= 8; i++) { await clearField(); await typeText(word); await clickBar(i); headed[word].push(await ev('fieldValue()')); } }
+  verdict[`headedExtendMixMorphClickGivesBarN_${tag}`] = ['Extend', 'Mix', 'Morph'].every((word) => headed[word].length === 8 && headed[word].every((v, i) => v === `${word} bar ${i + 1}`));
+  await mount(w, true);
+  const six = [];
+  for (const word of ['Duplicate', 'Copy', 'Move', 'Delete', 'Remove', 'Keep']) for (const n of [3, 6]) { await clearField(); await typeText(word); await clickBar(n); six.push([await ev('fieldValue()'), `${word} bar ${n}`]); }
+  verdict[`headlessOtherSixStillGiveBarN_${tag}`] = six.length === 12 && six.every(([got, want]) => got === want) && (await ev('pinned()')) === null;
+  await mount(w, true);
+  await typeText('Morph'); await clickBar(2); await typeText(' into'); await clickBar(3); await typeText(' over 5 bars, in musical order.');
+  const headField = await ev('fieldValue()');
+  await ENTER(); await sleep(300); await ENTER(); await sleep(350);
+  const headList = await ev('list()');
+  await typeText('Morph'); await clickBar(4);
+  verdict[`headByClicksThenBarStep_${tag}`] = headField === 'Morph [[bar_005]] into [[bar_009]] over 5 bars, in musical order.' && headList.length === 1 && headList[0] === 'Morph [[bar_005]] into [[bar_009]] over 5 bars, in musical order.' && (await ev('fieldValue()')) === 'Morph bar 4';
+
+  // ---- 2026-11-19-0999: bars clicked out of order (Delete, bar 5 then bar 3) ------------------------------------------------------------------------------------------------------------------------------------------------
+  await mount(w);
+  const ooBefore = (await ev('list()')).length;
+  await typeText('Delete'); await clickBar(5); await clickBar(3);
+  const ooField = await ev('fieldValue()');
+  verdict[`outOfOrderClickFieldIsInClickOrder_${tag}`] = ooField === 'Delete bar 5 and bar 3' && (await ev('pinned()')) === null;
+  await ENTER(); await sleep(350);
+  const ooPreview = await ev('suggestion()'), ooLive = await ev('livePreview()');
+  await p.shot(path.join(OUT, `barwords-outoforder-${w}-${theme}.png`), { x: 0, y: 0, width: Math.min(w, 1100), height: 640 });
+  verdict[`outOfOrderEnterPreviewsCanonical_${tag}`] = ooPreview === 'Delete bar 3 and bar 5.' && ooLive === true && (await ev('processCalls')) === 0 && (await ev('serviceCalls')) === 0 && (await ev('list()')).length === ooBefore;
+  await ENTER(); await sleep(400);
+  const ooAfter = await ev('list()');
+  verdict[`outOfOrderSecondEnterAppliesOneSortedLine_${tag}`] = ooAfter.length === ooBefore + 1 && ooAfter[ooAfter.length - 1] === 'Delete bar 3 and bar 5.' && (await ev('processCalls')) === 1 && (await ev('serviceCalls')) === 0 && (await ev('fieldValue()')) === '';
+  await focusField(); await CMD_Z(); await sleep(300);
+  verdict[`outOfOrderCmdZTakesItBackInOneStep_${tag}`] = (await ev('list()')).length === ooBefore;
+  await mount(w);
+  const refusals = []; const listBefore = (await ev('list()')).length;      // 2026-11-19-0999 supervisor fix: the note is not a fresh one-line note here, so compare with its length BEFORE the refused sentences
+  for (const [typed, words] of [['Delete bars 3 to 5 and bar 4', 'bar 4 is in both bars 3 to 5 and bar 4'], ['Keep bar 4 and bar 3', 'say bars 3 to 4.']]) {
+    await clearField(); await typeText(typed); await ENTER(); await sleep(350);
+    refusals.push((await ev('dialog()')).some((d) => d.text.indexOf(words) >= 0) && (await ev('livePreview()')) === false);
+  }
+  verdict[`overlapAndTouchingAreRefusedInWords_${tag}`] = refusals.length === 2 && refusals.every((x) => x === true) && (await ev('processCalls')) === 0 && (await ev('serviceCalls')) === 0 && (await ev('list()')).length === listBefore;
 
   // ---- general ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
   await mount(w);

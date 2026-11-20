@@ -217,8 +217,26 @@ export function readRange(sc: Scan): { first: number; last: number } {
 }
 
 /**
+ * 2026-11-19-0999 (deliberate): the bars of a step may be named in ANY ORDER ("Delete bar 5 and bar 3" is a person clicking 5 and then 3). `runs` is kept sorted ascending, so the canonical sentence, the Recipe, the Python and the json cache all say "Delete bar 3 and bar 5".
+ * The same range said twice is one range ("bar 3 and bar 3"); ranges that share a bar ("bars 3 to 5 and bar 4") or touch ("bar 3 and bar 4") are refused in words (code `refused`: the sentence service cannot fix them), at the range read last of the two.
+ */
+function addRun(f: Scan, runs: BarRun[], first: number, last: number, at: number): void {
+  const i = runs.findIndex((r) => r[0] > first);
+  const slot = i === -1 ? runs.length : i;
+  const lo = runs[slot - 1], hi = runs[slot], now: BarRun = [first, last];
+  if (lo !== undefined && lo[0] === first && lo[1] === last) return;
+  const clash = (a: BarRun, b: BarRun): void => {                       // a starts first
+    if (b[0] <= a[1]) f.failAt(`Expected each bar to be named once, but bar ${b[0]} is in both ${rangeWords(a[0], a[1])} and ${rangeWords(b[0], b[1])}.`, at, 'refused');
+    if (b[0] === a[1] + 1) f.failAt(`Expected at least one bar between ranges, but ${rangeWords(b[0], b[1])} comes right after ${rangeWords(a[0], a[1])}: say ${rangeWords(a[0], b[1])}.`, at, 'refused');
+  };
+  if (lo !== undefined) clash(lo, now);
+  if (hi !== undefined) clash(now, hi);
+  runs.splice(slot, 0, now);
+}
+
+/**
  * 2026-11-16-1000: a STRUCTURE step of a transform, read from the start of a sentence: "Keep bars 3 to 5 and bar 8.", "Delete bar 2.", "Copy bars 3 to 5.", "Move bars 3 to 5 one bar left." (words: bar-structure-core.ts). Returns null (nothing eaten) when the
- * sentence starts with none of the verbs. The ranges are ascending and apart; a structure step may not come after a Thin out or a Double up (it changes WHICH bars there are, and those two have already counted them).
+ * sentence starts with none of the verbs. The ranges are said in any order and kept ascending and apart (`addRun`: 2026-11-19-0999); a structure step may not come after a Thin out or a Double up (it changes WHICH bars there are, and those two have already counted them).
  * 2026-11-19-0996b (the driver's words, read and written as the canonical ones): "Duplicate" is Copy, "Remove" is Delete, "Move bar 3 back / left / earlier" and "forward / right / later" (with or without "one bar", also "to the left") are one bar left / right and
  * several places ("two bars left") are READ and refused in words (code `refused`: the service cannot fix them), and "Morph bars 2 and 3 across 5 bars ..." is a step of its own (`readMorphBetween`); a Morph that is followed by a note ("Morph [[a]] into [[b]]") is a head, not a step: null.
  */
@@ -235,9 +253,7 @@ export function readStructureStep(f: Scan, afterDensity: boolean): StructureOp |
   for (;;) {
     const at = f.at;
     const { first, last } = readRange(f);
-    const before = runs[runs.length - 1];
-    if (before !== undefined && first <= before[1] + 1) f.failAt(`Expected the bars in order with at least one bar between ranges, but ${rangeWords(first, last)} comes after ${rangeWords(before[0], before[1])}.`, at);
-    runs.push([first, last]);
+    addRun(f, runs, first, last, at);
     if (runs.length > STRUCTURE_RUNS_MAX) f.failAt(`Expected at most ${STRUCTURE_RUNS_MAX} ranges of bars, but found more.`, at);
     const more = f.comma();
     if (f.kw('and')) continue;
