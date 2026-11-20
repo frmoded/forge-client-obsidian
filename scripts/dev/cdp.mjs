@@ -3,12 +3,21 @@
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path'; import os from 'node:os'; import { spawn } from 'node:child_process';
 import { startReaper } from './reaper.mjs';
 import { acquireForProcess } from './heavy-lock.mjs';
+import { checkStart, guardWanted, killDescendants, watchTree } from '../heavy-guard.mjs';
 // 2026-10-31-1125: a real-Chrome measure is a heavy run: the first openPage of a process takes $TMPDIR/forge-heavy.lock and keeps it until the process ends (a second heavy run waits and says who holds it). Not inside a test run (NODE_TEST_CONTEXT).
-let heavyLock = null;
+let heavyLock = null, memGuard = false;
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 export async function openPage({ dir, width = 900, height = 1200, pageHtml, routes = {} }) {
   if (!heavyLock && !process.env.NODE_TEST_CONTEXT) heavyLock = acquireForProcess({ what: 'real-Chrome measure' });
   if (heavyLock) await heavyLock;
+  // 2026-11-20-1001z: the memory guard (scripts/heavy-guard.mjs; the numbers are in the header of scripts/heavy-guard.sh). Once per process, after the lock, BEFORE Chrome starts: refuse (exit 75) while the compressor holds over 8 GB or over 2 GB of swap is used,
+  // and while the measure runs stop it (exit 76; the exit handler below kills Chrome with it) when this process and its Chrome pass 6 GB, or the compressor 10 GB. Not inside a test run (NODE_TEST_CONTEXT), not under heavy-guard.sh (it watches the tree already).
+  if (!memGuard && guardWanted()) {
+    memGuard = true;
+    const start = checkStart({ what: 'real-Chrome measure' });
+    if (start.refuse) { console.error(start.text); process.exit(75); }
+    watchTree({ what: 'real-Chrome measure', roots: () => [process.pid], onStop: (hit) => { console.error(hit.text); killDescendants(process.pid); process.exit(76); } });
+  }
   const srv = http.createServer(async (q, r) => {
     if (routes[q.method + ' ' + q.url]) { await routes[q.method + ' ' + q.url](q, r); return; }
     if (q.url === '/' || q.url === '/index.html') { r.writeHead(200, { 'content-type': 'text/html' }); r.end(pageHtml); return; }

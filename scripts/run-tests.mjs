@@ -9,6 +9,9 @@
 //   FORGE_NESTED_CONCURRENCY=N        how many nested files at once (a whole number from 1); overrides the calm/strained choice
 //   --load-sensitive=only|skip        2026-11-19-0945: run ONLY the files of scripts/test-groups.mjs LOAD_SENSITIVE_FILES (the matrix runs them first, before the legs) or everything BUT them (the legs). A listed file that fails while the machine is
 //                                     thrashing is reported `⚠ NEEDS A QUIET MACHINE`, counted apart (`ℹ needs-quiet-machine N`, `ℹ fail` unchanged) and the run exits 3 (not 0, not 1); a failure on a calm machine, of any other file, or on a machine that cannot be read is a plain failure.
+// 2026-11-20-1001z: started FROM THE COMMAND LINE (`npm test`, `node scripts/run-tests.mjs`) with no guard already around it (the matrix's legs run under heavy-guard.sh) and outside a test run, it guards itself with the memory guard of scripts/heavy-guard.sh: it refuses to start
+//   (exit 75, "memory pressure high, wait") while the compressor holds over 8 GB or over 2 GB of swap is used, and stops EVERY test tree it started (exit 76, "stopped by the memory guard", not a test failure) when they together pass 6144 MB (FORGE_HEAVY_RSS_MB) or the compressor
+//   passes 10 GB or swap 4 GB. It takes NO heavy lock (a bare `npm test` never waited for one and still does not; `bash scripts/heavy-guard.sh npm test` is the way that does). FORGE_HEAVY_GUARD=off switches it off. A call of main() from a test is never guarded.
 // The output keeps node's own: the rest of the suite, then the group, then ONE final summary block (ℹ tests / suites / pass / fail / cancelled / skipped / todo / duration_ms) summing both, because the matrix reads the LAST such lines.
 import { spawn } from 'node:child_process';
 import path from 'node:path';
@@ -16,6 +19,10 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { LOAD_SENSITIVE_FILES, defaultTestFiles, isLoadSensitive, partitionTestFiles } from './test-groups.mjs';
 import { machineStrain, readMachine, readingsLine } from './dev/mem-core.mjs';
+import { killTree as killWholeTree } from './dev/proc-tree.mjs';
+import { checkStart, guardWanted } from './heavy-guard.mjs';
+import { createGuard, limitsFromEnv } from './heavy-mem-core.mjs';
+import { readMachine as readHeavyMachine, readProcesses } from './heavy-mem-read.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const DEFAULT_NESTED_TIMEOUT_S = 300;
@@ -138,7 +145,7 @@ export function parseArgs(argv) {
   return { flags, files, loadSensitive, bad };
 }
 
-export async function main(argv = process.argv.slice(2), { root = ROOT, out = process.stdout, err = process.stderr, env = process.env, machine, loadSensitive = LOAD_SENSITIVE_FILES } = {}) {
+export async function main(argv = process.argv.slice(2), { root = ROOT, out = process.stdout, err = process.stderr, env = process.env, machine, loadSensitive = LOAD_SENSITIVE_FILES, memGuard = null } = {}) {
   const { flags, files: asked, loadSensitive: which, bad } = parseArgs(argv);
   if (bad !== null) { out.write(`✖ --load-sensitive must be only or skip (got "${bad}")\n`); return 1; }
   const everything = asked.length > 0 ? asked : defaultTestFiles(root);
@@ -149,6 +156,16 @@ export async function main(argv = process.argv.slice(2), { root = ROOT, out = pr
   const live = new Set();
   const track = (c) => { live.add(c); c.on('exit', () => live.delete(c)); };
   const stop = (sig) => { for (const c of live) killTree(c.pid, 'group'); process.exit(sig === 'SIGINT' ? 130 : 143); };
+  // 2026-11-20-1001z: `memGuard` (the CLI entry below makes it; a call from a test has none) is looked at every limits.pollMs against ALL the test trees alive: a stop kills every one of them whole and ends the run with 76
+  const guardTimer = memGuard === null ? null : setInterval(() => {
+    const hit = memGuard.tick(readProcesses(), [...live].map((c) => c.pid));
+    if (hit === null) return;
+    clearInterval(guardTimer);
+    err.write(`${hit.text}\n`);
+    for (const c of live) killWholeTree(c.pid);
+    process.exit(76);
+  }, memGuard.limits.pollMs);
+  guardTimer?.unref();
   process.on('SIGINT', () => stop('SIGINT')); process.on('SIGTERM', () => stop('SIGTERM'));
   const t0 = Date.now();
   out.write(`ℹ run-tests: ${rest.length} file(s) in one run, then ${nested.length} nested-runner file(s) (scripts/test-groups.mjs), each under ${timeoutS} s\n`);
@@ -182,10 +199,17 @@ export async function main(argv = process.argv.slice(2), { root = ROOT, out = pr
   if (firstSummary === null) out.write('✖ the main run printed no summary (it did less than asked)\n');
   for (const f of FIELDS) out.write(`ℹ ${f} ${f === 'duration_ms' ? summary[f].toFixed(6) : summary[f]}\n`);
   if (needsQuiet > 0) { for (const q of quiet) out.write(`⚠ NEEDS A QUIET MACHINE: ${q}\n`); out.write(`ℹ needs-quiet-machine ${needsQuiet}\n`); }      // after the summary block the matrix reads; exit 3 = not green, not red
+  if (guardTimer) clearInterval(guardTimer);
   if (first.code !== 0 || firstSummary === null || group.failures.length > 0) return 1;
   return needsQuiet > 0 ? 3 : 0;
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  main().then((code) => process.exit(code), (e) => { console.error('run-tests failed', e); process.exit(1); });
+  let memGuard = null;
+  if (guardWanted(process.env)) {
+    const start = checkStart({ env: process.env, what: 'npm test' });
+    if (start.refuse) { console.error(start.text); process.exit(75); }
+    memGuard = createGuard({ readMem: () => readHeavyMachine(process.env), what: 'npm test', limits: limitsFromEnv(process.env) });
+  }
+  main(process.argv.slice(2), { memGuard }).then((code) => process.exit(code), (e) => { console.error('run-tests failed', e); process.exit(1); });
 }

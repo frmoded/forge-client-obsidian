@@ -3,6 +3,7 @@
 //   node scripts/dev/mem-plan.mjs                   the budget, the heap cap, and what they allow, in words
 //   node scripts/dev/mem-plan.mjs strain                    the machine's load, swap and free memory in one line, and, only when swap is over 85 % used or the 1-minute load is over 4 per core, the thrashing sentence
 //   node scripts/dev/mem-plan.mjs matrix-files [--legs n]   the number for `node --test --test-concurrency=<n>` in one matrix leg (stdout: just the number)
+// 2026-11-20-1001z: FORGE_MATRIX_FILE_CONC=<n> (a whole number from 1) sets that number outright and WINS over the budget calculation; anything else in it (empty, 0, 2.5, abc) is ignored.
 // FORGE_MEM_BUDGET_MB (default: half the RAM, at least 2048) is the budget; FORGE_MATRIX_FILE_MB (default 600: measured 2026-11-02, 16 test files at once = 8.3 GB of tooling RSS, about 520 MB each, and the machine fell to 1.5 GB honestly available; on 2026-10-31 34 at once = 11.5 GB) is what one
 // matrix test file is assumed to need; FORGE_TEST_HEAP_MB (default 1024) is the mutation runner's per-test-process heap cap.
 import os from 'node:os';
@@ -10,10 +11,14 @@ import { machineStrain, matrixFileConcurrency, memBudgetMb, readMachine, reading
 
 export const DEFAULT_MATRIX_FILE_MB = 600;
 export const matrixFileMb = (env = process.env) => Number(env.FORGE_MATRIX_FILE_MB) || DEFAULT_MATRIX_FILE_MB;
+/** 2026-11-20-1001z (deliberate): the DEFAULT number of test files one matrix leg runs at once is at most 4 (it was the memory budget's, 9 to 15). Measured: one full matrix at 4 files per leg took 248 s and its whole process tree peaked at 6,432 MB (22 processes), where the 1002 runs at 4 files took 237 to 267 s: no slower than at 9 files (340 to 660 s) and far lighter on a 24 GB Mac that froze at compressed 10.7 GB. FORGE_MATRIX_FILE_CONC overrides it in both directions. */
+export const MATRIX_FILES_DEFAULT_MAX = 4;
+/** 2026-11-20-1001z: the direct override of the files one matrix leg runs at once: FORGE_MATRIX_FILE_CONC when it is a whole number from 1, else null. */
+export const matrixFileConcOverride = (env = process.env) => { const n = Number(env.FORGE_MATRIX_FILE_CONC); return env.FORGE_MATRIX_FILE_CONC !== undefined && env.FORGE_MATRIX_FILE_CONC.trim() !== '' && Number.isInteger(n) && n >= 1 ? n : null; };
 
 export function plan(env = process.env, totalBytes = os.totalmem(), cores = os.cpus().length, legs = 2, availableMb = readSystemMemory(env).availableMb) {
   const budgetMb = memBudgetMb(env, totalBytes, availableMb), heapMb = testHeapMb(env), fileMb = matrixFileMb(env);
-  return { budgetMb, heapMb, fileMb, legs, cores, matrixFiles: matrixFileConcurrency({ budgetMb, heapMb: fileMb, legs, cores }), rssCapMb: testRssCapMb(env), mutateChildren: Math.max(1, Math.floor(budgetMb / Math.max(heapMb, testRssCapMb(env)))) };
+  return { budgetMb, heapMb, fileMb, legs, cores, matrixFiles: matrixFileConcOverride(env) ?? Math.min(MATRIX_FILES_DEFAULT_MAX, matrixFileConcurrency({ budgetMb, heapMb: fileMb, legs, cores })), matrixFilesFrom: matrixFileConcOverride(env) === null ? 'the memory budget' : 'FORGE_MATRIX_FILE_CONC', rssCapMb: testRssCapMb(env), mutateChildren: Math.max(1, Math.floor(budgetMb / Math.max(heapMb, testRssCapMb(env)))) };
 }
 
 if (process.argv[1] && import.meta.url === new URL(process.argv[1], 'file:').href) {
@@ -27,5 +32,5 @@ if (process.argv[1] && import.meta.url === new URL(process.argv[1], 'file:').hre
   const li = rest.indexOf('--legs');
   const p = plan(process.env, os.totalmem(), os.cpus().length, li >= 0 ? Number(rest[li + 1]) : 2);
   if (cmd === 'matrix-files') console.log(p.matrixFiles);
-  else console.log(`memory budget ${p.budgetMb} MB (FORGE_MEM_BUDGET_MB); mutation test processes at most ${p.mutateChildren} at once (heap cap ${p.heapMb} MB, FORGE_TEST_HEAP_MB; a test process tree is killed over ${p.rssCapMb} MB, FORGE_TEST_RSS_MB); matrix: ${p.matrixFiles} test files per leg with ${p.legs} legs (assumed ${p.fileMb} MB a file, FORGE_MATRIX_FILE_MB)`);
+  else console.log(`memory budget ${p.budgetMb} MB (FORGE_MEM_BUDGET_MB); mutation test processes at most ${p.mutateChildren} at once (heap cap ${p.heapMb} MB, FORGE_TEST_HEAP_MB; a test process tree is killed over ${p.rssCapMb} MB, FORGE_TEST_RSS_MB); matrix: ${p.matrixFiles} test files per leg with ${p.legs} legs (${p.matrixFilesFrom === 'FORGE_MATRIX_FILE_CONC' ? 'set by FORGE_MATRIX_FILE_CONC' : `assumed ${p.fileMb} MB a file, FORGE_MATRIX_FILE_MB; FORGE_MATRIX_FILE_CONC sets it outright`})`);
 }

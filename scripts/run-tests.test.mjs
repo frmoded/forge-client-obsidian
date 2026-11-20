@@ -14,12 +14,21 @@ const write = (dir, name, text) => { fs.writeFileSync(path.join(dir, name), text
 const PASS = (marker) => `import { test } from 'node:test'; test('${marker}', () => { console.log('RAN ${marker}'); });\n`;
 /** A test that spawns a grandchild which holds the inherited pipes and never ends, records its pid, then waits for ever. Its text names `--test` and calls spawn, so the rule puts it in the group. */
 const HANG = (pidFile) => `import { spawn } from 'node:child_process'; import fs from 'node:fs';
-const grandchild = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1e6)', '--', '--test'], { stdio: 'inherit' });
+const grandchild = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1e6); setTimeout(() => process.exit(0), 120000)', '--', '--test'], { stdio: 'inherit' });   // 2026-11-20-1001z (deliberate): it ends by itself after 2 minutes, so a leaked one cannot live for hours
 fs.writeFileSync(${JSON.stringify(pidFile)}, String(grandchild.pid));
 console.log('HANGING with grandchild ' + grandchild.pid);
 await new Promise(() => {});
 `;
 const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+// 2026-11-20-1001z (deliberate): the fixture's keepalive grandchild (`node -e setInterval ... -- --test`) is killed AT THE END of every test that starts one, passed or failed, and its death is asserted. Before this the two explicit kills sat after assertions: a
+// test that failed before them, or whose process was killed, left the grandchild running (the cron logger of 2026-11-20 saw two of them, pids 52297 and 79239, from 10:03 to 13:29). It reads the pid the fixture recorded; no file, no pid, nothing to do.
+const reapRecorded = async (pidFile) => {
+  let pid = 0;
+  try { pid = Number(fs.readFileSync(pidFile, 'utf8')); } catch { return; }
+  if (!(pid > 1)) return;
+  try { process.kill(pid, 'SIGKILL'); } catch { /* gone already */ }
+  assert.ok(await until(() => !alive(pid)), `the fixture's keepalive grandchild ${pid} is dead at the end of the test`);
+};
 const until = async (cond, ms = 3000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (cond()) return true; await new Promise((r) => setTimeout(r, 50)); } return cond(); };
 /** The environment of a run that asks for `n` nested files at a time (the real one, with that one setting changed). */
 const withConcurrency = (n) => ({ ...process.env, FORGE_NESTED_CONCURRENCY: String(n) });
@@ -99,6 +108,7 @@ test('THE POINT: a test whose GRANDCHILD holds the pipe and never ends is killed
     assert.match(o.text, /ℹ nested-runner group: 2 file\(s\), 2 at a time, each under 2 s: 1 ok, 1 failed/);
   } finally {
     if (saved === undefined) delete process.env.FORGE_NESTED_TEST_TIMEOUT_S; else process.env.FORGE_NESTED_TEST_TIMEOUT_S = saved;
+    await reapRecorded(pidFile);
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
@@ -115,7 +125,7 @@ test('CONTROL (the test can fail): killing only the CHILD leaves the grandchild 
     assert.ok(alive(pid), 'the grandchild SURVIVED a child-only kill (this is what hung the suite)');
     process.kill(pid, 'SIGKILL');                                          // clean up the control's own straggler
     assert.ok(await until(() => !alive(pid)));
-  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  } finally { await reapRecorded(pidFile); fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
 // ---- 2026-11-05-1186: the group runs several files at once on a calm machine ---------------------------------------------------------------------------------------------

@@ -1,0 +1,222 @@
+// 2026-11-20-1001z - scripts/heavy-mem-core.mjs: the rules of the memory report and of the memory guard, proved on FIXTURE TEXT (a process table, vm_stat, sysctl, memory_pressure): no test here reads the machine, starts a process or allocates memory.
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { test } from 'node:test';
+
+import {
+  DEFAULT_LIMITS, alsoRunning, alsoRunningLine, createGuard, formatReport, labelOf, limitsFromEnv, machineLines, machineSnapshot, parsePs, peakOf, refusalReasons, refusalText, sampleOf, stopReason, stopText, tailTrend, treeRows, treeStats, tsvLine,
+} from './heavy-mem-core.mjs';
+
+// a process table as `ps -Ao pid,ppid,rss,command` prints it: 100 is the command, 101 and 102 its children, 103 a grandchild; 200 and 201 are somebody else's tree; 1 is launchd
+const PS = `  PID  PPID    RSS COMMAND
+    1     0   9000 /sbin/launchd
+  100     1   2048 node scripts/drain-matrix.sh --quiet-only
+  101   100 307200 /usr/local/bin/node --test src/a.test.ts
+  102   100 102400 /usr/local/bin/node --test src/b.test.ts
+  103   101 614400 /usr/local/bin/node -e hog
+  200     1 819200 node /home/x/hello-cloudflare/node_modules/.bin/wrangler dev --test-scheduled
+  201   200 409600 /usr/local/bin/node --no-warnings /home/x/hello-cloudflare/node_modules/wrangler/wrangler-dist/cli.js
+`;
+const rows = parsePs(PS);
+
+test('treeRows / treeStats: the command, its children and its grandchildren, nobody else; MB summed, biggest first; a root that has ended contributes nothing', () => {
+  assert.deepEqual(treeRows(rows, [100]).map((r) => r.pid).sort((a, b) => a - b), [100, 101, 102, 103]);
+  const s = treeStats(rows, [100]);
+  assert.equal(s.count, 4);
+  assert.equal(s.totalMb, 2 + 300 + 100 + 600);
+  assert.deepEqual(s.procs.map((p) => [p.pid, p.mb]), [[103, 600], [101, 300], [102, 100], [100, 2]]);
+  assert.equal(treeStats(rows, [999]).count, 0, 'a pid that is not in the table');
+  assert.equal(treeStats(rows, [100, 200]).count, 6, 'two roots: both trees');
+  assert.equal(treeRows(rows, [100, 101]).length, 4, 'a root inside another root is counted once');
+  assert.ok(!treeRows(rows, [100]).some((r) => r.pid === 1), 'pid 1 is never walked through');
+});
+
+test('sampleOf keeps the five biggest, null when the tree is gone; peakOf is the highest total (the first on a tie)', () => {
+  const big = parsePs(['  1 0 1 launchd', ...Array.from({ length: 8 }, (_, i) => `  ${300 + i} 1 ${(i + 1) * 1024} p${i}`)].join('\n'));
+  const s = sampleOf([...big, { pid: 400, ppid: 1, rssKb: 1, command: 'root' }, ...big.slice(1).map((r) => ({ ...r, ppid: 400 }))], [400], 5);
+  assert.equal(s.top.length, 5);
+  assert.deepEqual(s.top.map((t) => t.mb), [8, 7, 6, 5, 4]);
+  assert.equal(sampleOf(rows, [999], 1), null);
+  const p = peakOf([{ totalMb: 10, tSec: 0 }, { totalMb: 30, tSec: 5 }, { totalMb: 30, tSec: 10 }, { totalMb: 5, tSec: 15 }]);
+  assert.equal(p.tSec, 5);
+  assert.equal(p.index, 1);
+  assert.equal(peakOf([]), null);
+});
+
+const series = (totals, step = 5) => totals.map((totalMb, i) => ({ tSec: i * step, totalMb, count: 3, top: [{ pid: 1, mb: totalMb, command: 'x' }] }));
+test('tailTrend: the last 25 % of the samples (at least 3) trending UP by more than 10 % of the peak is rising; flat, falling, noise and too few samples are not', () => {
+  // 12 samples: the tail is the last 3. A run that climbs steadily to the end: rising
+  const leak = tailTrend(series([100, 150, 200, 250, 300, 350, 400, 500, 600, 700, 800, 900]));
+  assert.equal(leak.tailLen, 3);
+  assert.equal(leak.rising, true, JSON.stringify(leak));
+  assert.equal(leak.riseMb, 200);
+  assert.equal(leak.risePctOfPeak, 22);
+  // it climbed, peaked and came down: not rising (the peak is earlier, the tail falls)
+  assert.equal(tailTrend(series([100, 500, 900, 1000, 900, 800, 700, 600, 500, 400, 300, 200])).rising, false);
+  // flat at the top, with noise
+  assert.equal(tailTrend(series([900, 905, 898, 902, 900, 901, 899, 903, 900, 902, 898, 904])).rising, false);
+  // a rise of 5 % of the peak at the end is under the 10 % rule
+  assert.equal(tailTrend(series([1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1025, 1050])).rising, false);
+  // exactly on the line is not over it: a rise of 100 MB on a 1000 MB peak
+  const edge = tailTrend(series([900, 900, 900, 900, 900, 900, 900, 900, 900, 900, 950, 1000]));
+  assert.equal(edge.riseMb, 100);
+  assert.equal(edge.rising, false, '100 MB is exactly 10 % of the 1000 MB peak: not MORE than 10 %');
+  assert.equal(tailTrend(series([900, 900, 900, 900, 900, 900, 900, 900, 900, 900, 951, 1002])).rising, true, 'over the line');
+  // a 4-sample run still has a tail of 3
+  assert.equal(tailTrend(series([100, 100, 400, 800])).tailLen, 3);
+  assert.equal(tailTrend(series([100, 200, 300])).tooFew, true, 'fewer than 4 samples cannot say');
+  assert.equal(tailTrend([]).rising, false);
+  // a long run: the tail is 25 % of it
+  assert.equal(tailTrend(series(Array.from({ length: 40 }, () => 500))).tailLen, 10);
+});
+
+// ---- the machine ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+const VM_STAT = `Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                               62137.
+Pages active:                            513673.
+Pages inactive:                          507704.
+Pages speculative:                        10646.
+Pages throttled:                              0.
+Pages wired down:                        155083.
+Pages purgeable:                           1627.
+File-backed pages:                       270697.
+Anonymous pages:                         761326.
+Pages stored in compressor:              689047.
+Pages occupied by compressor:            260891.
+`;
+const SWAP = 'vm.swapusage: total = 4096.00M  used = 2389.31M  free = 1706.69M  (encrypted)\n';
+const PRESSURE = 'The system has 25769803776 (1572864 pages with a page size of 16384).\nSystem-wide memory free percentage: 72%\n';
+
+test('machineSnapshot reads hw.memsize, vm.swapusage, the compressor, vm_stat\'s free/active/inactive/wired pages and the free percentage; the lines say them; a figure the text lacks is "unknown"', () => {
+  const m = machineSnapshot({ memsize: '25769803776\n', swap: SWAP, vmStat: VM_STAT, pressure: PRESSURE });
+  assert.equal(m.memsizeMb, 24576);
+  assert.equal(m.swapTotalMb, 4096);
+  assert.equal(m.swapUsedMb, 2389);
+  assert.equal(m.compressedMb, 4076, 'Pages occupied by compressor: 260891 pages of 16384 bytes');
+  assert.deepEqual([m.freeMb, m.activeMb, m.inactiveMb, m.wiredMb], [971, 8026, 7933, 2423]);
+  assert.deepEqual(m.pages, { free: 62137, active: 513673, inactive: 507704, wired: 155083, compressor: 260891 });
+  assert.equal(m.freePct, 72);
+  const text = machineLines(m, 'machine at start').join('\n');
+  assert.match(text, /hw\.memsize 24576 MB/);
+  assert.match(text, /vm\.swapusage total 4096 MB, used 2389 MB/);
+  assert.match(text, /compressed 4076 MB/);
+  assert.match(text, /memory_pressure free percentage 72 %/);
+  assert.match(text, /free 62137 pages \(971 MB\), active 513673 pages \(8026 MB\), inactive 507704 pages \(7933 MB\), wired 155083 pages \(2423 MB\)/);
+  const none = machineSnapshot({});
+  assert.deepEqual([none.memsizeMb, none.swapUsedMb, none.compressedMb, none.freePct], [null, null, null, null]);
+  assert.match(machineLines(none, 'machine at end').join('\n'), /hw\.memsize unknown; vm\.swapusage total unknown, used unknown; compressed unknown/);
+});
+
+// ---- the report ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+test('formatReport: the peak in MB, the five biggest at the peak, the tail verdict, the machine at start and end (hw.memsize and vm.swapusage first), the samples file; a TSV line per sample', () => {
+  const start = machineSnapshot({ memsize: '25769803776', swap: SWAP, vmStat: VM_STAT, pressure: PRESSURE });
+  const samples = [100, 400, 900, 1500, 1400, 1300, 1200, 1100].map((totalMb, i) => ({ tSec: i * 5, totalMb, count: 4, top: [{ pid: 103, mb: Math.round(totalMb * 0.6), command: 'node -e hog' }, { pid: 101, mb: Math.round(totalMb * 0.3), command: 'node --test src/a.test.ts' }] }));
+  const text = formatReport({ command: 'bash drain-matrix.sh --quiet-only', exitCode: 0, seconds: 41.2, intervalMs: 5000, samples, start, end: start, tsvPath: '/x/heavy.tsv' });
+  assert.match(text, /^==== heavy-mem-report ====/);
+  assert.match(text, /command: bash drain-matrix\.sh --quiet-only/);
+  assert.match(text, /exit code 0; ran 41\.2 s; 8 samples, one every 5 s/);
+  assert.match(text, /PEAK 1500 MB \(the whole tree: 4 processes\) at 15\.0 s/);
+  assert.match(text, /\n\s+103\s+900 MB\s+node -e hog/);
+  assert.match(text, /tail: flat or falling: the last 3 samples/);
+  assert.equal((text.match(/machine at start: hw\.memsize 24576 MB/g) ?? []).length, 1);
+  assert.match(text, /machine at end: hw\.memsize/);
+  assert.match(text, /samples: \/x\/heavy\.tsv/);
+  const rising = formatReport({ command: 'x', exitCode: 1, seconds: 10, intervalMs: 5000, samples: [100, 200, 300, 400, 500, 600, 700, 800].map((t, i) => ({ tSec: i * 5, totalMb: t, count: 1, top: [{ pid: 1, mb: t, command: 'a' }] })), start, end: start });
+  assert.match(rising, /tail: RISING \(a leak or a runaway\)/);
+  assert.match(formatReport({ command: 'x', exitCode: 0, seconds: 0.1, intervalMs: 5000, samples: [], start, end: start }), /no sample saw the command running/);
+  assert.equal(tsvLine(samples[3]), '15.0\t1500\t4\t103\t900\tnode -e hog');
+});
+
+// ---- the guard's rules ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+test('the limits: the defaults, each overridden by its variable, a caller\'s tree cap below the user\'s FORGE_HEAVY_RSS_MB, junk ignored, a stop limit never under its refuse limit', () => {
+  assert.deepEqual(limitsFromEnv({}), { rssMb: 6144, compressedRefuseMb: 8192, swapRefuseMb: 2048, freePctMin: 35, compressedKillMb: 10240, swapKillMb: 4096, pollMs: 500, sysEveryMs: 2000, alsoRunningMb: 500 });
+  assert.equal(limitsFromEnv({}, { rssMb: 12288 }).rssMb, 12288, 'a caller\'s own default for its tree');
+  assert.equal(limitsFromEnv({ FORGE_HEAVY_RSS_MB: '150' }, { rssMb: 12288 }).rssMb, 150, 'the user\'s word wins');
+  const all = limitsFromEnv({ FORGE_HEAVY_RSS_MB: '1', FORGE_HEAVY_COMPRESSED_MB: '2', FORGE_HEAVY_SWAP_MB: '3', FORGE_HEAVY_FREE_PCT: '4', FORGE_HEAVY_KILL_COMPRESSED_MB: '5', FORGE_HEAVY_KILL_SWAP_MB: '6', FORGE_HEAVY_POLL_MS: '7', FORGE_HEAVY_SYS_MS: '8', FORGE_HEAVY_ALSO_MB: '9' });
+  assert.deepEqual(all, { rssMb: 1, compressedRefuseMb: 2, swapRefuseMb: 3, freePctMin: 4, compressedKillMb: 5, swapKillMb: 6, pollMs: 7, sysEveryMs: 8, alsoRunningMb: 9 });
+  assert.equal(limitsFromEnv({ FORGE_HEAVY_RSS_MB: 'abc', FORGE_HEAVY_SWAP_MB: '-5', FORGE_HEAVY_COMPRESSED_MB: '' }).rssMb, 6144);
+  assert.equal(limitsFromEnv({ FORGE_HEAVY_SWAP_MB: '-5' }).swapRefuseMb, 2048);
+  assert.equal(limitsFromEnv({ FORGE_HEAVY_COMPRESSED_MB: '20000' }).compressedKillMb, 20000, 'a raised refuse limit raises the stop limit with it');
+  assert.equal(limitsFromEnv({ FORGE_HEAVY_SWAP_MB: '9000' }).swapKillMb, 9000);
+});
+
+test('refusalReasons: compressed over 8 GB, swap over 2 GB, free percentage under 35 - each alone refuses; an unknown figure never does; the free percentage alone is NOT what decides when the compressor says otherwise', () => {
+  const lim = limitsFromEnv({});
+  assert.deepEqual(refusalReasons({ compressedMb: 4000, swapUsedMb: 100, freePct: 72 }, lim), []);
+  assert.match(refusalReasons({ compressedMb: 9000, swapUsedMb: 0, freePct: 90 }, lim).join(), /compressed memory 9000 MB is over 8192 MB/);
+  assert.match(refusalReasons({ compressedMb: 100, swapUsedMb: 2500, freePct: 90 }, lim).join(), /swap used 2500 MB is over 2048 MB/);
+  assert.match(refusalReasons({ compressedMb: 100, swapUsedMb: 0, freePct: 34 }, lim).join(), /free percentage 34 % is under 35 %/);
+  assert.deepEqual(refusalReasons({ compressedMb: 100, swapUsedMb: 0, freePct: 35 }, lim), [], '35 is not under 35');
+  assert.deepEqual(refusalReasons({ compressedMb: 8192, swapUsedMb: 2048, freePct: 35 }, lim), [], 'exactly on a limit is not over it');
+  assert.equal(refusalReasons({ compressedMb: 10738, swapUsedMb: null, freePct: 42 }, lim).length, 1, 'the 2026-11-20 13:29 reading: free 42 % would have passed a free-percentage gate; the compressor refuses');
+  assert.deepEqual(refusalReasons({ compressedMb: null, swapUsedMb: null, freePct: null }, lim), [], 'nothing known: nothing refused');
+});
+
+test('stopReason: the tree over its cap, the compressor over 10 GB, swap over 4 GB; the cron logger\'s last two blocks (11179 and 10738 MB compressed) are both over the stop limit', () => {
+  const lim = limitsFromEnv({});
+  assert.equal(stopReason({ treeMb: 3000, mem: { compressedMb: 6000, swapUsedMb: 1000 } }, lim), null);
+  assert.match(stopReason({ treeMb: 6145, mem: { compressedMb: 100 } }, lim), /process tree holds 6145 MB, over the 6144 MB cap/);
+  assert.equal(stopReason({ treeMb: 6144, mem: {} }, lim), null, 'on the cap is not over it');
+  assert.match(stopReason({ treeMb: 10, mem: { compressedMb: 10738 } }, lim), /compressed memory is 10738 MB, over 10240 MB/);
+  assert.match(stopReason({ treeMb: 10, mem: { compressedMb: 11179 } }, lim), /compressed memory is 11179 MB/);
+  assert.match(stopReason({ treeMb: 10, mem: { swapUsedMb: 4097 } }, lim), /swap used is 4097 MB, over 4096 MB/);
+  assert.equal(stopReason({ treeMb: 10, mem: null }, lim), null);
+});
+
+test('labelOf / alsoRunning: Chrome\'s 59 helpers are ONE line; a wrangler dev server of another project is named as a dev server; small programs are left out; our own pids can be excluded', () => {
+  assert.deepEqual(labelOf('/Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/156/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer) --type=renderer'), { label: 'Google Chrome', devServer: false });
+  assert.deepEqual(labelOf('node /home/x/hello-cloudflare/node_modules/.bin/wrangler dev --test-scheduled'), { label: 'wrangler/workerd', devServer: true });
+  assert.deepEqual(labelOf('/usr/local/bin/node --no-warnings /home/x/node_modules/wrangler/wrangler-dist/cli.js'), { label: 'wrangler/workerd', devServer: true });
+  assert.equal(labelOf('/usr/local/bin/node --test src/a.test.ts').label, 'node a.test.ts');
+  const chrome = Array.from({ length: 59 }, (_, i) => ({ pid: 1000 + i, ppid: 1, rssKb: 100 * 1024, command: `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome Helper ${i}` }));
+  const list = alsoRunning([...rows, ...chrome], { exclude: new Set([100, 101, 102, 103]) });
+  assert.deepEqual(list.map((g) => [g.label, g.count, g.mb, g.devServer]), [['Google Chrome', 59, 5900, false], ['wrangler/workerd', 2, 1200, true]]);
+  assert.equal(alsoRunning(rows, { minMb: 2000 }).length, 0);
+  assert.equal(alsoRunningLine(list), 'also running: Google Chrome (59 processes, 5900 MB), wrangler/workerd [dev server] (2 processes, 1200 MB)');
+  assert.equal(alsoRunningLine([]), '');
+});
+
+test('the refusal and the stop sentences carry what the callers look for: "memory pressure high, wait" with the reasons and "also running"; "stopped by the memory guard", the biggest process and "NOT a test failure"', () => {
+  const r = refusalText({ reasons: ['compressed memory 9000 MB is over 8192 MB (FORGE_HEAVY_COMPRESSED_MB)'], also: 'also running: wrangler/workerd [dev server] (2 processes, 1200 MB)', what: 'drain-matrix' });
+  assert.match(r.split('\n')[0], /^heavy-guard: memory pressure high, wait \(drain-matrix\): compressed memory 9000 MB/);
+  assert.match(r, /heavy-guard: also running: wrangler\/workerd \[dev server\]/);
+  assert.match(r, /nothing was started/);
+  assert.ok(!/also running/.test(refusalText({ reasons: ['x'], also: '', what: 'w' })), 'no line when nothing is big');
+  const tree = treeStats(rows, [100]);
+  const s = stopText({ what: 'mutation pass', reason: 'its process tree holds 7000 MB, over the 6144 MB cap (FORGE_HEAVY_RSS_MB)', tree, mem: { compressedMb: 9000, swapUsedMb: null } });
+  assert.match(s, /stopped by the memory guard \(mutation pass\)/);
+  assert.match(s, /Biggest process in the tree: pid 103, 600 MB, \/usr\/local\/bin\/node -e hog/);
+  assert.match(s, /compressed 9000 MB, swap used unknown/);
+  assert.match(s, /NOT a test failure/);
+  assert.match(s, /exit code 76/);
+});
+
+test('createGuard: feeds the rule from a process table the caller already has; the system numbers are read at most every sysEveryMs (not on every tick); a trip carries the text; the tree cap needs no system reading to fire', () => {
+  let clock = 0, reads = 0, mem = { compressedMb: 1000, swapUsedMb: 0 };
+  const g = createGuard({ readMem: () => { reads++; return mem; }, what: 'x', limits: limitsFromEnv({ FORGE_HEAVY_RSS_MB: '5000' }), now: () => clock });
+  assert.equal(g.tick(rows, [100]), null);
+  assert.equal(reads, 1);
+  clock = 500; assert.equal(g.tick(rows, [100]), null); clock = 1000; assert.equal(g.tick(rows, [100]), null);
+  assert.equal(reads, 1, 'not read again before 2000 ms');
+  clock = 2000; mem = { compressedMb: 11000, swapUsedMb: 0 };
+  const hit = g.tick(rows, [100]);
+  assert.match(hit.reason, /compressed memory is 11000 MB/);
+  assert.match(hit.text, /stopped by the memory guard \(x\)/);
+  assert.equal(hit.tree.count, 4);
+  const small = createGuard({ readMem: () => ({}), what: 'y', limits: limitsFromEnv({ FORGE_HEAVY_RSS_MB: '500' }), now: () => 0 });
+  assert.match(small.tick(rows, [100]).reason, /process tree holds 1002 MB, over the 500 MB cap/);
+});
+
+test('the numbers in the header of scripts/heavy-guard.sh are the numbers of DEFAULT_LIMITS (one table, no drift)', () => {
+  const header = fs.readFileSync(path.join(import.meta.dirname, 'heavy-guard.sh'), 'utf8').split('\n').filter((l) => l.startsWith('#')).join('\n');
+  const rowFor = (label, value, variable) => assert.match(header, new RegExp(`${label}\\s+${value}\\s*(MB|%|ms)\\s+${variable}`), `${label}: ${value} ${variable}`);
+  rowFor('tree cap', DEFAULT_LIMITS.rssMb, 'FORGE_HEAVY_RSS_MB');
+  rowFor('refuse: compressed', DEFAULT_LIMITS.compressedRefuseMb, 'FORGE_HEAVY_COMPRESSED_MB');
+  rowFor('refuse: swap used', DEFAULT_LIMITS.swapRefuseMb, 'FORGE_HEAVY_SWAP_MB');
+  rowFor('refuse: free percentage', DEFAULT_LIMITS.freePctMin, 'FORGE_HEAVY_FREE_PCT');
+  rowFor('stop: compressed', DEFAULT_LIMITS.compressedKillMb, 'FORGE_HEAVY_KILL_COMPRESSED_MB');
+  rowFor('stop: swap used', DEFAULT_LIMITS.swapKillMb, 'FORGE_HEAVY_KILL_SWAP_MB');
+  rowFor('look every', DEFAULT_LIMITS.pollMs, 'FORGE_HEAVY_POLL_MS');
+  rowFor('named in "also running"', DEFAULT_LIMITS.alsoRunningMb, 'FORGE_HEAVY_ALSO_MB');
+});

@@ -18,6 +18,9 @@ import { spawn, execFile, execFileSync } from 'node:child_process';
 import { startReaper } from './reaper.mjs';
 import { killTree } from './proc-tree.mjs';
 import { acquireForProcess } from './heavy-lock.mjs';
+import { checkStart, guardWanted } from '../heavy-guard.mjs';
+import { createGuard, limitsFromEnv } from '../heavy-mem-core.mjs';
+import { readMachine as readHeavyMachine } from '../heavy-mem-read.mjs';
 import { memBudgetMb, testHeapMb, testRssCapMb, capConcurrency, createMemoryGate, groupMbs, parsePs as parseRssPs, readSystemMemory } from './mem-core.mjs';
 import {
   capKilledFiles, firstFailure, parseChangedLines, isMutableSource, generateMutants, sample, parseHandList, resolveHand, applyMutant, capLoops, killedByLoopCap, killedByHeapCap, DEFAULT_MAX_LOOP, buildMap, selectTests, hashTexts, parseTapSummary,
@@ -213,6 +216,10 @@ const overCap = new Map();
 // runner killed it at once, called its baseline red and every kill by it unproven. So the cap is PER FILE when a file needs one (learnCap, in main): `capByFile` holds the raised caps, `peakByFile` the most memory each file's tree was
 // seen to hold (the same look the cap uses), `rootFile` which file a tree is running.
 let defaultCapMb = Infinity;
+// 2026-11-20-1001z: the machine-level memory guard (scripts/heavy-guard.mjs, the numbers in the header of scripts/heavy-guard.sh) rides on THIS watchdog's process table (one `ps` four times a second, already read below): main() creates `memGuard` and `guardStop`
+// when the guard is wanted; the watchdog hands each table to memGuard.tick, which stops the whole pass (every test tree, exit 76, "stopped by the memory guard") when all the live trees together pass the pass's cap, or the compressor or swap pass their limits.
+// The per-tree cap above stays what it was; the start refusal (exit 75) is in main(). Nothing is read twice: no second `ps`, no second timer.
+let memGuard = null, guardStop = null;
 // A MEASURING run (learnCap) is keyed by where it runs as well as by the file (`runKey`): its high ceiling and its peak are its own, never those of a mutant of the same file running at the same time.
 const runKey = (cwd, file) => `${cwd}\0${file}`;
 const capByFile = new Map(), capByRun = new Map(), peakByRun = new Map(), rootFile = new Map();
@@ -225,7 +232,8 @@ function startRssWatchdog(capMb) {
     execFile('ps', ['-Ao', 'pid=,ppid=,rss=,command='], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, timeout: 5000 }, (err, stdout) => {
       busy = false;
       if (err) return;
-      for (const { root, mb } of groupMbs(parseRssPs(stdout), [...liveGroups])) {
+      const table = parseRssPs(stdout);
+      for (const { root, mb } of groupMbs(table, [...liveGroups])) {
         const run = rootFile.get(root);
         if (run !== undefined && mb > (peakByRun.get(run.key) ?? 0)) peakByRun.set(run.key, mb);
         const cap = (run !== undefined ? (capByRun.get(run.key) ?? capByFile.get(run.file)) : undefined) ?? capMb;
@@ -234,6 +242,8 @@ function startRssWatchdog(capMb) {
         console.error(`mutate: a test process tree (pid ${root}) holds ${mb} MB, over the ${cap} MB cap (FORGE_TEST_RSS_MB): killed`);
         killGroup(root);
       }
+      const hit = memGuard?.tick(table, [...liveGroups]);
+      if (hit && guardStop) { const stop = guardStop; guardStop = null; stop(hit); }
     });
   }, 250);                    // 250 ms: a runaway grows 1-3 GB a second (measured), a 1 s look let it overshoot the cap two- or threefold
   t.unref();
@@ -350,6 +360,11 @@ export async function main(argv) {
   // 2026-10-31-1125: one heavy thing at a time ($TMPDIR/forge-heavy.lock, heavy-lock.mjs): a second heavy run waits and says who holds it. Not for --list (it runs nothing), and not inside a test run (NODE_TEST_CONTEXT: that run
   // is the heavy thing, and its own tests start this CLI on scratch projects); a runner started BY a lock holder (FORGE_HEAVY_LOCK_HELD) does not wait for it.
   if (!a.list && !process.env.NODE_TEST_CONTEXT) await acquireForProcess({ what: 'mutation pass' });
+  // 2026-11-20-1001z: the memory guard's start check, after the lock and before anything is built or started: exit 75 "memory pressure high, wait" (the compressor over 8 GB, swap over 2 GB, free percentage under 35). The pass's own cap for all its test trees
+  // together is its memory budget (at least 6 GB; FORGE_HEAVY_RSS_MB wins). Not for --list, not inside a test run, not under heavy-guard.sh.
+  const guarding = !a.list && guardWanted(process.env);
+  const passCapMb = Math.max(6144, budgetMb);
+  if (guarding) { const start = checkStart({ env: process.env, what: 'mutation pass', rssMb: passCapMb }); if (start.refuse) { console.error(start.text); return 75; } }
   const texts = readTexts(root);
   const before = a.noVerify ? null : fingerprint(root);
   const { map, cached } = loadMap(root, texts);
@@ -413,6 +428,10 @@ export async function main(argv) {
   if (!a.keep) reaper.addPath(scratch);                                    // removed by the sidecar too if this process dies by SIGKILL
   for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.once(sig, () => { killAll(); cleanup(); process.exit(130); });
   process.once('exit', killAll);                                           // any other way out of the process: no group outlives it
+  if (guarding) {
+    memGuard = createGuard({ readMem: () => readHeavyMachine(process.env), what: 'mutation pass', limits: limitsFromEnv(process.env, { rssMb: passCapMb }) });
+    guardStop = (hit) => { console.error(hit.text); killAll(); cleanup(); process.exit(76); };
+  }
   process.once('uncaughtException', (e) => { console.error(e); killAll(); cleanup(); process.exit(1); });
   try {
     const base = buildBase(root, scratch);

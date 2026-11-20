@@ -13,6 +13,8 @@
 #          --cleanup-worktrees                         # take back the git worktrees a KILLED matrix left registered in the seven repos (`git worktree remove --force` on each one registered under a drain-matrix.* directory, then `git worktree prune`; never a recursive delete of a tree), then exit
 #          FORGE_POWER_GUARD=off / FORGE_CAFFEINATE=off  # the two switches of the power guard below
 #          --full-lean                                 # the LEAN leg runs the WHOLE suite again (the behaviour before 2026-11-04-1174); by default it runs only the edition-sensitive files (below)
+#          FORGE_MATRIX_FILE_CONC=4                    # 2026-11-20-1001z: the test files ONE LEG runs at once (default: computed from FORGE_MEM_BUDGET_MB / FORGE_MATRIX_FILE_MB by scripts/dev/mem-plan.mjs matrix-files; this wins when set)
+#          FORGE_MATRIX_RSS_MB / FORGE_HEAVY_GUARD=off # 2026-11-20-1001z: the memory guard around the whole run (see "ONE HEAVY THING AT A TIME" below and the header of scripts/heavy-guard.sh)
 #
 # What it does: worktrees (detached, committed state only) of forge-client-obsidian, music-theory, forge-tutorial, forge-moda, music-core, forge and music-playground
 # next to each other; links node_modules, forge/.venv and the music wheels into them; then THREE LEGS AT THE SAME TIME (drain 2026-10-26-1300; the machine has the cores):
@@ -53,8 +55,11 @@ if [ "${FORGE_MATRIX_COPY:-}" = "$0" ]; then SCRIPT_DIR="$FORGE_MATRIX_SCRIPT_DI
 
 # 2026-10-31-1125: ONE HEAVY THING AT A TIME. The first thing this script does is take $TMPDIR/forge-heavy.lock (scripts/dev/heavy-lock.mjs): when a mutation pass, a real-Chrome measure or another matrix holds it, this one WAITS and
 # says who holds it; a stale lock (its holder gone, kill -9 included) is taken over. Whatever the lock starts is told so (FORGE_HEAVY_LOCK_HELD), so a heavy tool inside the matrix does not wait for the matrix. FORGE_HEAVY_LOCK=off: no lock.
+# 2026-11-20-1001z: the same start now goes through scripts/heavy-guard.sh, which takes THAT lock exactly as before and adds the memory guard around the whole matrix (the legs, the hygiene step and the pytest leg are all in its process tree, so
+# `--quiet-only` is covered too): it REFUSES to start (exit 75, "memory pressure high, wait") while the memory compressor holds more than 8 GB or more than 2 GB of swap is used, and it KILLS the whole tree (exit 76, "stopped by the memory guard") when the tree
+# passes FORGE_MATRIX_RSS_MB (default 12288: two legs at their budget; FORGE_HEAVY_RSS_MB wins) or the compressor passes 10 GB. Inside a test run, and with FORGE_HEAVY_GUARD=off, it is only the lock. The numbers and variables: the header of scripts/heavy-guard.sh.
 if [ -z "${FORGE_HEAVY_LOCK_HELD:-}" ] && [ "${FORGE_HEAVY_LOCK:-}" != "off" ]; then
-  exec node "$SCRIPT_DIR/dev/heavy-lock.mjs" run --what drain-matrix -- bash "$0" "$@"
+  exec bash "$SCRIPT_DIR/heavy-guard.sh" --what drain-matrix --rss-mb "${FORGE_MATRIX_RSS_MB:-12288}" -- bash "$0" "$@"
 fi
 
 PROJECTS="${PROJECTS:-$HOME/projects}"
@@ -196,7 +201,8 @@ STRAIN="$(node "$SCRIPT_DIR/dev/mem-plan.mjs" strain 2>/dev/null || true)"
 [ -n "$STRAIN" ] && printf '%s\n' "$STRAIN"
 if printf '%s\n' "$STRAIN" | grep -q '^the machine is thrashing'; then SERIAL=1; fi
 LEGS_AT_ONCE=2; [ "$SERIAL" = "1" ] && LEGS_AT_ONCE=1
-FILE_CONC="$(node "$SCRIPT_DIR/dev/mem-plan.mjs" matrix-files --legs "$LEGS_AT_ONCE" 2>/dev/null || echo 8)"
+# 2026-11-20-1001z: FORGE_MATRIX_FILE_CONC=<n> sets the files one leg runs at once outright (a whole number from 1; mem-plan.mjs reads it and it wins over the budget calculation); the fallback below honours it too.
+FILE_CONC="$(node "$SCRIPT_DIR/dev/mem-plan.mjs" matrix-files --legs "$LEGS_AT_ONCE" 2>/dev/null || echo "${FORGE_MATRIX_FILE_CONC:-8}")"
 export FILE_CONC
 echo "memory: $(node "$SCRIPT_DIR/dev/mem-plan.mjs" --legs "$LEGS_AT_ONCE" 2>/dev/null || echo 'budget unknown')"
 
