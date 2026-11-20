@@ -150,8 +150,16 @@ test('a note the controls would overwrite (a phrase with a hand edit) is refused
   assert.match(r.last(), /\[\[phrase_008\]\]/); assert.deepEqual(r.buttons(), []); assert.deepEqual(r.creates, []);
 });
 
-test('MUSIC_COMPOSER_AUTO_APPLY (on) never skips this preview: a copy is a new note, so the person always sees "Copy [[bar_007]] to a new bar." first', async () => {
+// 2026-11-20-1002 (deliberate): auto-apply (the default now: `Preview before applying` OFF) used to NEVER skip this preview (0992: a copy makes a new note). The copy is undoable by the trash since 0992a, so it applies at once like every sentence the grammar reads;
+// the old two-Enter story is what `Preview before applying` ON still shows (the rig's default autoApply false is that setting ON).
+test('2026-11-20-1002 (deliberate): auto-apply ON applies "Duplicate [[bar_007]]." at the FIRST Enter (was: never skipped the preview); no "Copy ... to a new bar." waits; the copy is on the undo stack', async () => {
   const r = rig({ autoApply: true }); await r.ready();
+  r.type('Duplicate [[bar_007]].'); await r.enter();
+  assert.deepEqual(r.creates, ['bars/bar_008.md'], 'the copy is made by the first Enter'); assert.deepEqual(r.buttons(), []); assert.equal(r.suggestion(), '');
+  assert.equal(r.ctl.canUndo(r.path), true);
+});
+test('`Preview before applying` ON (the rig\'s autoApply false): the preview "Copy [[bar_007]] to a new bar." is always seen first, then the second Enter makes the copy (the old story)', async () => {
+  const r = rig({ autoApply: false }); await r.ready();
   r.type('Duplicate [[bar_007]].'); await r.enter();
   assert.deepEqual(r.creates, [], 'nothing is created by the first Enter'); assert.equal(r.suggestion(), 'Copy [[bar_007]] to a new bar.'); assert.deepEqual(r.buttons(), ['apply-preview', 'cancel-preview']);
   await r.enter(); assert.deepEqual(r.creates, ['bars/bar_008.md']);

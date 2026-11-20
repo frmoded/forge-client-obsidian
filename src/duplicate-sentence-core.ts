@@ -5,6 +5,8 @@
 //   the gesture                 in a phrase tab, when the composer's text (trimmed, any case) is exactly "Duplicate" or ends with the word, the NEXT click on a bar of the Score does not pin it: the bar's note name is appended
 //                               (` [[bar_007]].`). `armsDuplicate` is the question, `withDuplicateLink` the text the click makes. After that the text ends with a link, so the next click pins again.
 
+import { readStepText } from './typed-step-core.ts';
+
 /** 2026-11-19-0997: this core is the LIST MODEL's (music-composer code, reached only through src/list-model-selected.ts); the music edition's list-model.full.ts lists this string in `cores`, scripts/build-main.test.mjs greps the lean bundle for it. */
 export const LIST_MODEL_SENTINEL_DUPLICATE_SENTENCE_CORE = 'forge-list-model-core:duplicate-sentence-core';
 
@@ -16,7 +18,10 @@ export interface ResolvedDuplicate { ok: true; family: DuplicateFamily; name: st
 export type ActionRead =
   | { kind: 'none' }
   | { kind: 'duplicate'; target: string }
-  | { kind: 'refused'; message: string };
+  /** 2026-11-20-1002: a typed Undo or Redo (typed-step-core.ts): `count` steps. Read by the same reader, for EVERY composer (the controller routes it; Duplicate stays a phrase's). */
+  | { kind: 'undo' | 'redo'; count: number }
+  /** `step: true` = the refusal is the typed Undo/Redo reader's (every composer says it); a refused Duplicate has no mark (only a phrase's composer says it). */
+  | { kind: 'refused'; message: string; step?: true };
 
 const FOLDER: Record<DuplicateFamily, string> = { bar: 'bars', phrase: 'phrases', arrangement: 'arrangements', composition: 'compositions' };
 const FAMILIES: readonly DuplicateFamily[] = ['bar', 'phrase', 'arrangement', 'composition'];
@@ -65,6 +70,8 @@ const NEEDS_LINK = 'Duplicate needs a link to the note: write it like Duplicate 
  * The word "Duplicate" opening any sentence of the text makes it an action text: with anything else in the text it is refused (never handed to the list grammar or the service, which would not know it).
  */
 export function readActionText(text: string): ActionRead {
+  const step = readStepText(text);                                                                         // 2026-11-20-1002: `Undo`, `Undo 3`, `Redo` ... are read here too (the same reader as Duplicate)
+  if (step.kind !== 'none') return step;
   const t = String(text ?? '').trim();
   const sentences = t.split(/(?<=[.!?])\s+|\n+/).map((x) => x.trim()).filter((x) => x !== '');
   const isAction = (x: string): boolean => /^duplicate(?![A-Za-z0-9_])/i.test(x) && !/^duplicate\s+bars?(?![A-Za-z0-9_])/i.test(x);       // 2026-11-19-0996b: "Duplicate bar 3." has a number and is a sentence of the LIST (the copy step), never a link

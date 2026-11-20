@@ -111,3 +111,19 @@ test('2026-11-19-0910: a refusal made by the plugin\'s own check (a composition 
   assert.equal(fromOutcome({ type: 'refused', message: 'no bars yet' }).text, 'The service refused: no bars yet');
   assert.equal(fromOutcome({ type: 'refused', message: 'x', by: 'plugin' }).kind, 'refused', 'it is still an error line (the neutral "!" glyph, no red)');
 });
+
+// ---- 2026-11-20-1002: the words of an apply at once, and of a "did you mean" ----------------------------------------------------------------------------------------------------------------------
+test('2026-11-20-1002: an apply at once says `Applied. <the canonical lines>` and, after the fact, `This replaces: <the old line>`; the two-Enter wording is byte for byte what it was', () => {
+  assert.deepEqual(fromOutcome({ type: 'applied', change: '1 line', description: 'Keep bars 1 to 3.', instant: {} }), { kind: 'applied', text: 'Applied. Keep bars 1 to 3.' });
+  assert.deepEqual(fromOutcome({ type: 'applied', change: '1 line', description: 'Keep   bars 1 to 3.\n', instant: { replaces: 'Keep bars 1 to 2.' } }), { kind: 'applied', text: 'Applied. Keep bars 1 to 3. This replaces: Keep bars 1 to 2.' });
+  assert.deepEqual(fromOutcome({ type: 'applied', change: '1 line', description: 'Keep bars 1 to 3.' }), { kind: 'applied', text: 'Applied (1 line): Keep bars 1 to 3.' }, 'no `instant`: the old wording');
+  assert.equal(fromOutcome({ type: 'applied', change: 'x', description: 'a'.repeat(900), instant: {} }).text.length <= 600, true, 'redacted and capped like every entry');
+});
+test('2026-11-20-1002: a "did you mean" is a suggestion entry whose text is the question and whose card carries the sentence; it is marked as a repair (the panel draws its button) and expires like any suggestion', () => {
+  const e = fromOutcome({ type: 'suggestion', description: 'Delete bar 2.', recipe: '', via: 'repair', question: 'Did you mean: Delete bar 2?' });
+  assert.equal(e.kind, 'suggestion'); assert.equal(e.text, 'Did you mean: Delete bar 2?'); assert.deepEqual(e.suggestion, { description: 'Delete bar 2.', recipe: '', state: 'open', repair: true });
+  const plain = fromOutcome({ type: 'suggestion', description: 'Delete bar 2.', recipe: '', via: 'grammar' }); assert.equal(plain.suggestion?.repair, undefined, 'a grammar suggestion has no repair mark');
+  const list = append([], e, 1000); assert.equal(expireOpen(list)[0].suggestion?.state, 'expired');
+  assert.equal(sanitizeLoaded(JSON.parse(JSON.stringify(list)))[0].suggestion?.state, 'expired', 'an open one does not survive a restart');
+  assert.equal(sanitizeLoaded(JSON.parse(JSON.stringify(list)))[0].suggestion?.repair, undefined, 'and with it the button goes');
+});

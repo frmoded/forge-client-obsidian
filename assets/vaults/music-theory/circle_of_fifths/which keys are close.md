@@ -22,5 +22,5 @@ circle_of_fifths/resources/html/circle_exercise_neighbours.html
 ">
 <span>&larr; <a class="internal-link" data-href="relative minors" href="relative minors" style="color:#1963D1;">relative minors</a></span>
 <span>&uarr; <a class="internal-link" data-href="Circle of fifths" href="Circle of fifths" style="color:#1963D1;">Circle of fifths</a></span>
-<span><a class="internal-link" data-href="practicing the circle" href="practicing the circle" style="color:#1963D1;">practicing the circle</a> &rarr;</span>
+<span><a class="internal-link" data-href="using the circle of fifths" href="using the circle of fifths" style="color:#1963D1;">using the circle of fifths</a> &rarr;</span>
 </div>

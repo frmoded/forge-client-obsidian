@@ -40,6 +40,7 @@ import { isEmptyNote } from './empty-note-core.ts';
 import { FAMILY_KINDS } from './note-family-core.ts';
 import type { ComposerMenuItem, PreviewResult, PromptBoxPorts } from './prompt-box-dom.ts';
 import type { ActionRead, ResolvedDuplicate } from './duplicate-sentence-core.ts';
+import type { StepPorts } from './typed-step-core.ts';
 import type { DuplicateResult } from './duplicate-note-core.ts';
 import type { CopyMark, UndoCopyResult } from './duplicate-undo-core.ts';
 import type { Proposal } from './composer-core.ts';
@@ -238,7 +239,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
         if (!lastText.has(path)) lastText.set(path, note);                                                // 2026-11-13-1214: the text the first control change is compared with
         const chat = mountChatPanel(contentEl, {
           box: {
-            preview: (text) => previewFromBox(path, text),
+            preview: (text, o) => previewFromBox(path, text, o?.instant === true),
             apply: (text, proposal) => applyProposal(path, text, proposal),
             cancel: () => { cancelledAsk.add(path); },
             discard: () => { discardPreview(path); },
@@ -300,12 +301,13 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
       return { ok: false };
     }
   }
-  async function applyFromBoxCore(path: string, text: string, said = false): Promise<{ ok: boolean; disk?: string; message?: string }> {
-    if (isBarPath(path)) { if (!said) say(path, { type: 'you', text }); return bar.applyBar(path, text); }       // 2026-11-19-0993: the typed sentences in the bar grammar, appended to the bar's list
+  async function applyFromBoxCore(path: string, text: string, said = false, instant = false): Promise<{ ok: boolean; disk?: string; message?: string }> {
+    const typed = listModel.typed.apply(path, text, said, stepPorts); if (typed !== null) return typed;          // 2026-11-20-1002: a typed Undo or Redo (every composer): the stack's own take-back, never a line of a list
+    if (isBarPath(path)) { if (!said) say(path, { type: 'you', text }); return bar.applyBar(path, text, instant); }       // 2026-11-19-0993: the typed sentences in the bar grammar, appended to the bar's list
     const family = familyOfPath(path); if (family === null) { pbWarn(`ask skipped: ${path} is not a phrase, arrangement or composition note`); return { ok: false }; }
     if (!said) say(path, { type: 'you', text });                                                          // 2026-11-13-1214: the sentence as typed, when Apply is pressed (2026-11-17-2001: said already when the preview was asked for)
-    if (family === 'phrase') { const act = listModel.duplicate.readActionText(text); if (act.kind !== 'none') return applyAction(path, act); }          // 2026-11-19-0992: an action never touches the list: no process call, no write of this note
-    return applyList(path, family, text);                                                                 // 2026-11-19-0970 / 0980: a sentence is APPENDED to the list of a phrase, an arrangement or a composition
+    if (family === 'phrase') { const act = listModel.duplicate.readActionText(text); if (act.kind === 'duplicate' || act.kind === 'refused') return applyAction(path, act); }          // 2026-11-19-0992: an action never touches the list: no process call, no write of this note
+    return applyList(path, family, text, instant);                                                                 // 2026-11-19-0970 / 0980: a sentence is APPENDED to the list of a phrase, an arrangement or a composition
   }
   const set = (path: string, u: Ui | null): void => { if (u === null || u.state.kind === 'synced') ui.delete(path); else { ui.set(path, u); notices.delete(path); } syncBars(); };
 
@@ -557,7 +559,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   // (the dialog says how to delete a copy), and the dialog's line has links that open the copy.
   // ================================================================================================================================================================================================================
   /** The first Enter on an action text: the proposal ("Copy [[bar_007]] to a new bar."), or why it cannot be done, in plain words (and never to the service). */
-  async function previewAction(path: string, act: Exclude<ActionRead, { kind: 'none' }>): Promise<PreviewResult> {
+  async function previewAction(path: string, act: Extract<ActionRead, { kind: 'duplicate' | 'refused' }>, instant = false): Promise<PreviewResult> {
     previewed.delete(path);
     const refuse = (message: string): PreviewResult => { pb(`action refused: ${message}`); say(path, { type: 'refused', message, by: 'plugin' }); setBoxNote(path, `Refused: ${message}`); return { ok: false, message: `Refused: ${message}` }; };
     if (act.kind === 'refused') return refuse(act.message);
@@ -569,11 +571,11 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     if (dry.ok === false) return refuse(dry.message);
     const description = listModel.duplicate.duplicatePreviewLine(of);
     pb('grammar verdict: accepted (action, preview, nothing written)');
-    say(path, { type: 'suggestion', description, recipe: '', via: 'grammar' });
-    return { ok: true, proposal: { description, via: 'grammar', action: true } };
+    if (!instant) say(path, { type: 'suggestion', description, recipe: '', via: 'grammar' });                  // 2026-11-20-1002: applied at once, the copy's own line ("Created bar_010, a copy of bar_007.") is all that is said
+    return { ok: true, proposal: { description, via: 'grammar', action: true, ...(instant ? { instant: true } : {}) } };
   }
   /** The second Enter on an action text: make the copy and say so, with links; nothing else is written. */
-  async function applyAction(path: string, act: Exclude<ActionRead, { kind: 'none' }>): Promise<{ ok: boolean; disk?: string; message?: string }> {
+  async function applyAction(path: string, act: Extract<ActionRead, { kind: 'duplicate' | 'refused' }>): Promise<{ ok: boolean; disk?: string; message?: string }> {
     const fail = (message: string): { ok: boolean; message: string } => { pb(`action failed: ${message}`); setBoxNote(path, message); say(path, { type: 'failed', message }); return { ok: false, message }; };
     if (act.kind === 'refused') { say(path, { type: 'refused', message: act.message, by: 'plugin' }); setBoxNote(path, `Refused: ${act.message}`); return { ok: false, message: `Refused: ${act.message}` }; }
     if (ports.duplicate === undefined) return fail('Duplicate is not available in this build: it cannot copy notes here.');
@@ -624,7 +626,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   }
 
   /** 2026-11-19-0970 - the composer's FIRST Enter in an arrangement or a composition: the typed sentence(s) APPENDED to the list (or in place of the sentence they replace), nothing written. */
-  async function previewList(path: string, family: ListFamily, text: string, cur: string): Promise<PreviewResult> {
+  async function previewList(path: string, family: ListFamily, text: string, cur: string, instant = false): Promise<PreviewResult> {
     previewed.delete(path);
     const typed = sentencesFor(path, family, text);                                                       // a random line draws its seed HERE, once
     const plan = await planAppend(listOf(cur, family), family, typed, ctxFor(path));
@@ -633,17 +635,18 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
       if (plan.unchanged) { const m = 'Nothing changed: the note already says this.'; say(path, { type: 'notice', message: m }); return { ok: false, message: m }; }
       const description = plan.added.join(' '), replaces = plan.replaced.map((r) => r.sentence).join(' ');
       pb('grammar verdict: accepted (preview, nothing written)');
-      say(path, { type: 'suggestion', description, recipe: '', via: 'grammar', ...(replaces !== '' ? { replaces } : {}) });
+      if (!instant) say(path, { type: 'suggestion', description, recipe: '', via: 'grammar', ...(replaces !== '' ? { replaces } : {}) });       // 2026-11-20-1002: applied at once, the dialog says it once, after the fact ("Applied. <the line>")
       if (plan.replay.stop !== null) setBoxNote(path, stopNotice(plan.replay.stop, plan.replay.applied));       // 2026-11-19-0980: a new head left a line it cannot take: said under the card, before the apply
-      return { ok: true, proposal: { description, via: 'grammar', ...(replaces !== '' ? { replaces } : {}) } };
+      return { ok: true, proposal: { description, via: 'grammar', ...(replaces !== '' ? { replaces } : {}), ...(instant ? { instant: true } : {}) } };
     }
     if (plan.reason === 'loop') { pb(`grammar verdict: accepted, then refused: ${plan.message}`); say(path, { type: 'refused', message: plan.message, by: 'plugin' }); setBoxNote(path, `Refused: ${plan.message}`); return { ok: false, message: `Refused: ${plan.message}` }; }
     if (plan.reason !== 'unreadable') { say(path, { type: 'notice', message: plan.message }); setBoxNote(path, plan.message); return { ok: false, message: plan.message }; }       // an unreadable line already in the list, or nothing to add: said in plain words
+    const offered = await listModel.repair.offer(text, family, async (repaired) => (await planAppend(listOf(cur, family), family, sentencesOfText(repaired, family), ctxFor(path))).ok, (ev) => say(path, ev));          // 2026-11-20-1002 (DID YOU MEAN): a deterministic repair the grammar reads is offered BEFORE the service is asked; Enter or its button applies the SUGGESTION
+    if (offered !== null) return offered;
     return askTail(path, text, saidRejected(path, text, cur, plan));
   }
-
   /** 2026-11-19-0970 - the second Enter (or an apply with no preview) in an arrangement or a composition: the same plan, made again against the note as it is NOW, written in one go. */
-  async function applyList(path: string, family: ListFamily, text: string): Promise<{ ok: boolean; disk?: string; message?: string }> {
+  async function applyList(path: string, family: ListFamily, text: string, instant = false): Promise<{ ok: boolean; disk?: string; message?: string }> {
     let cur = ''; try { cur = await ports.read(path); } catch (e) { console.error('[forge-promptbox] applyList: could not read the note', e); const m = `Could not read the note: ${(e as Error)?.message ?? e}`; say(path, { type: 'failed', message: m }); return { ok: false, message: m }; }
     const before = listOf(cur, family);
     const plan = await planAppend(before, family, sentencesFor(path, family, text), ctxFor(path));
@@ -660,7 +663,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     previewed.delete(path);
     told.delete(path); ports.trace(appliedLine(basename(path), done.change)); set(path, null);
     setBoxNote(path, 'Applied.');
-    say(path, { type: 'applied', change: done.change, description: (await descriptionOf(path)) ?? plan.list.join(' ') });
+    say(path, { type: 'applied', change: done.change, description: instant ? plan.added.join(' ') : (await descriptionOf(path)) ?? plan.list.join(' '), ...(instant ? { instant: { replaces: plan.replaced.map((r) => r.sentence).join(' ') } } : {}) });       // 2026-11-20-1002: applied at once, in the words the preview would have used
     if (done.stop !== null) sayCut(path, { stop: done.stop, applied: done.applied });                       // 2026-11-19-0980: a head that left a line it cannot take: "Line 3 is not a sentence I can read; the note shows lines 1 and 2."
     return { ok: true, disk: '' };
   }
@@ -753,6 +756,8 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     const list = listOf(text, family);
     return which === 'undo' ? stackOf(path).canUndo(list) : stackOf(path).canRedo(list);
   };
+  /** 2026-11-20-1002 (A TYPED UNDO AND REDO, typed-step-core): what its runner borrows: the note's own undo stack, its dialog and its box. */
+  const stepPorts: StepPorts = { you: (p, text) => say(p, { type: 'you', text }), canStep, step: stepList, note: setBoxNote, pb, say: (p, kind, message) => say(p, kind === 'refused' ? { type: 'refused', message, by: 'plugin' } : { type: 'notice', message }) };
   /** The composer's "+" menu of a list note: the New actions (as every tab has them), then "Undo last sentence" and "Redo", shown disabled (never hidden) when there is nothing to undo or redo. */
   function withListMenu(path: string, base: ReturnType<NonNullable<DescriptionPorts['composerMenu']>>): NonNullable<PromptBoxPorts['menu']> {
     return {
@@ -866,8 +871,8 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
 
   /** 2026-11-17-2001 - the composer's FIRST Enter: what would this sentence do? Nothing is written. The grammar reads it first (free, instant, exact); when it cannot, the sentence service is asked ONCE (the same gates as
    *  before). The answer is a proposal (its canonical wording) the person sees in the dialog and applies with a second Enter, or a reason it cannot be one (the line under the card says it). */
-  async function previewFromBox(path: string, text: string): Promise<PreviewResult> {
-    try { return await previewFromBoxCore(path, text); }
+  async function previewFromBox(path: string, text: string, instant = false): Promise<PreviewResult> {
+    try { return await previewFromBoxCore(path, text, instant); }
     catch (e) {                                                                                           // never silent (2026-11-13-1211): the console, the dialog and the line under the card say it
       const why = (e as Error)?.message ?? String(e);
       pbWarn(`preview failed: ${why}`); console.error('[forge-promptbox] preview failed', e);
@@ -875,12 +880,13 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
       return { ok: false, message: `Could not ask: ${why}` };
     }
   }
-  async function previewFromBoxCore(path: string, text: string): Promise<PreviewResult> {
+  async function previewFromBoxCore(path: string, text: string, instant = false): Promise<PreviewResult> {
     if (isBarPath(path)) {                                                                                   // 2026-11-19-0993: a bar's composer reads the bar grammar locally (no model call)
       pb(`preview asked: ${basename(path)} family=bar text=${text.length} chars`);
       say(path, { type: 'you', text });
+      const typed = listModel.typed.preview(path, text, stepPorts); if (typed !== null) return typed;         // 2026-11-20-1002: a typed Undo or Redo is read before the bar grammar
       let cur = ''; try { cur = await ports.read(path); } catch (e) { const m = `Could not read the note: ${(e as Error)?.message ?? e}`; say(path, { type: 'failed', message: m }); return { ok: false, message: m }; }
-      return bar.previewBar(path, text, cur);
+      return bar.previewBar(path, text, cur, instant);
     }
     const family = familyOfPath(path);
     if (family === null) { pbWarn(`preview skipped: ${path} is not a phrase, arrangement or composition note`); return { ok: false, message: 'This note is not a phrase, arrangement or composition.' }; }
@@ -889,8 +895,9 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     cancelledAsk.delete(path);
     let cur = '';
     try { cur = await ports.read(path); } catch (e) { const m = `Could not read the note: ${(e as Error)?.message ?? e}`; say(path, { type: 'failed', message: m }); return { ok: false, message: m }; }
-    if (family === 'phrase') { const act = listModel.duplicate.readActionText(text); if (act.kind !== 'none') return previewAction(path, act); }          // 2026-11-19-0992: `Duplicate [[bar_007]].` is an ACTION sentence, read here (no model call) and never a line of the list
-    return previewList(path, family, text, cur);                                                          // 2026-11-19-0970 / 0980: the typed sentence APPENDED to the list (or in place of the line it replaces), nothing written
+    const typed = listModel.typed.preview(path, text, stepPorts); if (typed !== null) return typed;         // 2026-11-20-1002: `Undo`, `Undo 3`, `Redo` are read here (the reader of Duplicate): never a line, never the service
+    if (family === 'phrase') { const act = listModel.duplicate.readActionText(text); if (act.kind === 'duplicate' || act.kind === 'refused') return previewAction(path, act, instant); }          // 2026-11-19-0992: `Duplicate [[bar_007]].` is an ACTION sentence, read here (no model call) and never a line of the list
+    return previewList(path, family, text, cur, instant);                                                          // 2026-11-19-0970 / 0980: the typed sentence APPENDED to the list (or in place of the line it replaces), nothing written
   }
   /** The service, once, for a sentence the grammar did not accept (the same gates as ever); its answer is the proposal the composer shows, or why there is none. (2026-11-19-0970: the tail of previewFromBoxCore, shared with the list.) */
   async function askTail(path: string, sentence: string, rejectedText: string): Promise<PreviewResult> {
@@ -918,7 +925,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     pb(`apply pressed: ${basename(path)} family=${familyOfPath(path) ?? 'none'} text=${text.length} chars via=${proposal.via}`);
     try {
       if (proposal.via === 'service') return await applyPreview(path);
-      const r = await applyFromBoxCore(path, text, true);
+      const r = await applyFromBoxCore(path, proposal.instead ?? text, true, !!(proposal.instant || proposal.instead));          // 2026-11-20-1002: a "did you mean" applies the SUGGESTION, in the instant words
       const fail = ui.get(path)?.message;
       if (r.ok) endSuggestion(path, 'applied');
       return r.ok ? r : { ok: false, message: r.message ?? fail ?? 'It did not go through.' };

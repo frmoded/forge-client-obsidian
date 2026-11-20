@@ -7,7 +7,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { Window } from 'happy-dom';
 
-import { DEFAULT_UI_FLAGS, SHOW_INSPECTOR, SHOW_LEGACY_CONTROLLERS, SHOW_SOURCE_CHIPS, readUiFlags, registerUiFlagsSource, uiFlags } from './ui-flags-core.ts';
+import { COMPOSER_AUTO_APPLY, DEFAULT_UI_FLAGS, PREVIEW_BEFORE_APPLYING, SHOW_INSPECTOR, SHOW_LEGACY_CONTROLLERS, SHOW_SOURCE_CHIPS, composerAutoApplyOf, readUiFlags, registerUiFlagsSource, uiFlags } from './ui-flags-core.ts';
 import { COMPACT_SCORE_INSET_PX, ENGRAVING_SCALE, FIT_PAGE_FACTOR, MIN_HOST_WIDTH_PX, VEROVIO_MIN_PAGE_WIDTH, pageWidthFor } from './host-width-core.ts';
 import { RELAYOUT_DEBOUNCE_MS, RELAYOUT_MIN_DELTA_PX, SCORE_HOST_CLASS, attachScoreArea, type ScoreAreaPorts } from './live-score-dom.ts';
 import { createDescriptionController, type DescriptionPorts } from './description-apply.ts';
@@ -19,21 +19,24 @@ const ROOT = path.resolve(import.meta.dirname, '..');
 // ---- the two switches ---------------------------------------------------------------------------------------------------------------------------------------------------
 test('the three music-tab switches are OFF by default and the bar numbers (2026-11-16-0902) are ON, in the constants, in the defaults and in the settings object a fresh install has', () => {
   assert.equal(SHOW_LEGACY_CONTROLLERS, false); assert.equal(SHOW_INSPECTOR, false); assert.equal(SHOW_SOURCE_CHIPS, false);
-  assert.deepEqual(DEFAULT_UI_FLAGS, { showLegacyControllers: false, showInspector: false, showSourceChips: false, showBarNumbers: true, composerAutoApply: false });
+  // 2026-11-20-1002 (deliberate): `composerAutoApply: false` (a sentence needs a second Enter) is now `previewBeforeApplying: false` (the sentence applies at once); MUSIC_COMPOSER_AUTO_APPLY is ON, the new setting `Preview before applying` is OFF
+  assert.deepEqual(DEFAULT_UI_FLAGS, { showLegacyControllers: false, showInspector: false, showSourceChips: false, showBarNumbers: true, previewBeforeApplying: false });
+  assert.equal(COMPOSER_AUTO_APPLY, true); assert.equal(PREVIEW_BEFORE_APPLYING, false); assert.equal(composerAutoApplyOf(DEFAULT_UI_FLAGS), true); assert.equal(composerAutoApplyOf({ ...DEFAULT_UI_FLAGS, previewBeforeApplying: true }), false);
   assert.deepEqual(uiFlags(), DEFAULT_UI_FLAGS, 'with no source registered a view gets the defaults');
   const settings = fs.readFileSync(path.join(ROOT, 'src/settings.ts'), 'utf8');
   assert.match(settings, /showLegacyControllers: false,\s*showInspector: false,\s*showSourceChips: false,\s*showBarNumbers: true,/);
-  assert.match(settings, /composerAutoApply: false,/, 'auto-apply is off in a fresh install');
+  assert.match(settings, /previewBeforeApplying: false,/, '2026-11-20-1002 (deliberate): a fresh install applies at once (was: composerAutoApply: false = the two Enters)');
+  assert.ok(!/composerAutoApply/.test(settings), 'the old key is gone from the settings (a stored one is ignored: the old false would have kept every existing install on two Enters)');
 });
 test('readUiFlags takes only real booleans from the settings object: junk, null and absent are the default (off); a saved true survives data.json', () => {
   assert.deepEqual(readUiFlags(undefined), DEFAULT_UI_FLAGS); assert.deepEqual(readUiFlags(null), DEFAULT_UI_FLAGS);
   assert.deepEqual(readUiFlags({ showLegacyControllers: 'true', showInspector: 1, showSourceChips: 'yes', showBarNumbers: 0 }), DEFAULT_UI_FLAGS);
-  assert.deepEqual(readUiFlags({ showLegacyControllers: true, showInspector: false }), { showLegacyControllers: true, showInspector: false, showSourceChips: false, showBarNumbers: true, composerAutoApply: false });
-  assert.deepEqual(readUiFlags(JSON.parse(JSON.stringify({ showLegacyControllers: true, showInspector: true, showSourceChips: true }))), { showLegacyControllers: true, showInspector: true, showSourceChips: true, showBarNumbers: true, composerAutoApply: false });
+  assert.deepEqual(readUiFlags({ showLegacyControllers: true, showInspector: false }), { showLegacyControllers: true, showInspector: false, showSourceChips: false, showBarNumbers: true, previewBeforeApplying: false });
+  assert.deepEqual(readUiFlags(JSON.parse(JSON.stringify({ showLegacyControllers: true, showInspector: true, showSourceChips: true }))), { showLegacyControllers: true, showInspector: true, showSourceChips: true, showBarNumbers: true, previewBeforeApplying: false });
 });
 test('the source: a registered source is asked at every call (a change takes effect when a tab mounts), a throwing source is the default, and null puts the default back', () => {
   let on = false;
-  registerUiFlagsSource(() => ({ showLegacyControllers: on, showInspector: on, showSourceChips: on, showBarNumbers: true }));
+  registerUiFlagsSource(() => ({ showLegacyControllers: on, showInspector: on, showSourceChips: on, showBarNumbers: true, previewBeforeApplying: false }));
   assert.equal(uiFlags().showLegacyControllers, false); on = true; assert.equal(uiFlags().showLegacyControllers, true);
   registerUiFlagsSource(() => { throw new Error('boom'); }); assert.deepEqual(uiFlags(), DEFAULT_UI_FLAGS);
   registerUiFlagsSource(null); assert.deepEqual(uiFlags(), DEFAULT_UI_FLAGS);
@@ -43,6 +46,9 @@ test('WIRING: the Forge settings tab has the two toggles, saved to the settings 
   assert.match(settings, /setName\('Show legacy controllers \(editing strips\)'\)[\s\S]*?settings\.showLegacyControllers = value/);
   assert.match(settings, /setName\('Show the bar inspector'\)[\s\S]*?settings\.showInspector = value/);
   assert.match(settings, /setName\('Show source chips'\)[\s\S]*?settings\.showSourceChips = value/);
+  // 2026-11-20-1002: the setting `Preview before applying` (default OFF) lives in the SAME tab, saved to the settings object; score-first.ts hands the composer `composerAutoApplyOf(uiFlags())`, read at every Enter
+  assert.match(settings, /setName\('Preview before applying'\)[\s\S]*?settings\.previewBeforeApplying = value/);
+  assert.match(fs.readFileSync(path.join(ROOT, 'src/score-first.ts'), 'utf8'), /composerAutoApply: \(\) => composerAutoApplyOf\(uiFlags\(\)\)/);
   assert.match(fs.readFileSync(path.join(ROOT, 'src/main.ts'), 'utf8'), /registerUiFlagsSource\(\(\) => readUiFlags\(this\.settings\)\)/);
   for (const f of ['phrase-view.ts', 'kits-arrangements.ts', 'compositions.ts']) assert.match(fs.readFileSync(path.join(ROOT, 'src', f), 'utf8'), /const flags = uiFlags\(\)/, f);
 });
@@ -203,4 +209,11 @@ test('the status line under the prompt box: shown when `showBoxStatus` is absent
 });
 test('WIRING: score-first.ts reads the legacy switch for the status line (the plugin\'s own default for `showBoxStatus`)', () => {
   assert.match(fs.readFileSync(path.join(ROOT, 'src/score-first.ts'), 'utf8'), /showBoxStatus: hooks\.showBoxStatus \?\? \(\(\) => uiFlags\(\)\.showLegacyControllers\)/);
+});
+
+test('2026-11-20-1002: readUiFlags takes previewBeforeApplying only as a real boolean; a stored OLD `composerAutoApply` (every install saved false) is ignored, so no install stays on the two Enters by accident', () => {
+  assert.equal(readUiFlags({ previewBeforeApplying: true }).previewBeforeApplying, true);
+  for (const junk of ['true', 1, null, undefined]) assert.equal(readUiFlags({ previewBeforeApplying: junk }).previewBeforeApplying, false, String(junk));
+  assert.equal(readUiFlags({ composerAutoApply: false } as never).previewBeforeApplying, false); assert.equal(readUiFlags({ composerAutoApply: true } as never).previewBeforeApplying, false);
+  assert.equal(composerAutoApplyOf(readUiFlags({ composerAutoApply: false } as never)), true, 'an old saved false applies at once now');
 });

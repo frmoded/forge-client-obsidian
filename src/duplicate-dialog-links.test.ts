@@ -55,11 +55,13 @@ test('the links survive the round trip through data.json (sanitizeLoaded keeps w
   assert.equal(sanitizeLoaded([{ ...e, links: 'nope' }])[0].links, undefined);
 });
 
-test('an ACTION proposal is never auto-applied (a copy is a new note: the preview is always seen); a sentence proposal still is, as before', () => {
+// 2026-11-20-1002 (deliberate): an ACTION proposal was never auto-applied (the preview of a copy was always seen); the copy is undone by the trash since 0992a, so it applies at once with auto-apply on (the default now); with the switch off the preview is still seen
+test('2026-11-20-1002 (deliberate): an ACTION proposal is auto-applied with the switch on (was: never) and previewed with it off; a sentence proposal is as before', () => {
   const working = { phase: 'working' as const, text: 'Duplicate [[bar_007]].', seq: 1 };
   const action: Proposal = { description: 'Copy [[bar_007]] to a new bar.', via: 'grammar', action: true };
   const r = step(working, { type: 'resolved', seq: 1, proposal: action, autoApply: true });
-  assert.equal(r.state.phase, 'previewing'); assert.equal(r.effect.do, 'none');
+  assert.equal(r.state.phase, 'applying'); assert.equal(r.effect.do, 'apply');
+  const off = step(working, { type: 'resolved', seq: 1, proposal: action }); assert.equal(off.state.phase, 'previewing'); assert.equal(off.effect.do, 'none');
   const plain: Proposal = { description: 'Extend [[bar_005]] to 4 bars.', via: 'grammar' };
   assert.equal(step(working, { type: 'resolved', seq: 1, proposal: plain, autoApply: true }).state.phase, 'applying', 'a recipe sentence is auto-applied when the switch is on, as before');
   assert.equal(initComposer('x').phase, 'idle');

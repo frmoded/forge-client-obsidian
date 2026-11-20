@@ -5,7 +5,7 @@
 // edited mid-session to ADD the profile takes effect on the next load.
 
 import { addQuietRibbonIcon } from './sr-label-core.ts';
-import { uiFlags } from './ui-flags-core.ts';
+import { composerAutoApplyOf, uiFlags } from './ui-flags-core.ts';
 import { onHandEditRefusal } from './hand-edit-refusal-core.ts';
 import { registerRestoreParticipants, type RestoreParticipant } from './restore-hold-core.ts';
 import { deferredTabName } from './deferred-tab-title-core.ts';
@@ -562,7 +562,7 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
       }, {
         ...hooks, showBoxStatus: hooks.showBoxStatus ?? (() => uiFlags().showLegacyControllers),
         // 2026-11-17-2001: the composer's switch and its "+" menu: the same four New actions as the header menu and the ribbon (ONE list, newMenuItems), and a note picker for "Insert a link to a note"
-        composerAutoApply: () => uiFlags().composerAutoApply,
+        composerAutoApply: () => composerAutoApplyOf(uiFlags()),
         openNote,                                                                                          // 2026-11-19-0992: the links of the dialog ("Created [[bar_010]], a copy of [[bar_007]].") open the note the way a lineage link does (a bar in the Beat Box)
         composerMenu: () => ({
           items: newMenuItems().map((item) => ({ id: item.commandId, label: item.title })),

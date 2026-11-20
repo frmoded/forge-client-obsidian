@@ -1,5 +1,8 @@
 # music-theory
 
+> "All musicians are subconsciously mathematicians."
+> Thelonious Monk
+
 A Forge vault for composing music with music21 in your Obsidian-based snippet workflow. (Renamed from `forge-music` in the Phase 5 two-vault split, 2026-08-06; sibling vault [music-core](https://github.com/frmoded/music-core) is the composition-primitive authoring surface.)
 
 ## What's inside

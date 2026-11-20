@@ -10,9 +10,10 @@ import { barSentencesOf, canonicalBarLine, headSentence } from './bar-grammar-co
 import { barUndoStack, mergeGestureSentences, planBarAppend } from './bar-list-core.ts';
 import { barLinesBlock, inspectBarNote, withoutBarLines, writeBarNote, type BarInspection } from './bar-list-note-core.ts';
 import { stopNotice, type Replaced, type UndoStack } from './sentence-list-core.ts';
+import { offerRepair } from './did-you-mean-core.ts';
 import type { DialogEvent } from './dialog-core.ts';
 /** What the composer's first Enter gets back (the shape prompt-box-dom.ts's PreviewResult has; written here so this file does not import the card). */
-type PreviewResult = { ok: true; proposal: { description: string; via: 'grammar' | 'service'; replaces?: string } } | { ok: false; message: string };
+type PreviewResult = { ok: true; proposal: { description: string; via: 'grammar' | 'service'; replaces?: string; instant?: boolean; instead?: string } } | { ok: false; message: string };
 import { parseBarSentence } from './bar-grammar-core.ts';
 import { formatRhythmJson, type RhythmData } from './rhythm-edit-core.ts';
 /** 2026-11-19-0997: this core is the LIST MODEL's (music-composer code, reached only through src/list-model-selected.ts); the music edition's list-model.full.ts lists this string in `cores`, scripts/build-main.test.mjs greps the lean bundle for it. */
@@ -35,6 +36,8 @@ export interface BarAppendOpts {
   gesture?: string;
   /** The line is said in the dialog ("Applied ...") when it came from the composer; a Beat Box gesture is quiet (the grid is its own feedback). */
   loud?: boolean;
+  /** 2026-11-20-1002: the composer applied it at once (no preview was shown): the dialog says `Applied. <the canonical line>` (and what it replaces) instead of the two-Enter wording. */
+  instant?: boolean;
 }
 export interface BarAppendResult {
   ok: boolean;
@@ -121,7 +124,11 @@ export function createBarList(deps: BarListDeps) {
     record(path, d);
     if (!d.wrote) return { ok: true, message: 'Nothing changed: the bar already says this.', data: d.plan.replay.data, unchanged: true, added: [], replaced: [] };
     deps.trace(`[forge-description] applied ${deps.basename(path)} (${d.plan.added.length} line${d.plan.added.length === 1 ? '' : 's'}: ${d.plan.added.join(' ')})`);
-    if (opts.loud === true) deps.say(path, { type: 'applied', change: `${d.plan.added.length} line${d.plan.added.length === 1 ? '' : 's'}`, description: d.plan.added.join(' ') });
+    if (opts.loud === true) {
+      const change = `${d.plan.added.length} line${d.plan.added.length === 1 ? '' : 's'}`;
+      if (opts.instant === true) { const old = d.plan.replaced.map((r) => r.sentence).join(' '); deps.say(path, { type: 'applied', change, description: d.plan.added.length > 0 ? d.plan.added.join(' ') : `Takes back: ${old}`, instant: { replaces: d.plan.added.length > 0 ? old : '' } }); }       // 2026-11-20-1002: the preview's own words, after the fact
+      else deps.say(path, { type: 'applied', change, description: d.plan.added.join(' ') });
+    }
     return { ok: true, message: d.plan.added.length === 0 ? `Took back: ${d.plan.replaced.map((r) => r.sentence).join(' ')}` : `Added: ${d.plan.added.join(' ')}`, data: d.plan.replay.data, added: d.plan.added, replaced: d.plan.replaced };
   }
 
@@ -131,12 +138,15 @@ export function createBarList(deps: BarListDeps) {
     reason === 'unreadable' ? `The grammar did not accept this sentence (line ${line}, column ${column}: ${message.replace(/^./, (c) => c.toLowerCase())}).` : message;
 
   /** The first Enter: what the typed sentences would do (nothing is written). A sentence the grammar cannot read is refused in words; the sentence service knows no bar sentences, so it is not asked. */
-  async function previewBar(path: string, text: string, cur: string): Promise<PreviewResult> {
+  async function previewBar(path: string, text: string, cur: string, instant = false): Promise<PreviewResult> {
     const insp = inspectBarNote(cur);
     if (insp.fence === null) { const m = 'This note is not a bar the Beat Box can read.'; deps.say(path, { type: 'notice', message: m }); return { ok: false, message: m }; }
     const plan = planBarAppend(insp.list, barSentencesOf(text));
     if (plan.ok === false) {
-      if (plan.reason === 'unreadable') { deps.say(path, { type: 'rejected', line: plan.line, column: plan.column, message: plan.message }); deps.setBoxNote(path, refusedWords(plan.reason, plan.message, plan.line, plan.column)); return { ok: false, message: refusedWords(plan.reason, plan.message, plan.line, plan.column) }; }
+      if (plan.reason === 'unreadable') {
+        const offered = await offerRepair(text, 'bar', (repaired) => planBarAppend(insp.list, barSentencesOf(repaired)).ok, (ev) => deps.say(path, ev));          // 2026-11-20-1002 (DID YOU MEAN): a repair the bar grammar reads is offered instead of the bare refusal
+        if (offered !== null) return offered;
+        deps.say(path, { type: 'rejected', line: plan.line, column: plan.column, message: plan.message }); deps.setBoxNote(path, refusedWords(plan.reason, plan.message, plan.line, plan.column)); return { ok: false, message: refusedWords(plan.reason, plan.message, plan.line, plan.column) }; }
       deps.say(path, { type: 'notice', message: plan.message }); deps.setBoxNote(path, plan.message);
       return { ok: false, message: plan.message };
     }
@@ -144,13 +154,13 @@ export function createBarList(deps: BarListDeps) {
     const description = plan.added.length > 0 ? plan.added.join(' ') : `Takes back: ${plan.replaced.map((r) => r.sentence).join(' ')}`;
     const replaces = plan.replaced.map((r) => r.sentence).join(' ');
     deps.pb('grammar verdict: accepted (preview, nothing written)');
-    deps.say(path, { type: 'suggestion', description, recipe: '', via: 'grammar', ...(replaces !== '' ? { replaces } : {}) });
-    return { ok: true, proposal: { description, via: 'grammar', ...(replaces !== '' ? { replaces } : {}) } };
+    if (!instant) deps.say(path, { type: 'suggestion', description, recipe: '', via: 'grammar', ...(replaces !== '' ? { replaces } : {}) });       // 2026-11-20-1002: applied at once, it is said once, after the fact
+    return { ok: true, proposal: { description, via: 'grammar', ...(replaces !== '' ? { replaces } : {}), ...(instant ? { instant: true } : {}) } };
   }
 
   /** The second Enter (or an apply with no preview): the same plan against the bar as it is now, written in one go and recorded for undo. */
-  async function applyBar(path: string, text: string): Promise<{ ok: boolean; disk?: string; message?: string }> {
-    const r = await appendBar(path, text, { loud: true });
+  async function applyBar(path: string, text: string, instant = false): Promise<{ ok: boolean; disk?: string; message?: string }> {
+    const r = await appendBar(path, text, { loud: true, ...(instant ? { instant: true } : {}) });
     if (!r.ok) {
       const m = r.reason === 'unreadable' ? refusedWords('unreadable', r.message, 1, 1) : r.message;
       deps.pb(`apply failed: ${m}`); deps.setBoxNote(path, m);

@@ -2,7 +2,7 @@
 //   idle -> (Enter) working -> previewing -> (Enter) applying -> idle        and Esc / typing / errors on the way.
 // Enter submits, Shift+Enter is a new line (the browser's own), Enter while an IME composition is open only confirms the composition. The FIRST Enter asks for a PREVIEW (the grammar first, then the
 // sentence service when the grammar cannot read it: the caller's rules, unchanged) and writes NOTHING; the preview is shown with "Press Enter to apply, Esc to discard"; the SECOND Enter applies; Esc discards;
-// typing a new sentence replaces the preview. With MUSIC_COMPOSER_AUTO_APPLY on (default OFF) a sentence the grammar reads exactly skips the preview. Esc while a request runs cancels it (its late answer is
+// typing a new sentence replaces the preview. With MUSIC_COMPOSER_AUTO_APPLY on (the default since 2026-11-20-1002; the setting `Preview before applying` turns it off) a sentence the grammar reads exactly skips the preview. Esc while a request runs cancels it (its late answer is
 // dropped). `seq` numbers the requests so an answer that arrives for a request that is gone changes nothing.
 
 export interface Proposal {
@@ -12,8 +12,14 @@ export interface Proposal {
   via: 'grammar' | 'service';
   /** 2026-11-19-0970 (the list model): the earlier sentence of the note's list that this one REPLACES (same kit, same volume target), in plain text. Absent = it replaces nothing. */
   replaces?: string;
-  /** 2026-11-19-0992: an ACTION sentence (`Duplicate [[bar_007]].`: it makes a new note, it is not a line of the list). The preview is always seen: MUSIC_COMPOSER_AUTO_APPLY never skips it. */
+  /** 2026-11-19-0992: an ACTION sentence (`Duplicate [[bar_007]].`: it makes a new note, it is not a line of the list). 2026-11-20-1002: it applies at once with the rest (the copy is undone by the trash); with `Preview before applying` its preview is seen first. */
   action?: boolean;
+  /** 2026-11-20-1002: the controller said nothing in the dialog for this proposal because the box applies it at once: it is never left waiting. */
+  instant?: boolean;
+  /** 2026-11-20-1002 (DID YOU MEAN): the sentence to apply INSTEAD of the typed text (a deterministic repair of it). Never applied by auto-apply: only Enter (or the dialog's button) says yes. */
+  instead?: string;
+  /** 2026-11-20-1002: a typed Undo or Redo: applied at the first Enter whatever the setting says (it IS the take-back; Redo undoes it). */
+  now?: boolean;
 }
 export type ComposerState =
   | { phase: 'idle'; text: string; seq: number }
@@ -78,7 +84,8 @@ export function step(s: ComposerState, ev: ComposerEvent): { state: ComposerStat
     }
     case 'resolved': {
       if (s.phase !== 'working' || ev.seq !== s.seq) return { state: s, effect: none };       // a late answer for a request that is gone
-      if (ev.autoApply === true && ev.proposal.via === 'grammar' && ev.proposal.action !== true) return { state: { phase: 'applying', text: s.text, seq: s.seq, proposal: ev.proposal }, effect: { do: 'apply', text: s.text, proposal: ev.proposal, seq: s.seq } };
+      const p = ev.proposal;
+      if ((ev.autoApply === true && p.via === 'grammar' && p.instead === undefined) || p.instant === true || p.now === true) return { state: { phase: 'applying', text: s.text, seq: s.seq, proposal: p }, effect: { do: 'apply', text: s.text, proposal: p, seq: s.seq } };
       return { state: { phase: 'previewing', text: s.text, seq: s.seq, proposal: ev.proposal }, effect: none };
     }
     case 'failed': {

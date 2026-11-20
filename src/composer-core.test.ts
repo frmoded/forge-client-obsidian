@@ -78,10 +78,30 @@ test('errors: a failed request or a failed write ends in the error phase with th
   const again = step(a, { type: 'enter' }); assert.equal(again.effect.do, 'preview'); assert.equal(again.state.seq, 3, 'a new request, a new number');
 });
 
-test('auto-apply (the setting, OFF by default): only a sentence the GRAMMAR reads skips the preview; the service always previews; without the flag nothing skips', () => {
-  assert.equal(step(working('x', 1), { type: 'resolved', seq: 1, proposal: P }).state.phase, 'previewing', 'off by default');
+// 2026-11-20-1002 (deliberate): the title said "OFF by default": the setting is now `Preview before applying` (default OFF = apply at once), the plugin supplies the flag; this pure machine still applies only when the event says autoApply, so the first lines are unchanged.
+test('auto-apply (the event flag): only a sentence the GRAMMAR reads skips the preview; the service always previews; without the flag nothing skips', () => {
+  assert.equal(step(working('x', 1), { type: 'resolved', seq: 1, proposal: P }).state.phase, 'previewing', 'no flag, no skip');
   const on = step(working('x', 1), { type: 'resolved', seq: 1, proposal: P, autoApply: true }); assert.equal(on.state.phase, 'applying'); assert.equal(on.effect.do, 'apply');
   assert.equal(step(working('x', 1), { type: 'resolved', seq: 1, proposal: S, autoApply: true }).state.phase, 'previewing', 'a service answer is never skipped');
+});
+
+// 2026-11-20-1002 (deliberate): an ACTION proposal (`Duplicate [[bar_007]].`) was never skipped by auto-apply (0992); the copy is undoable by the trash since 0992a, so it applies at once like the rest.
+test('2026-11-20-1002 (deliberate): an action proposal (Duplicate) is applied at once when auto-apply is on, and still previews when it is off', () => {
+  const D: Proposal = { description: 'Copy [[bar_007]] to a new bar.', via: 'grammar', action: true };
+  assert.equal(step(working('x', 1), { type: 'resolved', seq: 1, proposal: D }).state.phase, 'previewing', 'off: the preview');
+  const on = step(working('x', 1), { type: 'resolved', seq: 1, proposal: D, autoApply: true }); assert.equal(on.state.phase, 'applying'); assert.deepEqual(on.effect, { do: 'apply', text: 'x', proposal: D, seq: 1 });
+});
+test('2026-11-20-1002: a proposal that carries a sentence INSTEAD (a "did you mean") is never applied by auto-apply: the person says yes with Enter, and Enter applies the proposal (the suggestion, not the typed text)', () => {
+  const R: Proposal = { description: 'Delete bar 2.', via: 'grammar', instead: 'Delete bar 2.' };
+  const on = step(working('delet bar 2', 1), { type: 'resolved', seq: 1, proposal: R, autoApply: true }); assert.equal(on.state.phase, 'previewing'); assert.equal(on.effect.do, 'none');
+  const yes = step(on.state, { type: 'enter' }); assert.equal(yes.state.phase, 'applying'); assert.deepEqual(yes.effect, { do: 'apply', text: 'delet bar 2', proposal: R, seq: 1 });
+  assert.match(announcement(on.state), /Preview: Delete bar 2/);
+});
+test('2026-11-20-1002: a proposal marked `now` (a typed Undo or Redo) is applied at once whatever the setting says; one marked `instant` (the controller said nothing in the dialog because it expected to apply) is never left waiting', () => {
+  const U: Proposal = { description: 'Undo', via: 'grammar', now: true };
+  for (const flag of [undefined, false, true]) { const r = step(working('Undo', 1), { type: 'resolved', seq: 1, proposal: U, ...(flag === undefined ? {} : { autoApply: flag }) }); assert.equal(r.state.phase, 'applying', String(flag)); assert.equal(r.effect.do, 'apply'); }
+  const I: Proposal = { description: 'Keep bars 1 to 2.', via: 'grammar', instant: true };
+  assert.equal(step(working('x', 1), { type: 'resolved', seq: 1, proposal: I }).state.phase, 'applying', 'no preview was said, so none may wait');
 });
 
 test('canSubmit, isWorking, the words and the announcements', () => {

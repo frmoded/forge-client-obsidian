@@ -142,6 +142,7 @@ export function mountChatPanel(host: HTMLElement, ports: ChatPanelPorts, initial
         const status = doc.createElement('div'); status.className = 'forge-chat-chosen';
         status.textContent = s.state === 'open' ? PREVIEW_HINT : CHOSEN[s.state];
         m.append(status);
+        if (s.repair === true && s.state === 'open') m.append(Object.assign(doc.createElement('button'), { type: 'button', className: 'forge-chat-link forge-chat-repair', textContent: 'Use this', onclick: () => { box.submit(); } }));          // 2026-11-20-1002: a "did you mean": the button does what Enter does (the sentence is applied only when the person says so)
       }
       m.append(meta);
       log.appendChild(m);

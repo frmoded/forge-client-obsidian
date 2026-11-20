@@ -125,6 +125,7 @@ window.setup = function (width) {
   }, {
     askPlan: function () { window.serviceCalls++; return Promise.resolve({ status: 200, json: {} }); }, planConfigured: function () { return true; },
     openNote: function (id) { window.opened.push(id); },
+    composerAutoApply: function () { return false; },      // 2026-11-20-1002 (deliberate): the setting Preview before applying is ON in this harness: the flows below type a sentence and press Enter TWICE (the plugin default is ONE Enter: measure-duplicate-followups.mjs has the one-Enter verdicts)
     composerMenu: function () { return { items: [{ id: 'p', label: 'New phrase' }, { id: 'b', label: 'New bar' }], run: function () {} }; },
   });
   window.ctl = cp.createDescriptionController(ports);

@@ -36,4 +36,6 @@ export const listModel: ListModel = {
     undoCopy: async (_ports, mark) => ({ state: 'failed', message: `${mark.name} was not moved to the trash: ${NOT_IN_LEAN}` }),
   },
   steps: { annotate: () => null, lineageOf: () => [] },          // 2026-11-20-1000: lean has no Score: nothing is tied through steps
+  typed: { preview: () => null, apply: () => null },     // 2026-11-20-1002: lean reads no step sentence (Undo is the grammar's to refuse, as before) and offers no "did you mean" (the bare message stays)
+  repair: { offer: async () => null },
 };

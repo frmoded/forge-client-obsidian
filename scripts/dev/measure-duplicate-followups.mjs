@@ -28,6 +28,19 @@
 //   nextCmdZReachesTheSentence       the Cmd+Z after that undoes the phrase's own sentence (the list is one shorter) and still does not trash the edited copy
 //   redoDoesNotBringTheCopyBack      Shift+Cmd+Z after a removed copy does not bring bars/bar_010 back
 //   noRedAnywhereInTheDialog, noTooltipAnywhere, noHorizontalOverflow     as in measure-duplicate-bar.mjs
+// 2026-11-20-1002 (ONE ENTER APPLIES, DID YOU MEAN, A TYPED UNDO AND REDO): the harness models the plugin's setting `Preview before applying`: setup(w) = the setting ON (the flows above press Enter TWICE, unchanged: none of their verdicts moved), setup(w, { instant: true }) = the
+//   default (ONE Enter), setup(w, { instant: true, kind: 'composition' }) = an empty composition. New verdicts (each suffixed _<width>_<theme>):
+//   oneEnterApplies                        "Make it 20 percent slower." typed, ONE real Enter: the list is one longer, no live preview, the field empty, the service not asked
+//   oneEnterSaysAppliedInThePreviewWords   the newest applied line is "Applied. Make it 20 percent slower." and no suggestion entry was made
+//   previewSettingRestoresTwoEnters        the setting ON: the first Enter shows the live preview and writes nothing, the second applies
+//   duplicateAppliesAtOnce / duplicateAtOnceIsUndoneByTheTrash     "Duplicate [[bar_009]]." and ONE Enter makes bars/bar_010 with no preview; a real Cmd+Z moves it to the trash
+//   suggestsTheClosedLink                  in a COMPOSITION: "Play [[phrase_001]" and ONE Enter: the dialog asks "Did you mean: Play [[phrase_001]]?" (the sentence "Play [[phrase_001]]." under it), no column error, the service not asked
+//   suggestionHasAButton                   a "Use this" button, wider than 8 px;   suggestionIsNeverAppliedSilently   the note is byte for byte what it was and the field still holds the typed text
+//   enterAppliesTheSuggestion              a real Enter: the list is exactly ["Play [[phrase_001]]."] and the field is empty;   suggestionButtonApplies   a real mouse click on the button does the same;   escDropsTheSuggestion   Esc: nothing written, the typed text stays, no button
+//   suggestsTheVerbTypo / suggestsOneBarForMovePlaceWords / noRepairKeepsTodaysMessage   "Delet bar 2." -> "Did you mean: Delete bar 2?"; "Move bar 4 before bar 2." -> "Did you mean: Move bar 4 one bar left? Move takes one bar one place at a time. Bar 4 before bar 2 is 2 places left: say it twice (the second time for bar 3)."; "Banana split." -> the old rejected line, no new question
+//   typedUndoTakesBackTheLast / typedRedoPutsItBack / typedUndoCountSaysHowMany / typedUndoNeverAListLine   two sentences, "Undo" (one fewer, the field empty, the service not asked), "Redo" (back), "Undo 5" ("Undid N sentences." or "Undid N sentence(s): there was nothing more to undo."), the word is never in the note
+//   nothingToUndoIsSaid / nothingToRedoIsSaid   an empty composition: "There is nothing to undo." / "There is nothing to redo.";   typedUndoTrashesAFreshDuplicate   "Removed bar_010 (moved to the trash)."
+//   Screenshots: instant-applied-<w>-<theme>.png, instant-didyoumean-<w>-<theme>.png.
 // HARNESS LESSONS (kept): every mount is a FRESH host element; no page global named like a read-only window property (never "closed", "name", "status"...); no backticks inside the page's template literal (this file's page text is one).
 // Screenshots: followups-click-foo-<w>-<theme>.png (after a click with "Foo" in the field), followups-created-<w>-<theme>.png (the notice and its buttons), followups-removed-<w>-<theme>.png (after Cmd+Z).
 import fs from 'node:fs';
@@ -45,7 +58,7 @@ const bundle = (await build({
     contents: [
       "export { createDescriptionController } from './src/description-apply.ts';",
       "export { descriptionPortsFor } from './src/description-wiring.ts';",
-      "export { emptyPhraseNote } from './src/empty-note-core.ts';",
+      "export { emptyPhraseNote, emptyCompositionNote } from './src/empty-note-core.ts';",
       "export { noteContentFor } from './src/phrase-core.ts';",
       "export { listOfNote } from './src/sentence-list-note-core.ts';",
       "export { planNewBar } from './src/score-first-core.ts';",
@@ -74,18 +87,24 @@ button:hover { background-color: #d8d8d8; box-shadow: 0 1px 2px 0 rgba(0,0,0,0.3
 const page = `<!doctype html><meta charset=utf-8><style>${VARS}${css}</style><body class="theme-light"><div id="frame" style="width:1100px;height:640px"><div id="host" style="height:640px;width:1100px"></div></div>
 <script>${bundle}</script><script>
 var VAULT_BARS = ['bar_002', 'bar_005', 'bar_007', 'bar_009'];
-var PATH = 'phrases/phrase_020.md';
+var PATH = 'phrases/phrase_020.md';          // 2026-11-20-1002: setup(width, { kind: composition }) makes it compositions/comp_001.md
 var EXTEND = { kind: 'extend', source: 'bar_005', bars: 8, style: 'repeat_with_fills', tempo_change_pct: 0, overrides: { '3': 'bars/bar_009', '6': 'bars/bar_002' } };
 window.keys = [];
 document.addEventListener('keydown', function (e) { setTimeout(function () { window.keys.push({ key: e.key, meta: e.metaKey, prevented: e.defaultPrevented }); }, 0); }, false);
-window.setup = function (width) {
+// 2026-11-20-1002 (deliberate): the harness models the plugin setting Preview before applying (the controller composerAutoApply port): the flows written before 1002 type a sentence and press Enter TWICE, so setup(width) is the setting ON (window.instant false);
+// setup(width, { instant: true }) is the new default (ONE Enter applies). setup(width, { kind: 'composition' }) mounts an EMPTY composition note instead of the phrase.
+window.setup = function (width, opts) {
+  opts = opts || {};
+  window.instant = opts.instant === true; window.kind = opts.kind === 'composition' ? 'composition' : 'phrase';
+  PATH = window.kind === 'composition' ? 'compositions/comp_001.md' : 'phrases/phrase_020.md';
   if (window.ctl) window.ctl.dispose();
   if (window.layer) window.layer.dispose();
   window.shifted = 0; window.notes = new Map(); window.processCalls = 0; window.creates = []; window.trashed = []; window.opened = []; window.pinTold = []; window.serviceCalls = 0;
   var bar = cp.planNewBar({ existingBasenames: [], exists: function () { return false; } }).content;
   VAULT_BARS.forEach(function (n) { window.notes.set('bars/' + n + '.md', bar.split('bar_001').join(n)); });
   window.phraseText = cp.noteContentFor('phrase_020', EXTEND);
-  window.notes.set(PATH, window.phraseText);
+  window.notes.set('phrases/phrase_001.md', cp.noteContentFor('phrase_001', EXTEND)); window.notes.set('phrases/phrase_002.md', cp.noteContentFor('phrase_002', EXTEND));
+  window.notes.set(PATH, window.kind === 'composition' ? cp.emptyCompositionNote('comp_001') : window.phraseText);
   var old = document.getElementById('host'); var host = document.createElement('div'); host.id = 'host'; old.parentNode.replaceChild(host, old);      // a NEW element per mount, as a new tab is
   host.className = ''; host.removeAttribute('style'); host.style.height = '640px'; host.style.width = width + 'px'; host.innerHTML = '';
   document.getElementById('frame').style.width = width + 'px';
@@ -122,6 +141,7 @@ window.setup = function (width) {
     exists: function (p) { return window.notes.has(p); }, isAlreadyExists: function (e) { return /already exists/i.test((e && e.message) || ''); },
   }, {
     askPlan: function () { window.serviceCalls++; return Promise.resolve({ status: 200, json: {} }); }, planConfigured: function () { return true; },
+    composerAutoApply: function () { return window.instant === true; },
     openNote: function (id) { window.opened.push(id); },
     composerMenu: function () { return { items: [{ id: 'p', label: 'New phrase' }, { id: 'b', label: 'New bar' }], run: function () {} }; },
   });
@@ -135,7 +155,9 @@ window.focusIsField = function () { return document.activeElement === document.q
 window.dialog = function () { return [].map.call(document.querySelectorAll('.forge-chat-msg'), function (m) { return { kind: m.getAttribute('data-kind'), text: (m.querySelector('.forge-chat-text') || {}).textContent || '' }; }); };
 window.suggestion = function () { var l = document.querySelectorAll('.forge-chat-suggestion-description'); return l.length ? l[l.length - 1].textContent : ''; };
 window.livePreview = function () { var c = document.querySelectorAll('.forge-chat-msg[data-kind="suggestion"] .forge-chat-chosen'); return c.length > 0 && c[c.length - 1].textContent === 'Press Enter to apply, Esc to discard'; };
-window.list = function () { return cp.listOfNote(window.notes.get(PATH), 'phrase', { bars: VAULT_BARS, phrases: [], arrangements: [], compositions: [], kits: [] }).list; };
+window.list = function () { return cp.listOfNote(window.notes.get(PATH), window.kind, { bars: VAULT_BARS, phrases: ['phrase_001', 'phrase_002'], arrangements: [], compositions: [], kits: [] }).list; };
+window.suggestionLine = function () { var l = document.querySelectorAll('.forge-chat-msg[data-kind="suggestion"] .forge-chat-text'); return l.length ? l[l.length - 1].textContent : ''; };
+window.repairButton = function () { return document.querySelector('.forge-chat-repair'); };
 window.pinned = function () { return window.layer.pinnedId(); };
 window.hueRed = function (c) { var m = /rgba?\\((\\d+)[, ]+(\\d+)[, ]+(\\d+)/.exec(c); if (!m) return false; var R = +m[1] / 255, G = +m[2] / 255, B = +m[3] / 255, mx = Math.max(R, G, B), mn = Math.min(R, G, B), d = mx - mn; if (d < 0.15 || mx < 0.25) return false; var h; if (mx === R) h = ((G - B) / d) % 6; else if (mx === G) h = (B - R) / d + 2; else h = (R - G) / d + 4; h = h * 60; if (h < 0) h += 360; return h < 20 || h > 340; };
 window.redFound = function () { var out = []; [].forEach.call(document.querySelectorAll('#host *'), function (el) { var cs = getComputedStyle(el); [cs.color, cs.backgroundColor, cs.borderTopColor].forEach(function (c) { if (c && hueRed(c)) out.push(el.className && el.className.baseVal !== undefined ? el.className.baseVal : el.className); }); }); return out; };
@@ -238,6 +260,88 @@ for (const w of [800, 1100]) for (const theme of ['light', 'dark']) {
   verdict[`cmdZLeavesAnEditedCopy_${tag}`] = (await ev(`notes.has('bars/bar_010.md')`)) === true && (await ev('trashed.length')) === 0 && (await lastNotice()) === 'bar_010 was edited since, so it was left in place. Delete it in the file list if you want it gone.';
   await CMD_Z(); await sleep(350);
   verdict[`nextCmdZReachesTheSentence_${tag}`] = (await ev('list()')).length === lenWithSentence - 1 && (await ev('trashed.length')) === 0 && (await ev(`notes.has('bars/bar_010.md')`)) === true;
+
+  // ---- 2026-11-20-1002: ONE Enter applies; the setting restores two; "did you mean"; a typed Undo and Redo --------------------------------------------------------------------------------------------------------------------
+  // ONE Enter: a typed sentence the grammar reads is applied by the first real Enter: the list is one longer, no live preview, the dialog says `Applied. <the line>`, the composer is empty, the service was not asked.
+  await ev(`setup(${w}, { instant: true })`); await mounted(); await sleep(300);
+  const len0 = (await ev('list()')).length;
+  await typeText('Make it 20 percent slower.'); await ENTER(); await sleep(450);
+  const one = await ev(`({ list: list(), live: livePreview(), field: fieldValue(), dialog: dialog(), service: serviceCalls, sug: dialog().filter(function (d) { return d.kind === 'suggestion'; }).length })`);
+  numbers[`oneEnter@${tag}`] = { len0, list: one.list, applied: one.dialog.filter((d) => d.kind === 'applied').map((d) => d.text) };
+  verdict[`oneEnterApplies_${tag}`] = one.list.length === len0 + 1 && one.list[one.list.length - 1] === 'Make it 20 percent slower.' && one.live === false && one.field === '' && one.service === 0;
+  verdict[`oneEnterSaysAppliedInThePreviewWords_${tag}`] = one.dialog.filter((d) => d.kind === 'applied').pop().text.replace(/^✓\s*/, '') === 'Applied. Make it 20 percent slower.' && one.sug === 0;
+  await p.shot(path.join(OUT, `instant-applied-${w}-${theme}.png`), { x: 0, y: 0, width: Math.min(w, 1100), height: 640 });
+  // the setting `Preview before applying` ON (window.instant false): the first Enter previews and writes nothing, the second applies (the old story)
+  await ev(`setup(${w}, { instant: false })`); await mounted(); await sleep(300);
+  const lenP = (await ev('list()')).length;
+  await typeText('Make it 20 percent slower.'); await ENTER(); await sleep(300);
+  const first = await ev(`({ list: list(), live: livePreview() })`);
+  await ENTER(); await sleep(450);
+  verdict[`previewSettingRestoresTwoEnters_${tag}`] = first.live === true && first.list.length === lenP && (await ev('list()')).length === lenP + 1;
+  // Duplicate at once, and Cmd+Z takes the fresh copy to the trash
+  await ev(`setup(${w}, { instant: true })`); await mounted(); await sleep(300);
+  await typeText('Duplicate [[bar_009]].'); await ENTER(); await sleep(450);
+  verdict[`duplicateAppliesAtOnce_${tag}`] = JSON.stringify(await ev('creates')) === JSON.stringify(['bars/bar_010.md']) && (await ev('livePreview()')) === false && (await ev('suggestion()')) === '';
+  await focusField(); await CMD_Z(); await sleep(300);
+  verdict[`duplicateAtOnceIsUndoneByTheTrash_${tag}`] = JSON.stringify(await ev('trashed')) === JSON.stringify(['bars/bar_010.md']) && (await ev(`notes.has('bars/bar_010.md')`)) === false;
+
+  // DID YOU MEAN: `Play [[phrase_001]` (an unclosed link) in a COMPOSITION: nothing is written, the question and its button show, Enter applies the SUGGESTION
+  await ev(`setup(${w}, { instant: true, kind: 'composition' })`); await mounted(); await sleep(300);
+  const compBefore = await ev(`notes.get(PATH)`);
+  await typeText('Play [[phrase_001]'); await ENTER(); await sleep(450);
+  const dm = await ev(`({ q: suggestionLine(), sug: suggestion(), live: livePreview(), btn: repairButton() ? repairButton().textContent : null, rect: repairButton() ? repairButton().getBoundingClientRect().width : 0, field: fieldValue(), rejected: dialog().filter(function (d) { return d.kind === 'rejected'; }).length, service: serviceCalls })`);
+  numbers[`didYouMean@${tag}`] = { q: dm.q, sug: dm.sug, btn: dm.btn };
+  verdict[`suggestsTheClosedLink_${tag}`] = dm.q === 'Did you mean: Play [[phrase_001]]?' && dm.sug === 'Play [[phrase_001]].' && dm.live === true && dm.rejected === 0 && dm.service === 0;
+  verdict[`suggestionHasAButton_${tag}`] = dm.btn === 'Use this' && dm.rect > 8;
+  verdict[`suggestionIsNeverAppliedSilently_${tag}`] = (await ev(`notes.get(PATH)`)) === compBefore && dm.field === 'Play [[phrase_001]';
+  await p.shot(path.join(OUT, `instant-didyoumean-${w}-${theme}.png`), { x: 0, y: 0, width: Math.min(w, 1100), height: 640 });
+  await ENTER(); await sleep(450);
+  verdict[`enterAppliesTheSuggestion_${tag}`] = JSON.stringify(await ev('list()')) === JSON.stringify(['Play [[phrase_001]].']) && (await ev('fieldValue()')) === '';
+  // the button, with a real mouse click, does what Enter does
+  await ev(`setup(${w}, { instant: true, kind: 'composition' })`); await mounted(); await sleep(300);
+  await typeText('Play [[phrase_001]'); await ENTER(); await sleep(450);
+  const bb = await ev(`box('.forge-chat-repair')`); await p.click(bb.x, bb.y); await sleep(450);
+  verdict[`suggestionButtonApplies_${tag}`] = JSON.stringify(await ev('list()')) === JSON.stringify(['Play [[phrase_001]].']);
+  // Esc drops it: nothing written, the typed text stays
+  await ev(`setup(${w}, { instant: true, kind: 'composition' })`); await mounted(); await sleep(300);
+  await typeText('Play [[phrase_001]'); await ENTER(); await sleep(450); await ESC(); await sleep(200);
+  verdict[`escDropsTheSuggestion_${tag}`] = (await ev('list()')).length === 0 && (await ev('fieldValue()')) === 'Play [[phrase_001]' && (await ev('livePreview()')) === false && (await ev('repairButton()')) === null;
+  // a typo of a verb, and Move with place words (a phrase)
+  await ev(`setup(${w}, { instant: true })`); await mounted(); await sleep(300);
+  await typeText('Delet bar 2.'); await ENTER(); await sleep(450);
+  verdict[`suggestsTheVerbTypo_${tag}`] = (await ev('suggestionLine()')) === 'Did you mean: Delete bar 2?' && (await ev('suggestion()')) === 'Delete bar 2.';
+  await ESC(); await clearField(); await typeText('Move bar 4 before bar 2.'); await ENTER(); await sleep(450);
+  verdict[`suggestsOneBarForMovePlaceWords_${tag}`] = (await ev('suggestionLine()')) === 'Did you mean: Move bar 4 one bar left? Move takes one bar one place at a time. Bar 4 before bar 2 is 2 places left: say it twice (the second time for bar 3).' && (await ev('suggestion()')) === 'Move bar 4 one bar left.';
+  await ESC(); await clearField(); await typeText('Banana split.'); await ENTER(); await sleep(450);
+  verdict[`noRepairKeepsTodaysMessage_${tag}`] = (await ev('repairButton()')) === null && (await ev('dialog()')).some((d) => d.kind === 'rejected') && (await ev('suggestionLine()')) === 'Did you mean: Move bar 4 one bar left? Move takes one bar one place at a time. Bar 4 before bar 2 is 2 places left: say it twice (the second time for bar 3).';      // the newest suggestion line is still the OLD Move one: no new one was made
+
+  // A TYPED UNDO AND REDO: two sentences, then `Undo` (one fewer), `Undo 5` (all that is left, said how many), `Redo`, nothing to undo said in words, never the service
+  await ev(`setup(${w}, { instant: true })`); await mounted(); await sleep(300);
+  const base = (await ev('list()')).length;
+  await typeText('Make it 20 percent slower.'); await ENTER(); await sleep(400); await typeText('Make it 8 bars long.'); await ENTER(); await sleep(400);
+  const two = (await ev('list()')).length;
+  await typeText('Undo'); await ENTER(); await sleep(450);
+  verdict[`typedUndoTakesBackTheLast_${tag}`] = two === base + 2 && (await ev('list()')).length === base + 1 && (await ev('fieldValue()')) === '' && (await ev('serviceCalls')) === 0;
+  await typeText('Redo'); await ENTER(); await sleep(450);
+  verdict[`typedRedoPutsItBack_${tag}`] = (await ev('list()')).length === base + 2;
+  await typeText('Undo 5'); await ENTER(); await sleep(600);
+  const undid = await lastNotice();
+  const afterN = (await ev('list()')).length;
+  const saidN = two >= 5 ? 'Undid 5 sentences.' : `Undid ${two} sentence${two === 1 ? '' : 's'}: there was nothing more to undo.`;      // every undo takes one line (a stack entry, or the last item as it is)
+  verdict[`typedUndoCountSaysHowMany_${tag}`] = afterN === Math.max(0, two - 5) && undid === saidN;
+  numbers[`typedUndo@${tag}`] = { base, two, afterN, notice: undid, expected: saidN };
+  verdict[`typedUndoNeverAListLine_${tag}`] = !(await ev(`notes.get(PATH)`)).includes('Undo') && !(await ev(`notes.get(PATH)`)).includes('Redo');
+  // nothing left to undo: said in words (an EMPTY composition has nothing at all)
+  await ev(`setup(${w}, { instant: true, kind: 'composition' })`); await mounted(); await sleep(300);
+  await typeText('Undo'); await ENTER(); await sleep(300);
+  verdict[`nothingToUndoIsSaid_${tag}`] = (await lastNotice()) === 'There is nothing to undo.' && (await ev('fieldValue()')) === '';
+  await typeText('Redo'); await ENTER(); await sleep(300);
+  verdict[`nothingToRedoIsSaid_${tag}`] = (await lastNotice()) === 'There is nothing to redo.';
+  // a fresh duplicate goes to the trash by a typed Undo
+  await ev(`setup(${w}, { instant: true })`); await mounted(); await sleep(300);
+  await typeText('Duplicate [[bar_009]].'); await ENTER(); await sleep(450); await typeText('Undo'); await ENTER(); await sleep(450);
+  verdict[`typedUndoTrashesAFreshDuplicate_${tag}`] = JSON.stringify(await ev('trashed')) === JSON.stringify(['bars/bar_010.md']) && (await lastNotice()) === 'Removed bar_010 (moved to the trash).';
+
 
   // ---- general ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
   await ev(`setup(${w})`); await mounted(); await sleep(300);

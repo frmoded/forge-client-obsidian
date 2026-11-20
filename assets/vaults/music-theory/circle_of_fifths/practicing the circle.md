@@ -34,6 +34,7 @@ You are done when you can find any key's signature in seconds, name its relative
   padding:6px 2px;
   margin:10px 0;
 ">
-<span>&larr; <a class="internal-link" data-href="which keys are close" href="which keys are close" style="color:#1963D1;">which keys are close</a></span>
+<span>&larr; <a class="internal-link" data-href="using the circle of fifths" href="using the circle of fifths" style="color:#1963D1;">using the circle of fifths</a></span>
 <span>&uarr; <a class="internal-link" data-href="Circle of fifths" href="Circle of fifths" style="color:#1963D1;">Circle of fifths</a></span>
+<span><a class="internal-link" data-href="Coltrane circle" href="Coltrane circle" style="color:#1963D1;">Coltrane circle</a> &rarr;</span>
 </div>

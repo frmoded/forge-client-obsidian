@@ -67,8 +67,8 @@ export interface ForgeSettings {
   dialogHeight: number;
   /** 2026-11-18 (0935): the left column's share of a two-column music tab (the draggable divider), per vault (this is the vault's own plugin data). No control in this page. Read through sanitizeRatio. */
   dialogRatio: number;
-  /** 2026-11-17-2001: MUSIC_COMPOSER_AUTO_APPLY (default off): a sentence the grammar reads exactly is applied on the first Enter, without a preview. */
-  composerAutoApply: boolean;
+  /** 2026-11-20-1002: `Preview before applying` (default OFF): off = ONE Enter applies a sentence the grammar reads completely; on = the first Enter shows what would be written and the second applies (the old behaviour). Replaces the old auto-apply key (a stored one is ignored). */
+  previewBeforeApplying: boolean;
 }
 
 export const DEFAULT_SETTINGS: ForgeSettings = {
@@ -91,7 +91,7 @@ export const DEFAULT_SETTINGS: ForgeSettings = {
   dialogHistory: {},
   dialogHeight: 112,
   dialogRatio: 0.4,
-  composerAutoApply: false,
+  previewBeforeApplying: false,
 };
 
 export class ForgeSettingTab extends PluginSettingTab {
@@ -238,16 +238,16 @@ export class ForgeSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName('Composer: apply a sentence the grammar reads exactly without a preview')
+      .setName('Preview before applying')
       .setDesc(
-        'Off (default): Enter shows what the sentence would do and a second Enter applies it; nothing is written before the second Enter. '
-        + 'On: a sentence the grammar reads exactly is applied on the first Enter (the sentence service always previews first). Takes effect when a tab is reopened.'
+        'Off (default): one Enter applies a sentence the grammar reads completely (a sentence the sentence service translated is still shown first). '
+        + 'On: the first Enter shows what would be written and a second Enter applies it. Takes effect at the next Enter.'
       )
       .addToggle(toggle =>
         toggle
-          .setValue(this.plugin.settings.composerAutoApply)
+          .setValue(this.plugin.settings.previewBeforeApplying)
           .onChange(async (value) => {
-            this.plugin.settings.composerAutoApply = value;
+            this.plugin.settings.previewBeforeApplying = value;
             await this.plugin.saveSettings();
           })
       );

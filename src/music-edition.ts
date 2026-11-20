@@ -101,4 +101,11 @@ export interface ListModel {
     annotate: typeof import('./phrase-steps-lineage-core.ts').annotateWithSteps;
     lineageOf: typeof import('./phrase-steps-lineage-core.ts').stepLineageOf;
   };
+  /** 2026-11-20-1002: typed-step-core.ts: a typed Undo or Redo (read by the same reader as Duplicate): previewed (applied at once) and run through the note's own undo stack; null = not a step sentence. Lean: always null (no sentence is a step). */
+  typed: {
+    preview: typeof import('./typed-step-core.ts').previewTyped;
+    apply: typeof import('./typed-step-core.ts').applyTyped;
+  };
+  /** 2026-11-20-1002: did-you-mean-core.ts: the deterministic repair of a sentence the grammar cannot read (`Did you mean: ...?`), said in the dialog and handed back as the composer's proposal; null = none. Lean: always null (the bare message stays). */
+  repair: { offer: typeof import('./did-you-mean-core.ts').offerRepair };
 }

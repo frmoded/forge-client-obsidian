@@ -17,7 +17,7 @@ export interface DialogEntry {
   at: number;                                         // ms since the epoch the entry was made (the dialog shows its age: relative-time-core.ts); 0 = an old entry that never had one: it shows no counter
   kind: DialogKind;
   text: string;
-  suggestion?: { description: string; recipe: string; state: SuggestionState };
+  suggestion?: { description: string; recipe: string; state: SuggestionState; /** 2026-11-20-1002: a "did you mean": the panel draws its button (the same as Enter) while it is open */ repair?: true };
   /** 2026-11-19-0992: the notes this line names (`[[bar_010]]` in its text): the panel draws each as a link that opens the note. `id` is the lineage id (`bars/bar_010`). Absent = plain text, as every older entry. */
   links?: DialogLink[];
 }
@@ -25,10 +25,10 @@ export interface DialogLink { name: string; id: string }
 /** What the description controller says happened (one stream feeds the console lines and this dialog). */
 export type DialogEvent =
   | { type: 'you'; text: string }
-  | { type: 'applied'; change: string; description: string }
+  | { type: 'applied'; change: string; description: string; /** 2026-11-20-1002: it was applied at once (no preview was shown): `Applied. <the canonical lines>`, and `This replaces: <the old line>` after the fact */ instant?: { replaces?: string } }
   | { type: 'rejected'; line: number; column: number; message: string }
   | { type: 'asking' }
-  | { type: 'suggestion'; description: string; recipe: string; via?: 'grammar' | 'service'; /** 2026-11-19-0970: the earlier sentence this one replaces (the list's conflict rule), said in plain text after the line */ replaces?: string }
+  | { type: 'suggestion'; description: string; recipe: string; via?: 'grammar' | 'service' | 'repair'; /** 2026-11-20-1002: with via 'repair': the question's words (`Did you mean: Delete bar 2?` and its hint) */ question?: string; /** 2026-11-19-0970: the earlier sentence this one replaces (the list's conflict rule), said in plain text after the line */ replaces?: string }
   | { type: 'refused'; message: string; by?: 'plugin' }
   | { type: 'dropped'; message: string }
   | { type: 'notice'; message: string }
@@ -52,10 +52,10 @@ export function fromOutcome(ev: DialogEvent): Omit<DialogEntry, 'id' | 'at'> {
   switch (ev.type) {
     case 'created': return { kind: 'applied', text: redact(ev.text), links: ev.links.map((l) => ({ name: l.name, id: l.id })) };
     case 'you': return { kind: 'you', text: redact(ev.text) };
-    case 'applied': return { kind: 'applied', text: redact(`Applied (${ev.change}): ${ONE(ev.description)}`) };
+    case 'applied': return { kind: 'applied', text: redact(ev.instant ? `Applied. ${ONE(ev.description)}${ev.instant.replaces ? ` This replaces: ${ONE(ev.instant.replaces)}` : ''}` : `Applied (${ev.change}): ${ONE(ev.description)}`) };
     case 'rejected': return { kind: 'rejected', text: redact(`The grammar did not accept this sentence (line ${ev.line}, column ${ev.column}: ${ev.message}).`) };
     case 'asking': return { kind: 'asking', text: 'Asking the sentence service...' };
-    case 'suggestion': return { kind: 'suggestion', text: redact(`${ev.via === 'grammar' ? 'The grammar read your sentence. This is what would be written.' : 'The service suggests this.'}${ev.replaces ? ` This replaces: ${ONE(ev.replaces)}` : ''}`), suggestion: { description: redact(ev.description), recipe: redact(ev.recipe), state: 'open' } };
+    case 'suggestion': return { kind: 'suggestion', text: redact(ev.via === 'repair' ? ev.question ?? '' : `${ev.via === 'grammar' ? 'The grammar read your sentence. This is what would be written.' : 'The service suggests this.'}${ev.replaces ? ` This replaces: ${ONE(ev.replaces)}` : ''}`), suggestion: { description: redact(ev.description), recipe: redact(ev.recipe), state: 'open', ...(ev.via === 'repair' ? { repair: true as const } : {}) } };
     case 'refused': return { kind: 'refused', text: redact(ev.by === 'plugin' ? `Refused: ${ev.message}` : `The service refused: ${ev.message}`) };
     case 'dropped': return { kind: 'dropped', text: redact(`Dropped: ${ev.message}`) };
     case 'notice': return { kind: 'notice', text: redact(ev.message) };

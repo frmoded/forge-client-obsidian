@@ -268,3 +268,27 @@ test('setNote puts a plain line under the card; typing clears it', () => {
   r.type('more');
   assert.equal(r.q('.forge-composer-error').textContent, '');
 });
+
+// ---- 2026-11-20-1002: the preview is told whether the box will apply at once; a suggestion is applied by Enter (never by itself) ----------------------------------------------------------------------------
+test('2026-11-20-1002: the preview is asked WITH the box\'s own answer to "will this apply at once?" (the controller then says nothing in the dialog that the apply would repeat); with the flag off it is told false', async () => {
+  const seen: Array<{ text: string; opts: unknown }> = [];
+  const mk = (flag: boolean | undefined) => rig({ ...(flag === undefined ? {} : { autoApply: () => flag }), preview: async (t, o) => { seen.push({ text: t, opts: o }); return { ok: true, proposal: { description: `Would write: ${t}.`, via: 'grammar' } }; } });
+  const on = mk(true); on.type('exact'); on.key('Enter'); await on.flush();
+  const off = mk(false); off.type('exact'); off.key('Enter'); await off.flush();
+  const none = mk(undefined); none.type('exact'); none.key('Enter'); await none.flush();
+  assert.deepEqual(seen.map((s) => (s.opts as { instant?: boolean } | undefined)?.instant), [true, false, false]);
+  assert.deepEqual(on.applies, ['exact']); assert.deepEqual(off.applies, []); assert.deepEqual(none.applies, []);
+});
+test('2026-11-20-1002: a "did you mean" proposal (carrying `instead`) waits even with auto-apply on, and Enter hands the proposal (with the sentence to apply instead) to apply()', async () => {
+  const got: Array<{ text: string; instead?: string }> = [];
+  const r = rig({ autoApply: () => true, preview: async () => ({ ok: true, proposal: { description: 'Delete bar 2.', via: 'grammar', instead: 'Delete bar 2.' } }), apply: async (t, p) => { got.push({ text: t, instead: p.instead }); return { ok: true, disk: '' }; } });
+  r.type('Delet bar 2.'); r.key('Enter'); await r.flush();
+  assert.deepEqual(got, [], 'never applied by itself'); assert.equal(r.handle.composer().phase, 'previewing'); assert.equal(r.q('.forge-prompt-box-text').value, 'Delet bar 2.');
+  r.key('Enter'); await r.flush();
+  assert.deepEqual(got, [{ text: 'Delet bar 2.', instead: 'Delete bar 2.' }]); assert.equal(r.q('.forge-prompt-box-text').value, '');
+});
+test('2026-11-20-1002: a proposal marked `now` (a typed Undo) is applied at the first Enter with the flag off, and the box shows what the note says after it', async () => {
+  const r = rig({ preview: async () => ({ ok: true, proposal: { description: 'Undo', via: 'grammar', now: true } }), apply: async () => ({ ok: true, disk: '' }) });
+  r.type('Undo'); r.key('Enter'); await r.flush();
+  assert.equal(r.handle.composer().phase, 'idle'); assert.equal(r.q('.forge-prompt-box-text').value, '');
+});

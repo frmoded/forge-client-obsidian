@@ -32,14 +32,14 @@ export type PreviewResult = { ok: true; proposal: Proposal } | { ok: false; mess
 export interface ComposerMenuItem { id: string; label: string }
 export interface PromptBoxPorts {
   /** Ask what the sentence would do WITHOUT writing: the grammar first, the sentence service when the grammar cannot read it (the caller's rules, unchanged). */
-  preview(text: string): Promise<PreviewResult>;
+  preview(text: string, opts?: { instant?: boolean }): Promise<PreviewResult>;
   /** Write it: the proposal the person saw, for `text`. `ok: false` = it did not go through (the line under the card says why). `ok: true` carries the Description the note says now. */
   apply(text: string, proposal: Proposal): Promise<{ ok: boolean; disk?: string; message?: string }>;
   /** The person pressed Esc while a request ran: drop it (its answer is ignored in any case). */
   cancel?(): void;
   /** Esc on a preview, or typing over it: the proposal is dropped (nothing was written). */
   discard?(): void;
-  /** MUSIC_COMPOSER_AUTO_APPLY: a sentence the grammar reads exactly skips the preview. Default off. */
+  /** MUSIC_COMPOSER_AUTO_APPLY: a sentence the grammar reads exactly skips the preview. Absent = off (2026-11-20-1002: the plugin supplies it, and its default is ON; the setting `Preview before applying` makes it false). The preview is told (`instant`) so it says nothing the apply would repeat. */
   autoApply?(): boolean;
   /** The "+" menu: the four New actions and "Insert a link to a note" (the tab says what is in it). */
   menu?: {
@@ -153,12 +153,12 @@ export function mountPromptBox(parent: HTMLElement, ports: PromptBoxPorts, initi
     switch (effect.do) {
       case 'preview': {
         note = null;
-        const { seq } = effect; const sent = effect.text;
+        const { seq } = effect; const sent = effect.text; const instant = ports.autoApply?.() === true;
         void (async () => {
           let res: PreviewResult;
-          try { res = await ports.preview(sent); } catch (e) { res = { ok: false, message: `Could not ask: ${(e as Error)?.message ?? e}` }; console.error('[forge-composer] preview threw', e); }
+          try { res = await ports.preview(sent, { instant }); } catch (e) { res = { ok: false, message: `Could not ask: ${(e as Error)?.message ?? e}` }; console.error('[forge-composer] preview threw', e); }
           if (disposed) return;
-          if (res.ok === true) dispatch({ type: 'resolved', seq, proposal: res.proposal, autoApply: ports.autoApply?.() === true });
+          if (res.ok === true) dispatch({ type: 'resolved', seq, proposal: res.proposal, autoApply: instant });
           else dispatch({ type: 'failed', seq, message: res.message });
         })();
         break;

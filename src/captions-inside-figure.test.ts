@@ -160,7 +160,8 @@ function figuresOf(note: string): Fig[] {
 }
 const chapterFigures = CHAPTERS.flatMap((c) => walkMd(c)).flatMap(figuresOf);
 test('no note of the three chapters keeps the italic line a caption was seeded from (the caption is inside the figure now); every figure of those chapters has a caption', () => {
-  assert.ok(chapterFigures.length >= 23, `${chapterFigures.length} figures`);
+  // 2026-11-20-1002 (deliberate): the floor moves from 23 to 22 figures. The wizard's edit of circle_of_fifths/Circle of fifths.md (vault 1b18279, carried in 0.11.116) took the chapter's intro wheel embed out ("Try it: click a key on the wheel"); the wheel is still embedded in building the circle of fifths, and every remaining figure still has its caption. The floor only guards against a walk that finds nothing.
+  assert.ok(chapterFigures.length >= 22, `${chapterFigures.length} figures`);
   for (const f of chapterFigures) {
     assert.ok(f.figure in captions, `${f.note}: ${f.figure} has no entry in captions.json`);
     if (f.below) { const seed = C.seedFromItalic(f.below.slice(1, -1)), cap = captions[f.figure]; assert.ok(!(seed.title === cap.title && seed.line === cap.line), `${f.note}:${f.line}: the italic line under ${f.figure} is the one the caption was seeded from`); }
