@@ -32,7 +32,7 @@ import {
 } from './bar-selection-core.ts';
 import { mountSelectionMenu, type SelectionMenuHandle } from './bar-selection-menu-dom.ts';
 import { barSelectionHost } from './bar-selection-bus.ts';
-import { barNumberOf } from './duplicate-sentence-core.ts';
+import { listModel } from './list-model-selected.ts';       // 2026-11-19-0997: `barNumberOf` (Duplicate's bar word) comes through the list-model seam
 import { isStructureOp } from './bar-structure-core.ts';
 import { MIX_BAR_ROLE, MIX_HIT_ROLE, annotateMixPayload, mixLineageOf } from './mix-lineage-core.ts';
 import { paintMixHits } from './mix-hits-dom.ts';
@@ -832,7 +832,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
   const copyClickPort = (): ScoreInspectorPorts['copyClick'] => ({
     armed: () => barSelectionHost()?.duplicateArmed?.(notePath) === true,
     onBar: (e) => {
-      const bar = barNumberOf(e.prov.params, e.prov.role === MIX_BAR_ROLE || e.prov.role === MIX_HIT_ROLE);          // 2026-11-19-0996b: the bar's number in the Score now (a mix is one bar and has none: bar 1)
+      const bar = listModel.duplicate.barNumberOf(e.prov.params, e.prov.role === MIX_BAR_ROLE || e.prov.role === MIX_HIT_ROLE);          // 2026-11-19-0996b: the bar's number in the Score now (a mix is one bar and has none: bar 1)
       const pin = pinnedNoteFor(e.prov);
       const host = barSelectionHost();
       console.info(`[forge-duplicate] copy click on ${e.id}: ${pin ? pin.noteId : 'no source note'} (bar ${bar ?? '?'})`);

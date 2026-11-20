@@ -28,7 +28,8 @@ import { phraseDescription, phraseRecipeSteps } from './phrase-notes-core.ts';
 import { describe } from './phrase-describe-core.ts';
 import { extractDescription } from './v2-note-core.ts';
 import { isBarPath, type PhraseParams } from './phrase-core.ts';
-import { createBarList, type BarAppendOpts, type BarAppendResult } from './bar-list-controller.ts';
+import type { BarAppendOpts, BarAppendResult } from './bar-list-controller.ts';
+import { listModel } from './list-model-selected.ts';       // 2026-11-19-0997: the bar list and Duplicate come through the list-model seam (music-edition.ts `ListModel`), not by import: the lean bundle carries none of their cores
 import type { PromptBoxHandle } from './prompt-box-dom.ts';
 import { mountChatPanel, type ChatPanelHandle } from './chat-panel-dom.ts';
 import { append, expireOpen, fromOutcome, memoryStore, openSuggestion, resolveSuggestion, type DialogEntry, type DialogEvent, type DialogStore } from './dialog-core.ts';
@@ -38,8 +39,8 @@ import { REDO_ID, REDO_LABEL, UNDO_ID, UNDO_LABEL } from './composer-core.ts';
 import { isEmptyNote } from './empty-note-core.ts';
 import { FAMILY_KINDS } from './note-family-core.ts';
 import type { ComposerMenuItem, PreviewResult, PromptBoxPorts } from './prompt-box-dom.ts';
-import { barInsertion, barWordVerb, duplicatePreviewLine, idParts, linkInsertion, readActionText, resolveDuplicateTarget, type ActionRead, type ResolvedDuplicate } from './duplicate-sentence-core.ts';
-import { copyNoteText, createdLine, type DuplicateResult } from './duplicate-note-core.ts';
+import type { ActionRead, ResolvedDuplicate } from './duplicate-sentence-core.ts';
+import type { DuplicateResult } from './duplicate-note-core.ts';
 import type { CopyMark, UndoCopyResult } from './duplicate-undo-core.ts';
 import type { Proposal } from './composer-core.ts';
 
@@ -262,7 +263,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   const setBoxBusy = (path: string, message: string | null): void => { for (const b of boxes.values()) if (b.path === path) b.handle.setBusy(message); };
   const setBoxNote = (path: string, message: string | null): void => { if (message !== null && ports.showBoxStatus && !ports.showBoxStatus()) return; for (const b of boxes.values()) if (b.path === path) b.handle.setNote(message); };        // 2026-11-15-1217: the status line is the legacy view; a clear (null) always goes through
   /** 2026-11-19-0993 (THE LIST MODEL, stage 3: BARS): a bar note is a list too (`lines:`); its half of this controller (bar-list-controller.ts) shares the dialog, the tracked write, the box and the trace lines. A bar is routed to it by its PATH (`isBarPath`), never by `familyOfPath`. */
-  const bar = createBarList({ proc: (path, fn) => proc(path, fn), say: (path, ev) => say(path, ev), pb: (line) => pb(line), pbWarn: (line) => pbWarn(line), trace: (line) => ports.trace(line), setBoxNote: (path, m) => setBoxNote(path, m), endSuggestion: (path, state) => endSuggestion(path, state), basename });
+  const bar = listModel.createBarList({ proc: (path, fn) => proc(path, fn), say: (path, ev) => say(path, ev), pb: (line) => pb(line), pbWarn: (line) => pbWarn(line), trace: (line) => ports.trace(line), setBoxNote: (path, m) => setBoxNote(path, m), endSuggestion: (path, state) => endSuggestion(path, state), basename });
   /** The Description on disk, again, into every box of this note (a control wrote it, a hand edit, an apply): unapplied typing is never overwritten (the box offers the choice). */
   const refreshBoxes = async (path: string): Promise<void> => {
     if (disposed) return;
@@ -303,7 +304,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     if (isBarPath(path)) { if (!said) say(path, { type: 'you', text }); return bar.applyBar(path, text); }       // 2026-11-19-0993: the typed sentences in the bar grammar, appended to the bar's list
     const family = familyOfPath(path); if (family === null) { pbWarn(`ask skipped: ${path} is not a phrase, arrangement or composition note`); return { ok: false }; }
     if (!said) say(path, { type: 'you', text });                                                          // 2026-11-13-1214: the sentence as typed, when Apply is pressed (2026-11-17-2001: said already when the preview was asked for)
-    if (family === 'phrase') { const act = readActionText(text); if (act.kind !== 'none') return applyAction(path, act); }          // 2026-11-19-0992: an action never touches the list: no process call, no write of this note
+    if (family === 'phrase') { const act = listModel.duplicate.readActionText(text); if (act.kind !== 'none') return applyAction(path, act); }          // 2026-11-19-0992: an action never touches the list: no process call, no write of this note
     return applyList(path, family, text);                                                                 // 2026-11-19-0970 / 0980: a sentence is APPENDED to the list of a phrase, an arrangement or a composition
   }
   const set = (path: string, u: Ui | null): void => { if (u === null || u.state.kind === 'synced') ui.delete(path); else { ui.set(path, u); notices.delete(path); } syncBars(); };
@@ -561,12 +562,12 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     const refuse = (message: string): PreviewResult => { pb(`action refused: ${message}`); say(path, { type: 'refused', message, by: 'plugin' }); setBoxNote(path, `Refused: ${message}`); return { ok: false, message: `Refused: ${message}` }; };
     if (act.kind === 'refused') return refuse(act.message);
     if (ports.duplicate === undefined) return refuse('Duplicate is not available in this build: it cannot copy notes here.');
-    const of = resolveDuplicateTarget(act.target, ports.vault());
+    const of = listModel.duplicate.resolveDuplicateTarget(act.target, ports.vault());
     if (of.ok === false) return refuse(of.message);
     let source = ''; try { source = await ports.read(of.path); } catch (e) { console.error('[forge-duplicate] previewAction: could not read the source', e); return refuse(`Could not read [[${of.name}]]: ${(e as Error)?.message ?? e}`); }
-    const dry = copyNoteText(source, of, 'copy_preview', ports.vault());                                    // the dry run: a note that cannot be copied is said NOW, not after the second Enter
+    const dry = listModel.duplicate.copyNoteText(source, of, 'copy_preview', ports.vault());                                    // the dry run: a note that cannot be copied is said NOW, not after the second Enter
     if (dry.ok === false) return refuse(dry.message);
-    const description = duplicatePreviewLine(of);
+    const description = listModel.duplicate.duplicatePreviewLine(of);
     pb('grammar verdict: accepted (action, preview, nothing written)');
     say(path, { type: 'suggestion', description, recipe: '', via: 'grammar' });
     return { ok: true, proposal: { description, via: 'grammar', action: true } };
@@ -576,14 +577,14 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     const fail = (message: string): { ok: boolean; message: string } => { pb(`action failed: ${message}`); setBoxNote(path, message); say(path, { type: 'failed', message }); return { ok: false, message }; };
     if (act.kind === 'refused') { say(path, { type: 'refused', message: act.message, by: 'plugin' }); setBoxNote(path, `Refused: ${act.message}`); return { ok: false, message: `Refused: ${act.message}` }; }
     if (ports.duplicate === undefined) return fail('Duplicate is not available in this build: it cannot copy notes here.');
-    const of = resolveDuplicateTarget(act.target, ports.vault());
+    const of = listModel.duplicate.resolveDuplicateTarget(act.target, ports.vault());
     if (of.ok === false) return fail(of.message);
     const done = await ports.duplicate(of);
     if (done.ok === false) return fail(done.message);
     pb(`action done: ${done.id} is a copy of ${done.sourceId}`);
     setBoxNote(path, 'Copied.');
-    say(path, { type: 'created', text: createdLine(done), links: [{ name: done.name, id: done.id }, { name: done.sourceName, id: done.sourceId }] });
-    pb(`action said: ${createdLine(done)} (drawn in ${[...boxes.values()].filter((b) => b.path === path && b.chat.attached()).length} panel(s) of ${basename(path)})`);       // 2026-11-19-0992b: the console says where the line was drawn (the driver saw nothing twice)
+    say(path, { type: 'created', text: listModel.duplicate.createdLine(done), links: [{ name: done.name, id: done.id }, { name: done.sourceName, id: done.sourceId }] });
+    pb(`action said: ${listModel.duplicate.createdLine(done)} (drawn in ${[...boxes.values()].filter((b) => b.path === path && b.chat.attached()).length} panel(s) of ${basename(path)})`);       // 2026-11-19-0992b: the console says where the line was drawn (the driver saw nothing twice)
     if (ports.undoCopy !== undefined) {                                                                     // 2026-11-19-0992a: the copy is an UNDO ENTRY (it changes no line of the list): Cmd/Ctrl+Z in the empty composer takes it back while its bytes are what was written
       try { const list = listOf(await ports.read(path), 'phrase'); stackOf(path).push({ before: [...list], after: [...list], added: [], replaced: [], copy: { path: done.path, name: done.name, hash: done.hash } }); }
       catch (e) { console.error('[forge-duplicate] could not make the copy an undo entry', e); }
@@ -595,24 +596,24 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     const box = [...boxes.values()].find((b) => b.path === path);
     if (box === undefined) return { ok: false, message: 'There is no composer open for this note.' };
     if (!duplicateArmed(path)) return { ok: false, message: 'The composer is empty: a click on a bar pins it.' };
-    if (barWordVerb(box.handle.state().text) !== null) {                                                    // 2026-11-19-0996b: the text starts with a bar word (Duplicate, Copy, Move, Delete, Remove, Keep, Morph, Mix, Extend): the click says WHICH BAR (its number in the Score now), at the caret, no preview, no pin
+    if (listModel.duplicate.barWordVerb(box.handle.state().text) !== null) {                                                    // 2026-11-19-0996b: the text starts with a bar word (Duplicate, Copy, Move, Delete, Remove, Keep, Morph, Mix, Extend): the click says WHICH BAR (its number in the Score now), at the caret, no preview, no pin
       if (typeof bar !== 'number' || !Number.isInteger(bar) || bar < 1) {
         const message = 'I cannot tell which bar that is, so I cannot write its number.';
         say(path, { type: 'notice', message }); box.handle.focus();
         return { ok: false, message };
       }
       pb(`bar click: bar ${bar}`);
-      box.handle.insertAtCaret((before) => barInsertion(before, bar));
+      box.handle.insertAtCaret((before) => listModel.duplicate.barInsertion(before, bar));
       return { ok: true, message: `Added bar ${bar} to the composer.` };
     }
-    const parts = idParts(noteId);
+    const parts = listModel.duplicate.idParts(noteId);
     if (parts === null) {
       const message = noteId === null ? 'I cannot tell which note made that bar, so I cannot copy it.' : `That bar comes from ${noteId}, which is not a bar, a phrase, an arrangement or a composition I can copy.`;
       say(path, { type: 'notice', message }); box.handle.focus();
       return { ok: false, message };
     }
     pb(`link click: ${noteId}`);                                                                            // 2026-11-19-0992a (R1): any other text: the link goes in at the caret, focus back, no preview, nothing else
-    box.handle.insertAtCaret((before) => linkInsertion(before, parts.name));
+    box.handle.insertAtCaret((before) => listModel.duplicate.linkInsertion(before, parts.name));
     return { ok: true, message: `Added [[${parts.name}]] to the composer.` };       // 2026-11-19-0996b: the 0992 branch (a text that ENDS with the word Duplicate got ` [[name]].` and a preview) is gone: a Duplicate sentence starts the text, so it is a bar word now, and the note copy is the typed `Duplicate [[bar_007]].`
   }
 
@@ -882,7 +883,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     cancelledAsk.delete(path);
     let cur = '';
     try { cur = await ports.read(path); } catch (e) { const m = `Could not read the note: ${(e as Error)?.message ?? e}`; say(path, { type: 'failed', message: m }); return { ok: false, message: m }; }
-    if (family === 'phrase') { const act = readActionText(text); if (act.kind !== 'none') return previewAction(path, act); }          // 2026-11-19-0992: `Duplicate [[bar_007]].` is an ACTION sentence, read here (no model call) and never a line of the list
+    if (family === 'phrase') { const act = listModel.duplicate.readActionText(text); if (act.kind !== 'none') return previewAction(path, act); }          // 2026-11-19-0992: `Duplicate [[bar_007]].` is an ACTION sentence, read here (no model call) and never a line of the list
     return previewList(path, family, text, cur);                                                          // 2026-11-19-0970 / 0980: the typed sentence APPENDED to the list (or in place of the line it replaces), nothing written
   }
   /** The service, once, for a sentence the grammar did not accept (the same gates as ever); its answer is the proposal the composer shows, or why there is none. (2026-11-19-0970: the tail of previewFromBoxCore, shared with the list.) */

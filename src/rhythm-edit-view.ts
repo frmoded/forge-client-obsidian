@@ -42,7 +42,8 @@ import { isScoreFirstVault } from './vault-profile-core.ts';
 import { isKitPath } from './kit-core.ts';
 import { keepBarProvenance } from './bar-provenance-core.ts';
 import { barListHost } from './bar-list-bus.ts';
-import { createBarBoxHost, type BarBoxHost } from './bar-box-host-core.ts';
+import type { BarBoxHost } from './bar-box-host-core.ts';
+import { listModel } from './list-model-selected.ts';       // 2026-11-19-0997: the bar's Beat Box host comes through the list-model seam (lean: none, the tab writes as it always did)
 import { isBarPath } from './phrase-core.ts';
 import { kitChoices, type KitChoice } from './kit-picker-core.ts';
 import { messageDelivery } from './score-first-messages-core.ts';
@@ -309,7 +310,7 @@ export class RhythmEditView extends EditableFileView {
   private makeBarBox(file: TFile, initial: RhythmData): BarBoxHost | null {
     const host = isBarPath(file.path) ? barListHost() : null;
     if (host === null) return null;
-    return createBarBoxHost(initial, {
+    return listModel.createBarBoxHost(initial, {
       appendLine: (sentence) => host.appendLine(file.path, sentence),
       load: (d) => { this.iframe?.contentWindow?.postMessage(buildLoadMessage(d, file.basename, 'edit', null, true, false, this.hoverLink, this.kits), '*'); this.scoreArea?.showNow(d); },
       reload: () => this.sendLoad(),

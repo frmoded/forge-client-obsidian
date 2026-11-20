@@ -100,7 +100,9 @@ for (const edition of ['lean', 'music'] as const) {
     assert.ok(read.ok);
     if (read.ok) { assert.equal(read.value.data.tempo_bpm, 120); assert.deepEqual(Object.keys(read.value.data.channels), ['kick', 'snare', 'hihat']); }
     // 2026-11-19-0993 (deliberate): in a score-first vault a bar's Beat Box save is a LINE of its list (the list model, stage 3): the front matter keeps every line it had and gains `lines:` (the head of the bar as it was, then what the save says)
-    assert.ok(after.startsWith('---\ntype: data\ncontent_type: json\ndescription: "bar_001 — x."\nlines:\n  - "Start with 16 steps in 4/4 at 100 beats per minute: '), 'the frontmatter lines are untouched, then the list');
+    // 2026-11-19-0997 (deliberate): the LEAN edition no longer carries the list model (src/list-model.lean.ts: no Beat Box host for a bar), so its Beat Box save is the autosave it was before 0993: the front matter is untouched and has NO `lines:`. The music edition's line is unchanged.
+    if (edition === 'lean') assert.ok(after.startsWith('---\ntype: data\ncontent_type: json\ndescription: "bar_001 — x."\n---\n'), 'lean: the front matter is untouched and holds no list');
+    else assert.ok(after.startsWith('---\ntype: data\ncontent_type: json\ndescription: "bar_001 — x."\nlines:\n  - "Start with 16 steps in 4/4 at 100 beats per minute: '), 'the frontmatter lines are untouched, then the list');
     assert.match(after, /\n---\n\n<!-- where this bar came from/);
   });
 
@@ -120,8 +122,10 @@ for (const edition of ['lean', 'music'] as const) {
       const after = v.files.get('bars/bar_001.md')!;
       // 2026-11-19-0993 (deliberate): in a SCORE-FIRST vault the save is a line of the bar's list (it gains `lines:`; every other front matter line and the body above the fence are as they were); in any other vault it is exactly what it was
       const above = after.slice(0, after.indexOf('```json')), was = plain.slice(0, plain.indexOf('```json'));
-      assert.equal(toml === SCORE_FIRST_TOML ? above.replace(/\nlines:\n(?:  - .*\n)+---\n/, '\n---\n') : above, was, `${toml === null ? 'no forge.toml' : toml.slice(0, 20)}: every byte above the fence`);
-      assert.equal(toml === SCORE_FIRST_TOML, /\nlines:\n/.test(above), 'only a score-first vault keeps a list');
+      // 2026-11-19-0997 (deliberate): the LEAN edition has no list model (src/list-model.lean.ts), so a score-first vault of the lean edition is written exactly as any other vault: only the json block changes, no `lines:`.
+      const listed = toml === SCORE_FIRST_TOML && edition === 'music';
+      assert.equal(listed ? above.replace(/\nlines:\n(?:  - .*\n)+---\n/, '\n---\n') : above, was, `${toml === null ? 'no forge.toml' : toml.slice(0, 20)}: every byte above the fence`);
+      assert.equal(listed, /\nlines:\n/.test(above), 'only a score-first vault of the music edition keeps a list');
       assert.equal(hasBarProvenance(after), false);
       assert.equal((readRhythmNote(after) as { value: { data: RhythmData } }).value.data.tempo_bpm, 120);
     }

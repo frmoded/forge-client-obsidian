@@ -76,7 +76,10 @@ export async function bundleRealPlugin(client: string = ROOT, edition: 'lean' | 
   const out = await build({
     entryPoints: [entry], bundle: true, format: 'esm', platform: 'node', write: false, logLevel: 'error',
     // The music edition is the same redirect scripts/build-main.mjs makes: the ONE module the rest of the plugin imports the edition from points at music-edition.full.ts (default: the committed lean one).
-    plugins: edition === 'music' ? [{ name: 'real-plugin-music-edition', setup: (b: any) => { b.onResolve({ filter: /(^|\/)music-edition-selected(\.ts)?$/ }, () => ({ path: path.join(client, 'src', 'music-edition.full.ts') })); b.onResolve({ filter: /(^|\/)edition-selected(\.ts)?$/ }, () => ({ path: path.join(client, 'src', 'edition-selected.music.ts') })); } }] : [],
+    plugins: edition === 'music'
+      ? [{ name: 'real-plugin-music-edition', setup: (b: any) => { b.onResolve({ filter: /(^|\/)music-edition-selected(\.ts)?$/ }, () => ({ path: path.join(client, 'src', 'music-edition.full.ts') })); b.onResolve({ filter: /(^|\/)edition-selected(\.ts)?$/ }, () => ({ path: path.join(client, 'src', 'edition-selected.music.ts') })); } }]
+      // 2026-11-19-0997: the LEAN variant is the lean BUILD's list model too (scripts/build-main.mjs redirects src/list-model-selected.ts to list-model.lean.ts for lean): a checkout without that file (an earlier worktree) has nothing to redirect.
+      : fs.existsSync(path.join(client, 'src', 'list-model.lean.ts')) ? [{ name: 'real-plugin-lean-list-model', setup: (b: any) => { b.onResolve({ filter: /(^|\/)list-model-selected(\.ts)?$/ }, () => ({ path: path.join(client, 'src', 'list-model.lean.ts') })); } }] : [],
     alias: { obsidian: shim }, loader: { '.wasm': 'binary' }, nodePaths: [path.join(ROOT, 'node_modules')], define: { 'process.env.NODE_ENV': '"production"' },
   });
   const file = path.join(tmp, 'bundle.mjs');

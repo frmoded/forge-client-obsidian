@@ -3,6 +3,8 @@
 // exactly what the duplicate wrote (a fingerprint compare). A copy that was edited since is LEFT in place and said; so is one that cannot be moved. The entry is spent either way, so the NEXT Cmd/Ctrl+Z reaches the note's own previous sentence.
 // Redo of a removed copy is not offered (a trashed note is the person's to restore from the trash). Nothing here writes the phrase.
 import { contentFingerprint } from './rhythm-edit-core.ts';
+/** 2026-11-19-0997: this core is the LIST MODEL's (music-composer code, reached only through src/list-model-selected.ts); the music edition's list-model.full.ts lists this string in `cores`, scripts/build-main.test.mjs greps the lean bundle for it. */
+export const LIST_MODEL_SENTINEL_DUPLICATE_UNDO_CORE = 'forge-list-model-core:duplicate-undo-core';
 
 /** What the stack keeps of a copy: where it is, its name (for the words), and the fingerprint of the exact text the duplicate wrote. */
 export interface CopyMark { path: string; name: string; hash: string }

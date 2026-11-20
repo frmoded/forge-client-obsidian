@@ -14,6 +14,8 @@ import { applyBarLine, barSentencesOf, canonicalBarLine, headSentence, parseBarS
 import { RHYTHM_STARTER } from './new-note-core.ts';
 import { formatRhythmJson, type RhythmData, type RhythmStep } from './rhythm-edit-core.ts';
 import { createUndoStack, stopNotice, type ListStop, type Replaced, type UndoStack } from './sentence-list-core.ts';
+/** 2026-11-19-0997: this core is the LIST MODEL's (music-composer code, reached only through src/list-model-selected.ts); the music edition's list-model.full.ts lists this string in `cores`, scripts/build-main.test.mjs greps the lean bundle for it. */
+export const LIST_MODEL_SENTINEL_BAR_LIST_CORE = 'forge-list-model-core:bar-list-core';
 
 const clone = (d: RhythmData): RhythmData => ({ ...d, channels: Object.fromEntries(Object.entries(d.channels).map(([k, row]) => [k, [...row]])) });
 /** The bar of an EMPTY list: what "New bar" writes today (a kick on steps 1 and 9, a snare on 5 and 13, 4/4, 16 steps, tempo 100). Not an empty grid: the prompt's "today's grid" is this one. */

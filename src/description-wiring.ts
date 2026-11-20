@@ -2,8 +2,8 @@
 // stand-in, so the test runs the very mapping (settings -> askPlan / configured, folders -> bar and phrase names) the plugin runs, not a hand-built stand-in of it.
 import type { DescriptionPorts } from './description-apply.ts';
 import { BAR_FOLDER_NAME, PHRASE_FOLDER } from './phrase-core.ts';
-import { duplicateNote } from './duplicate-note-core.ts';
-import { undoCopy } from './duplicate-undo-core.ts';
+import type { undoCopy } from './duplicate-undo-core.ts';
+import { listModel } from './list-model-selected.ts';       // 2026-11-19-0997: Duplicate's cores come through the list-model seam (lean: stubs that refuse), not by import
 
 /** What the plugin supplies from Obsidian (the vault, the workspace, window timers, the console, a modal). */
 export interface DescriptionEnv {
@@ -61,8 +61,8 @@ export function descriptionPortsFor(env: DescriptionEnv, hooks: DescriptionHooks
     ...(hooks.composerAutoApply ? { composerAutoApply: hooks.composerAutoApply } : {}),
     ...(hooks.composerMenu ? { composerMenu: hooks.composerMenu } : {}),
     ...(env.confirm ? { confirm: env.confirm } : {}),
-    ...(create && exists && isAlreadyExists ? { duplicate: (of: Parameters<NonNullable<DescriptionPorts['duplicate']>>[0]) => duplicateNote({ read: (p) => env.read(p), listBasenames: (folder) => env.basenamesIn(folder), exists, create, isAlreadyExists, trace: (line) => env.trace(line) }, of, vault()) } : {}),
-    ...(create && exists && isAlreadyExists && env.trash ? { undoCopy: (mark: Parameters<typeof undoCopy>[1]) => undoCopy({ read: (p) => env.read(p), exists, trash: (p) => env.trash!(p) }, mark) } : {}),     // 2026-11-19-0992a: a copy is an undo entry only where the plugin can move it to the trash
+    ...(create && exists && isAlreadyExists ? { duplicate: (of: Parameters<NonNullable<DescriptionPorts['duplicate']>>[0]) => listModel.duplicate.duplicateNote({ read: (p) => env.read(p), listBasenames: (folder) => env.basenamesIn(folder), exists, create, isAlreadyExists, trace: (line) => env.trace(line) }, of, vault()) } : {}),
+    ...(create && exists && isAlreadyExists && env.trash ? { undoCopy: (mark: Parameters<typeof undoCopy>[1]) => listModel.duplicate.undoCopy({ read: (p) => env.read(p), exists, trash: (p) => env.trash!(p) }, mark) } : {}),     // 2026-11-19-0992a: a copy is an undo entry only where the plugin can move it to the trash
     ...(hooks.openNote ? { openNote: hooks.openNote } : {}),
   };
 }

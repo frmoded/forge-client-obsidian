@@ -8,6 +8,8 @@
 import { diffBarData } from './bar-list-core.ts';
 import { rhythmDataEqual, validateRhythmData, type RhythmData } from './rhythm-edit-core.ts';
 import type { AutosaveStatus } from './rhythm-autosave-core.ts';
+/** 2026-11-19-0997: this core is the LIST MODEL's (music-composer code, reached only through src/list-model-selected.ts); the music edition's list-model.full.ts lists this string in `cores`, scripts/build-main.test.mjs greps the lean bundle for it. */
+export const LIST_MODEL_SENTINEL_BAR_BOX_HOST_CORE = 'forge-list-model-core:bar-box-host-core';
 
 export const SWING_QUIET_MS = 200;
 

@@ -19,6 +19,8 @@ import { isEmptyNote } from './empty-note-core.ts';
 import { replayGrammar, stopNotice, type ReplayCtx } from './sentence-list-core.ts';
 import { listOfNote, writeListNote } from './sentence-list-note-core.ts';
 import type { DuplicateFamily, ResolvedDuplicate } from './duplicate-sentence-core.ts';
+/** 2026-11-19-0997: this core is the LIST MODEL's (music-composer code, reached only through src/list-model-selected.ts); the music edition's list-model.full.ts lists this string in `cores`, scripts/build-main.test.mjs greps the lean bundle for it. */
+export const LIST_MODEL_SENTINEL_DUPLICATE_NOTE_CORE = 'forge-list-model-core:duplicate-note-core';
 
 /** The notes the sentences of a list may name (the grammar's own shape, taken from the replay's context so this core does not import the grammar). */
 type GrammarVault = ReplayCtx['vault'];

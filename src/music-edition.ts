@@ -57,3 +57,43 @@ export interface MusicEdition {
     opts?: RenderOptions,
   ): boolean;
 }
+
+/**
+ * 2026-11-19-0997: THE LIST MODEL's seam. The cores of the list model (a bar's list and its grammar, the Beat Box's host of it, the note writer of `lines:`, Duplicate) are music-composer code: the lean edition has no Score
+ * and no composer to type them into, so its bundle must not carry them (the lean size cap and scripts/build-main.test.mjs say so). Every shared module that used one of them takes it from `listModel`
+ * (src/list-model-selected.ts) instead of importing the core.
+ *
+ * THE DIRECTION IS THE REVERSE OF `music-edition-selected`, on purpose: that file is committed pointing at the LEAN implementation, so the 28 test files that drive description-apply.ts / description-wiring.ts
+ * under `node --test` (no bundle: the committed selector is what they get) would run the lean stub and lose the list model they test. `list-model-selected.ts` is committed pointing at list-model.full.ts (tsc, node
+ * --test and the music build see the real cores); scripts/build-main.mjs redirects it to list-model.lean.ts for the LEAN edition only, and src/test-support/bundle-real-plugin.ts does the same for its lean variant.
+ *
+ * The types come from the cores themselves (`typeof import(...)`, erased: no bundle weight); the lean stubs have the same shapes and answer what lean answered before the list model existed (no action sentence, no bar
+ * list, no Beat Box host: the tab writes through its autosave).
+ */
+export interface ListModel {
+  /** true for list-model.full.ts, false for the lean stub. */
+  readonly present: boolean;
+  /** The sentinel string of every core this implementation carries (`forge-list-model-core:<file>`); empty in lean. The build test greps the lean bundle for each. */
+  readonly cores: readonly string[];
+  /** bar-list-controller.ts: the BAR half of the description controller. Lean: an inert handle (every write refused in words, nothing evaluated, no undo). */
+  createBarList: typeof import('./bar-list-controller.ts').createBarList;
+  /** bar-box-host-core.ts: a bar's Beat Box tab turns the widget's messages into the bar's list. Lean: null (the tab then writes as it always did). */
+  createBarBoxHost(...args: Parameters<typeof import('./bar-box-host-core.ts').createBarBoxHost>): ReturnType<typeof import('./bar-box-host-core.ts').createBarBoxHost> | null;
+  /** bar-list-note-core.ts `withBarLines`: a NEW bar starts with an empty `lines:`. Lean: the text as it is (a bar with no list, as before the list model). */
+  withBarLines: typeof import('./bar-list-note-core.ts').withBarLines;
+  /** duplicate-sentence-core.ts, duplicate-note-core.ts, duplicate-undo-core.ts: the composer's action sentences and the bar words. Lean: no sentence is an action, nothing can be copied. */
+  duplicate: {
+    readActionText: typeof import('./duplicate-sentence-core.ts').readActionText;
+    barWordVerb: typeof import('./duplicate-sentence-core.ts').barWordVerb;
+    barNumberOf: typeof import('./duplicate-sentence-core.ts').barNumberOf;
+    barInsertion: typeof import('./duplicate-sentence-core.ts').barInsertion;
+    linkInsertion: typeof import('./duplicate-sentence-core.ts').linkInsertion;
+    idParts: typeof import('./duplicate-sentence-core.ts').idParts;
+    resolveDuplicateTarget: typeof import('./duplicate-sentence-core.ts').resolveDuplicateTarget;
+    duplicatePreviewLine: typeof import('./duplicate-sentence-core.ts').duplicatePreviewLine;
+    copyNoteText: typeof import('./duplicate-note-core.ts').copyNoteText;
+    createdLine: typeof import('./duplicate-note-core.ts').createdLine;
+    duplicateNote: typeof import('./duplicate-note-core.ts').duplicateNote;
+    undoCopy: typeof import('./duplicate-undo-core.ts').undoCopy;
+  };
+}

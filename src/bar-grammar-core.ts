@@ -13,6 +13,8 @@
 //   Rotate the kick channel one step to the left. / ... to the right.   Move the kick channel one place earlier. / ... later.
 // Not words (the Beat Box writes nothing for them): the kit picker (it only changes what "Add instrument" offers), mute, solo, volume, play.
 import { MAX_RHYTHM_STEPS, RHYTHM_CHANNELS, validateRhythmData, type RhythmData, type RhythmStep } from './rhythm-edit-core.ts';
+/** 2026-11-19-0997: this core is the LIST MODEL's (music-composer code, reached only through src/list-model-selected.ts); the music edition's list-model.full.ts lists this string in `cores`, scripts/build-main.test.mjs greps the lean bundle for it. */
+export const LIST_MODEL_SENTINEL_BAR_GRAMMAR_CORE = 'forge-list-model-core:bar-grammar-core';
 
 export type BarLine =
   | { kind: 'start'; data: RhythmData }

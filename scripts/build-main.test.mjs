@@ -8,7 +8,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { buildMain, resolveEdition } from "./build-main.mjs";
+import { createRequire } from "node:module";
+import { buildMain, resolveEdition, editionPlugin, stubInlinedAssetsPlugin } from "./build-main.mjs";
 
 // Strings that only appear when verovio / html-midi-player and their transitive chain
 // (@magenta/music -> tone -> standardized-audio-context) are bundled. Each is a package or module
@@ -77,8 +78,9 @@ function buildCodeOnly(edition) {
 test("lean build stays lean in size: code-only, far below the music build, independent of the last `npm run build`", async () => {
   const lean = await buildCodeOnly("lean");
   const music = await buildCodeOnly("music");
+  // 2026-11-19-0997 (deliberate): the cap is BACK at 1_500_000 (the 0992a figure of 1_700_000 is retired). The list model's cores moved behind src/list-model-selected.ts (the lean build gets list-model.lean.ts: stubs, no core): lean code-only measured 1_552_286 bytes on bb17c2e and 1_494_060 after (-58_226), 5_940 under the cap. Nothing the cap protects changed: the music chain stays out of lean, and lean stays more than five times smaller than music. The next lean-reached music code has to go behind the seam too, or move this cap on purpose.
   // 2026-11-19-0992a (deliberate): the cap moves from 1_500_000 to 1_700_000. The matrix on the committed 0993 head (ffc6510) found lean at 1_535_383 bytes (9ae606d, before 0993: 1_478_803; 0993's bar list model added about 56 KB of pure TypeScript reached from the shared composer path), which the cap's own comment ("baseline ~0.64 MB") had long outgrown. What this test protects is unchanged and still asserted below: the music chain (Verovio, the players, the music widgets) stays out of lean, lean is more than five times smaller than music (music is over 5 MB). The list-model cores are music-composer code and belong behind the edition seam; that move is a follow-up (L47 in the 0992a FEEDBACK), not part of this commit.
-  assert.ok(lean < 1_700_000, `lean main.js code grew to ${lean} bytes (baseline ~1.48 MB before the bar list model)`);
+  assert.ok(lean < 1_500_000, `lean main.js code grew to ${lean} bytes (1_494_060 at 2026-11-19-0997, the list model's cores being behind the seam)`);
   assert.ok(lean * 5 < music, `lean (${lean}) is no longer far below music (${music})`);
 });
 
@@ -89,4 +91,47 @@ test("the size test does not depend on the generated assets: stubbing them chang
   const js = fs.readFileSync(withStub, "utf8");
   assert.match(js, /BUNDLED_ASSETS_VERSION\s*=\s*"stub"/, "the stub module is what got bundled");
   assert.equal(js.includes("Domain modules pre-injected into the snippet namespace"), false, "no inlined engine file CONTENT leaked in from the generated module");
+});
+
+// 2026-11-19-0997: the LIST MODEL's cores (the bar list, its grammar, its Beat Box host and note writer, Duplicate) are music-composer code: the lean edition's bundle must not carry them. They are reached
+// only through src/list-model-selected.ts (the build points it at list-model.lean.ts for the lean edition; src/list-model.ts is the interface). The sentinel of each core is an exported constant the music edition's
+// list-model.full.ts lists in `cores` (so esbuild keeps it there and a vacuous "lean has none" cannot pass); a core a lean build still REACHED but tree-shook to nothing would leave no sentinel, so the test ALSO asks the
+// build's metafile which source files lean reached and which it did not.
+const LIST_MODEL_CORES = [
+  "bar-list-controller", "bar-list-core", "bar-grammar-core", "bar-box-host-core", "bar-list-note-core",
+  "duplicate-sentence-core", "duplicate-note-core", "duplicate-undo-core",
+];
+const sentinelOf = (core) => `forge-list-model-core:${core}`;
+
+async function metafileOf(edition) {
+  const require = createRequire(import.meta.url);
+  const { build } = require("esbuild");
+  const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+  const r = await build({
+    entryPoints: [path.join(root, "src", "main.ts")], bundle: true, platform: "node", format: "cjs", write: false, metafile: true, logLevel: "silent",
+    external: ["obsidian", "@codemirror/view", "@codemirror/state", "@codemirror/language"],
+    plugins: [editionPlugin(edition), stubInlinedAssetsPlugin()],
+    outfile: path.join(os.tmpdir(), `forge-meta-${edition}.js`),
+  });
+  return { inputs: Object.keys(r.metafile.inputs), text: r.outputFiles[0].text };
+}
+
+test("0997 lean build: NONE of the list model's cores is in the bundle (no sentinel, and not even a reached-but-empty module)", async () => {
+  const { inputs, text } = await metafileOf("lean");
+  for (const core of LIST_MODEL_CORES) {
+    assert.equal(text.includes(sentinelOf(core)), false, `lean main.js contains the sentinel of ${core}`);
+    assert.equal(inputs.includes(`src/${core}.ts`), false, `lean reached src/${core}.ts (a list-model core must only be reached through src/list-model-selected.ts)`);
+  }
+  assert.equal(inputs.includes("src/list-model.full.ts"), false, "lean reached list-model.full.ts");
+  assert.equal(inputs.includes("src/list-model.lean.ts"), true, "lean did not get list-model.lean.ts (the redirect is not in place: vacuous)");
+});
+
+test("0997 music build: DOES contain every list-model core (guards the lean assertion against passing vacuously)", async () => {
+  const { inputs, text } = await metafileOf("music");
+  for (const core of LIST_MODEL_CORES) {
+    assert.equal(text.includes(sentinelOf(core)), true, `music main.js is missing the sentinel of ${core}`);
+    assert.equal(inputs.includes(`src/${core}.ts`), true, `music did not reach src/${core}.ts`);
+  }
+  assert.equal(inputs.includes("src/list-model.full.ts"), true);
+  assert.equal(inputs.includes("src/list-model.lean.ts"), false, "the music edition got the lean list model");
 });

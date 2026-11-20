@@ -15,6 +15,9 @@
 // main.ts, so it cannot end up in main.js — no dead-code elimination involved. See
 // src/music-edition.ts, and scripts/build-main.test.mjs for the check that proves it.
 //
+// 2026-11-19-0997: the LIST MODEL (the bar list, its Beat Box host, Duplicate) has its own, REVERSED selector: src/list-model-selected.ts is committed pointing at list-model.full.ts (so tsc and `node --test` see the
+// real cores) and the LEAN edition is redirected to list-model.lean.ts (stubs; no core imported). The music edition keeps the committed file. See `ListModel` in src/music-edition.ts.
+//
 // esbuild is pinned at 0.17.3; this uses only its stable `build` + onResolve plugin API.
 //
 // Usage:
@@ -53,6 +56,11 @@ export function editionPlugin(edition) {
     setup(b) {
       b.onResolve({ filter: /(^|\/)music-edition-selected(\.ts)?$/ }, () => ({
         path: path.join(ROOT, "src", edition === "music" ? "music-edition.full.ts" : "music-edition.lean.ts"),
+      }));
+      // 2026-11-19-0997: the list model's cores (the bar list, the Beat Box host, Duplicate) are music-composer code. src/list-model-selected.ts is committed pointing at list-model.full.ts (tests and tsc see the real
+      // cores); the LEAN edition is redirected to list-model.lean.ts (stubs, no core imported), so lean's main.js never reaches them. The music edition resolves the committed file (the full one).
+      b.onResolve({ filter: /(^|\/)list-model-selected(\.ts)?$/ }, () => ({
+        path: path.join(ROOT, "src", edition === "music" ? "list-model.full.ts" : "list-model.lean.ts"),
       }));
       // Phase 2: the runtime edition id (vault lists, wizard flavors, Python resolution order).
       // Committed as lean; redirected for the music edition from the SAME env var, so the runtime

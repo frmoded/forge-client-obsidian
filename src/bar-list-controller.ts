@@ -15,6 +15,8 @@ import type { DialogEvent } from './dialog-core.ts';
 type PreviewResult = { ok: true; proposal: { description: string; via: 'grammar' | 'service'; replaces?: string } } | { ok: false; message: string };
 import { parseBarSentence } from './bar-grammar-core.ts';
 import { formatRhythmJson, type RhythmData } from './rhythm-edit-core.ts';
+/** 2026-11-19-0997: this core is the LIST MODEL's (music-composer code, reached only through src/list-model-selected.ts); the music edition's list-model.full.ts lists this string in `cores`, scripts/build-main.test.mjs greps the lean bundle for it. */
+export const LIST_MODEL_SENTINEL_BAR_LIST_CONTROLLER = 'forge-list-model-core:bar-list-controller';
 
 export interface BarListDeps {
   /** The vault's atomic read-modify-write of one note, as the controller tracks it (`fn` gets the CURRENT text; returning it unchanged writes nothing). */

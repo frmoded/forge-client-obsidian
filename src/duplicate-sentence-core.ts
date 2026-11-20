@@ -5,6 +5,9 @@
 //   the gesture                 in a phrase tab, when the composer's text (trimmed, any case) is exactly "Duplicate" or ends with the word, the NEXT click on a bar of the Score does not pin it: the bar's note name is appended
 //                               (` [[bar_007]].`). `armsDuplicate` is the question, `withDuplicateLink` the text the click makes. After that the text ends with a link, so the next click pins again.
 
+/** 2026-11-19-0997: this core is the LIST MODEL's (music-composer code, reached only through src/list-model-selected.ts); the music edition's list-model.full.ts lists this string in `cores`, scripts/build-main.test.mjs greps the lean bundle for it. */
+export const LIST_MODEL_SENTINEL_DUPLICATE_SENTENCE_CORE = 'forge-list-model-core:duplicate-sentence-core';
+
 /** The names of the notes of a vault, by kind (what a link may mean). The grammar's vault has this shape and more. */
 export interface DuplicateVault { bars: readonly string[]; phrases: readonly string[]; arrangements?: readonly string[]; compositions?: readonly string[] }
 export type DuplicateFamily = 'bar' | 'phrase' | 'arrangement' | 'composition';

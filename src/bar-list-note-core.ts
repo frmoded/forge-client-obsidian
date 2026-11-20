@@ -7,6 +7,8 @@ import { extractJsonBlock, formatRhythmJson, readRhythmNote, rhythmDataEqual, ty
 import { keepBarProvenance } from './bar-provenance-core.ts';
 import { baselineList, replayBar, type BarReplay } from './bar-list-core.ts';
 import { stopNotice } from './sentence-list-core.ts';
+/** 2026-11-19-0997: this core is the LIST MODEL's (music-composer code, reached only through src/list-model-selected.ts); the music edition's list-model.full.ts lists this string in `cores`, scripts/build-main.test.mjs greps the lean bundle for it. */
+export const LIST_MODEL_SENTINEL_BAR_LIST_NOTE_CORE = 'forge-list-model-core:bar-list-note-core';
 
 interface Front { eol: string; body: string[]; bodyText: string }
 function front(text: string): Front | null {
