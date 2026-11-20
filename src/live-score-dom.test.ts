@@ -11,9 +11,11 @@ import { DESCRIPTION_BAR_CLASS } from './description-bar-dom.ts';
 import { LEAN_SCORE_NOTE, scorePanelPlan } from './score-first-core.ts';
 import { RHYTHM_STARTER } from './new-note-core.ts';
 import { accessibleName, visibleText } from './test-support/accessible-name.ts';
+import { installPollingObserver, settle } from './test-support/polling-observer.ts';
 
 function page() {
   const win: any = new Window({ url: 'http://localhost/' });
+  installPollingObserver(win);                  // 2026-11-19-0998 (deliberate): happy-dom's own observer holds its callback only by WeakRef, so a collection between mount and use loses the late-engraving swap (src/test-support/polling-observer.ts)
   const doc = win.document;
   const tab = doc.createElement('div');
   tab.className = 'forge-rhythm-edit-view';
@@ -190,7 +192,8 @@ function lateRenderer() {
   };
   return { deps, slots };
 }
-const flushDom = async () => { for (let i = 0; i < 6; i++) await new Promise((r) => setTimeout(r, 0)); };
+/** 2026-11-19-0998 (deliberate): a NEGATIVE wait ("nothing happened"): the observer reports on a 3 ms look, so give it ten looks; a positive wait is `settle(condition)` instead (it was six setTimeout(0): a race under load). */
+const flushDom = () => settle(() => false, 30);
 
 test('LATE engraving: the first score is shown at once; the next one stays hidden (pending) while the old one stays on screen, and is swapped in when its <svg> arrives', async () => {
   const { tab } = page();
@@ -210,7 +213,7 @@ test('LATE engraving: the first score is shown at once; the next one stays hidde
   assert.ok(hosts()[1].classList.contains(SCORE_HOST_PENDING_CLASS), 'the new one is hidden (laid out, not shown)');
   assert.equal(stopped.length, 0, 'the old player keeps its place until the swap');
 
-  slots.shift()!(); await flushDom();                                   // the new engraving arrives
+  slots.shift()!(); await settle(() => hosts().length === 1);           // the new engraving arrives (the observer swaps it in)
   assert.equal(hosts().length, 1, 'the swap happened');
   assert.notEqual(hosts()[0], first);
   assert.equal(hosts()[0].classList.contains(SCORE_HOST_PENDING_CLASS), false, 'and the new one is revealed');
@@ -231,7 +234,7 @@ test('LATE engraving: a newer draw replaces the pending one (only the newest can
   slots[0]();                                                           // the superseded render finishes late: into a host that was removed
   await flushDom();
   assert.equal(hosts().length, 2, 'nothing swapped');
-  slots[1](); await flushDom();
+  slots[1](); await settle(() => hosts().length === 1);
   assert.equal(hosts().length, 1);
   assert.equal(tab.querySelector(`.${SCORE_HOST_CLASS} svg`)!.textContent, 'score-of-bar_001');
 });

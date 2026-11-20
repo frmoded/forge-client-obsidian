@@ -23,32 +23,16 @@ import { loadRealOnload, type LoadedPlugin } from './test-support/real-onload.ts
 import { RHYTHM_BOX_WIDGET_PATH } from './rhythm-edit-core.ts';
 import { widgetHtml, skip } from './test-support/rhythm-widget-harness.ts';
 import { PLAYGROUND_BARS } from './test-support/bar-list-fixtures.ts';
+import { installPollingObserver, settle } from './test-support/polling-observer.ts';
 
 const BOX = { preview: async () => ({ ok: false as const, message: 'x' }), apply: async () => ({ ok: false }) };
 const tick = (ms = 30) => new Promise((r) => setTimeout(r, ms));
-/** 2026-11-19-0992c (load-proof): wait until a condition holds (the observer's callback is a timer in happy-dom, so a fixed 30 ms tick is a race on a machine under load: the matrix's lean leg failed on it); gives up after `ms` and lets the assertions below say what is wrong. */
-async function settle(ok: () => boolean, ms = 5000): Promise<void> { const t0 = Date.now(); while (!ok() && Date.now() - t0 < ms) await tick(5); await tick(5); }
 const win: any = new Window({ url: 'http://localhost/' });
 const doc: any = win.document;
 
-// 2026-11-19-0992c (load-proof): happy-dom 20's MutationObserver hands the page only a WEAKREF to its report function (lib/mutation-observer/MutationObserverListener.js: `callback: new WeakRef(...)`), so a garbage collection between mount and use silently ends the delivery:
-// on a machine under load (the matrix's lean leg, two legs at once) this file lost the observer and failed or stalled. The panel's own observer callback is what is under test, so this file gives the window a PLAIN observer that holds its callback strongly and notices a
-// change of the observed element's children by looking (every 3 ms, unref'd); the real browser's observer is proved by the real-Chrome measure scripts/dev/measure-bar-beatbox-layout.mjs (236 verdicts, the three orders).
-class PollingObserver {
-  private timer: any = null; private snap: any[] = [];
-  private readonly cb: (records: unknown[], obs: unknown) => void;
-  constructor(cb: (records: unknown[], obs: unknown) => void) { this.cb = cb; }
-  observe(target: any): void {
-    this.snap = Array.from(target.childNodes);
-    this.timer = setInterval(() => {
-      const now = Array.from(target.childNodes) as any[];
-      if (now.length !== this.snap.length || now.some((n, i) => n !== this.snap[i])) { this.snap = now; this.cb([], this); this.snap = Array.from(target.childNodes); }
-    }, 3); this.timer.unref?.();
-  }
-  disconnect(): void { if (this.timer) clearInterval(this.timer); this.timer = null; }
-  takeRecords(): unknown[] { return []; }
-}
-win.MutationObserver = PollingObserver;
+// 2026-11-19-0992c (load-proof), moved by 2026-11-19-0998 (deliberate) into src/test-support/polling-observer.ts: happy-dom 20's MutationObserver hands the page only a WEAKREF to its report function, so a garbage collection between mount and use silently ends
+// the delivery (see that file). The window gets the shared polling observer, which holds its callback strongly; the real browser's observer is proved by the real-Chrome measure scripts/dev/measure-bar-beatbox-layout.mjs (236 verdicts, the three orders).
+installPollingObserver(win);
 Object.assign(globalThis, { document: win.document, window: win, HTMLElement: win.HTMLElement });
 
 /** An element as Obsidian's `empty()` empties it: every child removed, one by one. */
