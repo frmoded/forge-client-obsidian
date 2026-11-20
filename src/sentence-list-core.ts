@@ -94,7 +94,7 @@ export function subjectOf(sentence: string, kind: ListKind): string | null {
 }
 
 // ---- the conflict subjects of a phrase (2026-11-19-0980): a SHAPE reading, like the arrangement's above -------------------------------------------------------------------------------------------------------------------
-const HEAD_LINE = /^\s*(?:extend|mix|morph|take)\b/i;
+const HEAD_LINE = /^\s*(?:extend|mix|take|morph(?!\s+bars?\s+\d))\b/i;       // 2026-11-19-0996b: "Morph bars 2 and 3 across 5 bars." is a STEP of the phrase, not a head
 const TEMPO_LINE = /^\s*make\s+it\s+[^\s]+\s*(?:percent|%)\s*(?:slower|faster)\b/i;
 const LENGTH_LINE = /^\s*make\s+it\s+[^\s]+\s+bars?\s+long\b/i;
 const FORK_LINE = /^\s*bar\s+(\d+)\s+is\b/i;
@@ -156,7 +156,7 @@ export interface ReplayCtx {
   /** Apply at most this many lines (the loop check of the caller cut the list there). */
   maxApplied?: number;
 }
-export interface ListStop { index: number; reason: 'unreadable' | 'loop'; message: string; line: number; column: number; /** 2026-11-19-0980: the grammar's own code for a refusal that is about the ORDER or the HEAD of a phrase's list (see GrammarError) */ code?: 'order' | 'head' }
+export interface ListStop { index: number; reason: 'unreadable' | 'loop'; message: string; line: number; column: number; /** 2026-11-19-0980: the grammar's own code for a refusal that is about the ORDER or the HEAD of a phrase's list (see GrammarError) */ code?: 'order' | 'head' | 'refused' }
 export interface Replay {
   /** The lines: the ones that were read in their canonical wording, the one that stopped the replay and the ones after it exactly as written. */
   list: string[];
@@ -286,7 +286,7 @@ export type Plan =
   | { ok: true; list: string[]; added: string[]; replaced: Replaced[]; unchanged: boolean; replay: Replay }
   /** `empty` nothing to add; `blocked` the list has a line that cannot be read (fix or undo it first); `unreadable` the typed sentence (line and column are IN THE TYPED TEXT); `loop` the typed sentence would make a composition play itself;
    *  2026-11-19-0980: `order` a structure step after a Thin out or a Double up of a phrase (do the structure steps first; never re-sorted), `head` a line the grammar read but the phrase's head cannot take (or no head yet): neither is for the sentence service. */
-  | { ok: false; reason: 'empty' | 'blocked' | 'unreadable' | 'loop' | 'order' | 'head'; message: string; line: number; column: number };
+  | { ok: false; reason: 'empty' | 'blocked' | 'unreadable' | 'loop' | 'order' | 'head' | 'refused'; message: string; line: number; column: number };
 
 /** The words a structure step after a density step is refused in: what to do and what was left alone. */
 export const orderRefusal = (sentence: string): string => `Do the structure steps first: "${sentence}" changes which bars there are, and this phrase already has a Thin out or a Double up before it (a Keep, Delete, Copy or Move comes before them). The list is unchanged.`;
@@ -306,6 +306,7 @@ export async function planAppend(list: SentenceList, kind: ListKind, typed: read
     if (j === -1 && newHead) { /* the new head left a later line that it cannot take: the replay stops there (the unreadable-line words), nothing is dropped */ }
     else if (j === -1) return { ok: false, reason: 'blocked', message: stopNotice(rep.stop, rep.applied), line: rep.stop.line, column: rep.stop.column };
     else if (rep.stop.code === 'order') return { ok: false, reason: 'order', message: orderRefusal(sentences[j]), line: j + 1, column: rep.stop.column };
+    else if (rep.stop.code === 'refused') return { ok: false, reason: 'refused', message: rep.stop.message, line: j + 1, column: rep.stop.column };       // 2026-11-19-0996b: read and refused in words ("Move bar 3 two bars left."): the service cannot fix it
     else if (rep.stop.code === 'head' || (kind === 'phrase' && list.length === 0 && j === 0 && !isHeadLine(sentences[0]) && phraseSubjectOf(sentences[0]) !== null)) return { ok: false, reason: 'head', message: rep.stop.message, line: j + 1, column: rep.stop.column };
     else return { ok: false, reason: rep.stop.reason === 'loop' ? 'loop' : 'unreadable', message: rep.stop.message, line: j + 1, column: rep.stop.column };
   }

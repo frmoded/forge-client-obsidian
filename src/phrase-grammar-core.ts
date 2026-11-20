@@ -15,7 +15,7 @@ import {
   MORPH_ORDERS, NOTE_NAME, STRUCTURE_RUNS_MAX, PHRASE_BARS_MAX, PHRASE_BARS_MIN, PHRASE_DEFAULTS, PHRASE_PCT_MAX, PHRASE_PCT_MIN, PHRASE_STYLES, MIX_DEFAULTS, MORPH_DEFAULTS, TRANSFORM_DEFAULTS, TRANSFORM_KEEPS, TRANSFORM_OPS_MAX, validatePhrase,
   type ExtendPhrase, type MixPhrase, type BarRun, type MorphOrder, type MorphPhrase, type PhraseParams, type StructureOp, type PhraseStyle, type TransformOp, type TransformPhrase,
 } from './phrase-core.ts';
-import { isStructureOp } from './bar-structure-core.ts';
+import { isStructureOp, runsWords } from './bar-structure-core.ts';
 import { rangeWords } from './phrase-words-core.ts';
 import { validateArrangement, type ArrangementParams, type ArrangementTrack } from './arrangement-core.ts';
 import { COMPOSITION_LENGTH_MAX, COMPOSITION_REPEAT_MAX, validateComposition, type CompositionParams, type CompositionSection } from './composition-core.ts';
@@ -26,9 +26,9 @@ export { canonical, complementOf100, describe, orderWords, plain, shiftDecimal, 
 
 /** The notes of the vault a description may name (basenames, no folder, no .md). `arrangements` and `kits` are optional: a list that is not given is not checked (names are then only checked for their spelling). */
 export interface GrammarVault { bars: readonly string[]; phrases: readonly string[]; arrangements?: readonly string[]; compositions?: readonly string[]; kits?: readonly string[] }
-/** `code` says WHY for the few refusals a caller must tell from the rest (2026-11-19-0980): `order` = a structure step after a Thin out or a Double up; `head` = a line the grammar understood but the phrase's head cannot take (a tempo after a Morph, a Thin out after an Extend).
+/** `code` says WHY for the few refusals a caller must tell from the rest (2026-11-19-0980): `order` = a structure step after a Thin out or a Double up; `head` = a line the grammar understood but the phrase's head cannot take (a tempo after a Morph, a Thin out after an Extend), or a step with no head yet; `refused` (2026-11-19-0996b) = a line the grammar read and will not do ("Move bar 3 two bars left.").
  *  The sentence service cannot fix either: the person changes the order or the head. */
-export interface GrammarError { message: string; line: number; column: number; code?: 'order' | 'head' }
+export interface GrammarError { message: string; line: number; column: number; code?: 'order' | 'head' | 'refused' }
 export type ParseResult = { ok: true; params: GrammarParams } | { ok: false; error: GrammarError };
 
 const NUMBER_WORDS = ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'] as const;
@@ -66,8 +66,8 @@ export const VERBS: ReadonlyArray<{ verb: string; kind: 'extend' | 'mix' | 'morp
 
 export class Fail extends Error {
   at: number;
-  code?: 'order' | 'head';
-  constructor(at: number, message: string, code?: 'order' | 'head') { super(message); this.at = at; if (code !== undefined) this.code = code; }
+  code?: 'order' | 'head' | 'refused';
+  constructor(at: number, message: string, code?: 'order' | 'head' | 'refused') { super(message); this.at = at; if (code !== undefined) this.code = code; }
 }
 const NAME = NOTE_NAME;                                        // 2026-11-16-1100: words joined by single spaces (a renamed phrase: [[my groove]]); see phrase-core.ts
 
@@ -88,7 +88,7 @@ export class Scan {
     return `"${m[0]}"`;
   }
   fail(expected: string, at?: number): never { this.ws(); throw new Fail(at ?? this.at, `Expected ${expected}, but found ${this.found()}.`); }
-  failAt(message: string, at: number, code?: 'order' | 'head'): never { throw new Fail(at, message, code); }
+  failAt(message: string, at: number, code?: 'order' | 'head' | 'refused'): never { throw new Fail(at, message, code); }
   comma(): boolean { this.ws(); if (this.s[this.i] === ',') { this.i++; return true; } return false; }
   /** Eat a keyword (several words separated by spaces, any case, any spacing), only whole words. */
   kw(phrase: string): boolean {
@@ -209,19 +209,28 @@ export function readRange(sc: Scan): { first: number; last: number } {
   if (!(sc.kw('bars') || sc.kw('bar'))) sc.fail('"bar N" or "bars N to M"');
   const first = sc.whole('a bar number', 1);
   let last = first;
-  if (sc.kw('to')) { const lastAt = sc.at; last = sc.whole('a bar number', 1); if (last < first) sc.failAt(`Expected the last bar to be ${first} or more, but found ${last}.`, lastAt); }
+  const toAt = sc.i;
+  const to = sc.kw('to');
+  if (to && sc.peekKw('the')) sc.i = toAt;                           // 2026-11-19-0996b: "Move bar 3 to the left" is not a range
+  else if (to) { const lastAt = sc.at; last = sc.whole('a bar number', 1); if (last < first) sc.failAt(`Expected the last bar to be ${first} or more, but found ${last}.`, lastAt); }
   return { first, last };
 }
 
 /**
  * 2026-11-16-1000: a STRUCTURE step of a transform, read from the start of a sentence: "Keep bars 3 to 5 and bar 8.", "Delete bar 2.", "Copy bars 3 to 5.", "Move bars 3 to 5 one bar left." (words: bar-structure-core.ts). Returns null (nothing eaten) when the
- * sentence starts with none of the four verbs. The ranges are ascending and apart; a structure step may not come after a Thin out or a Double up (it changes WHICH bars there are, and those two have already counted them).
+ * sentence starts with none of the verbs. The ranges are ascending and apart; a structure step may not come after a Thin out or a Double up (it changes WHICH bars there are, and those two have already counted them).
+ * 2026-11-19-0996b (the driver's words, read and written as the canonical ones): "Duplicate" is Copy, "Remove" is Delete, "Move bar 3 back / left / earlier" and "forward / right / later" (with or without "one bar", also "to the left") are one bar left / right and
+ * several places ("two bars left") are READ and refused in words (code `refused`: the service cannot fix them), and "Morph bars 2 and 3 across 5 bars ..." is a step of its own (`readMorphBetween`); a Morph that is followed by a note ("Morph [[a]] into [[b]]") is a head, not a step: null.
  */
+const STEP_VERBS: ReadonlyArray<readonly [string, 'keep' | 'delete' | 'copy' | 'move' | 'morph']> = [['keep', 'keep'], ['delete', 'delete'], ['remove', 'delete'], ['copy', 'copy'], ['duplicate', 'copy'], ['move', 'move'], ['morph', 'morph']];
 export function readStructureStep(f: Scan, afterDensity: boolean): StructureOp | null {
   const start = f.i;
-  const verb = (['keep', 'delete', 'copy', 'move'] as const).find((v) => f.kw(v));
-  if (verb === undefined) { f.i = start; return null; }
-  if (afterDensity) f.failAt(`Expected "${verb[0].toUpperCase()}${verb.slice(1)}" to come before any "Thin out" or "Double up" (a change of which bars there are comes first), but it comes after one.`, start, 'order');
+  const hit = STEP_VERBS.find(([word]) => f.kw(word));
+  if (hit === undefined) { f.i = start; return null; }
+  const [word, verb] = hit;
+  if (verb === 'morph' && !/^\s*bars?\s+\d/i.test(f.s.slice(f.i))) { f.i = start; return null; }          // "Morph [[a]] into [[b]]": a head
+  if (afterDensity) f.failAt(`Expected "${word[0].toUpperCase()}${word.slice(1)}" to come before any "Thin out" or "Double up" (a change of which bars there are comes first), but it comes after one.`, start, 'order');
+  if (verb === 'morph') return readMorphBetween(f);
   const runs: BarRun[] = [];
   for (;;) {
     const at = f.at;
@@ -236,10 +245,66 @@ export function readStructureStep(f: Scan, afterDensity: boolean): StructureOp |
     break;
   }
   if (verb !== 'move') { f.end(); return { op: verb, runs }; }
+  return readMoveDirection(f, runs);
+}
+
+/** "one bar left" / "left" / "back" / "earlier" / "to the left" -> -1 and the right-hand words -> 1; a number of places other than one is read and refused with the sentence to say instead. */
+function readMoveDirection(f: Scan, runs: BarRun[]): StructureOp {
+  const at = f.at, start = f.i;
+  let places = 1;
+  const n = f.number();
+  if (n !== null && (f.kw('bars') || f.kw('bar'))) places = n.value; else { f.i = start; f.kw('a bar'); }
+  f.kw('to the');
   let by: -1 | 1;
-  if (f.kw('one bar left')) by = -1; else if (f.kw('one bar right')) by = 1; else f.fail('"one bar left" or "one bar right"');
+  if (['left', 'back', 'backwards', 'backward', 'earlier'].some((w) => f.kw(w))) by = -1;
+  else if (['right', 'forwards', 'forward', 'later'].some((w) => f.kw(w))) by = 1;
+  else f.fail('"one bar left", "one bar right", "back" or "forward"');
   f.end();
+  if (places !== 1) {
+    const say = `Move ${runsWords(runs)} one bar ${by === -1 ? 'left' : 'right'}.`;
+    f.failAt(places < 1 ? `Expected a move of one bar, but found ${places} bars.` : `Move takes one bar at a time. Say "${say}" ${places === 2 ? 'twice' : `${places} times`}.`, at, 'refused');
+  }
   return { op: 'move', runs, by };
+}
+
+/** The place words of a Morph-between: "at the start", "at the end", "after bar 3", "before bar 2", "between bars 2 and 3" (the two bars must be neighbours); the gap after bar K (0 = the start) or the end. Null when none starts here. */
+function readPlace(f: Scan): number | 'end' | null {
+  if (f.kw('at the start') || f.kw('at the beginning') || f.kw('at the front')) return 0;
+  if (f.kw('at the end') || f.kw('at the back')) return 'end';
+  if (f.kw('after')) { f.kw('bars') || f.kw('bar'); return f.whole('a bar number ("after bar N")', 1); }
+  if (f.kw('before')) { f.kw('bars') || f.kw('bar'); return f.whole('a bar number ("before bar N")', 1) - 1; }
+  if (f.kw('in between') || f.kw('between')) {
+    f.kw('bars') || f.kw('bar');
+    const at = f.at, x = f.whole('a bar number', 1);
+    if (!f.kw('and')) f.fail('"and"');
+    f.kw('bars') || f.kw('bar');
+    const y = f.whole('a bar number', 1);
+    if (y !== x + 1) f.failAt(`Expected two neighbouring bars after "between", but found bar ${x} and bar ${y}.`, at);
+    return x;
+  }
+  return null;
+}
+
+/** "Morph bars 2 and 3 across 5 bars, in seeded order, seed 7, and put them after bar 3." (the verb is eaten): the two bars of the phrase as it is before the step, the number of NEW bars between them, the order, the seed (only with the seeded order) and the place; the place defaults to between two neighbouring bars, else after the later one. */
+function readMorphBetween(f: Scan): StructureOp {
+  const at = f.at;
+  if (!(f.kw('bars') || f.kw('bar'))) f.fail('"bars"');
+  const a = f.whole('a bar number', 1);
+  if (!(f.kw('and') || f.kw('into') || f.kw('to'))) f.fail('"and"');
+  f.kw('bars') || f.kw('bar');
+  const bAt = f.at;
+  const b = f.whole('a bar number', 1);
+  if (a === b) f.failAt(`Expected two different bars to morph between, but found bar ${a} twice.`, bAt);
+  let bars = 0, order: MorphOrder = MORPH_DEFAULTS.order, seed: number | null = null, after: number | 'end' | null = null, seedAt = -1;
+  segments(f, [
+    { name: 'the place', read: () => { const s = f.i; f.kw('and'); const put = f.kw('put them') || f.kw('put it') || f.kw('put those') || f.kw('place them') || f.kw('place it'); const p = readPlace(f); if (p === null) { if (put) f.fail('a place ("after bar N", "before bar N", "between bars N and M", "at the start" or "at the end")'); f.i = s; return false; } after = p; return true; } },
+    { name: '"across N bars"', read: () => { if (!(f.kw('across') || f.kw('over'))) return false; bars = f.whole('a number of new bars', PHRASE_BARS_MIN, PHRASE_BARS_MAX); f.kw('new'); if (!(f.kw('bars') || f.kw('bar'))) f.fail('"bars"'); return true; } },
+    { name: 'the order', read: () => { const s = f.i; if (!f.kw('in')) return false; const o = orderFromWords(f); if (o === null) { f.i = s; return false; } order = o; return true; } },
+    { name: '"seed N"', read: () => { if (!f.kw('seed')) return false; seedAt = f.at; seed = f.whole('a seed', 0); return true; } },
+  ], `"across N bars", an order ("in musical order", also seeded, by-channel), "seed N" or a place ("after bar N", "before bar N", "between bars N and M", "at the start", "at the end")`);
+  if (bars === 0) f.failAt('Expected "across N bars" (how many new bars to make between them), but found none.', at);
+  if (seed !== null && order !== 'seeded') f.failAt(`Expected a seed only with the seeded order, but this morph is in ${orderWords(order)}.`, seedAt);
+  return { op: 'morph_between', a, b, bars, order, seed: order === 'seeded' ? seed ?? 0 : 0, after: after ?? (Math.abs(a - b) === 1 ? Math.min(a, b) : Math.max(a, b)) };
 }
 
 /** The comma-separated segments of a head sentence, each at most once, in any order; `try` returns true when one was read. */
@@ -622,6 +687,7 @@ export function parse(text: string, vault: GrammarVault): ParseResult {
       return c.ok === false ? err(ss[0].start, c.message) : { ok: true, params: c.value };
     }
     reservedGuard(first);
+    if (/^morph\s+bars?\s+\d/i.test(ss[0].text)) first.failAt('A phrase starts with Extend, Mix, Morph or Take: "Morph bars N and M across K bars" works on the bars the phrase already has, so it comes after the first line.', ss[0].start, 'head');          // 2026-11-19-0996b: a step, not a head
     const open = OPEN_VERBS.find((v) => v.re.test(ss[0].text));
     if (!open) first.fail(`a description that starts with ${OPEN_EXAMPLES}`);
     const params: GrammarParams = open.kind === 'extend' ? parseExtend(ss, vault) : open.kind === 'mix' ? parseMix(ss, vault) : open.kind === 'morph' ? parseMorph(ss, vault) : open.kind === 'transform' ? parseTransform(ss, vault) : parseArrangement(ss, vault);

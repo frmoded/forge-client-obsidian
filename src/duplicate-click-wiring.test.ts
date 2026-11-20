@@ -45,7 +45,7 @@ async function rig(phrase: PhraseParams, opts: { host?: boolean; composer?: bool
   }, {}));
   const off = opts.host === false ? () => {} : registerBarSelectionHost({
     appendLine: (p, s) => ctl.appendLine(p, s), makePhrase: async () => ({ ok: true as const, path: 'phrases/phrase_099.md' }),
-    duplicateArmed: (p) => ctl.duplicateArmed(p), duplicateClick: (p, id) => ctl.duplicateClick(p, id),
+    duplicateArmed: (p) => ctl.duplicateArmed(p), duplicateClick: (p, id, bar) => ctl.duplicateClick(p, id, bar),      // 2026-11-19-0996b (deliberate): the bar's number rides along, as score-first.ts registers it
   });
   const ports: PhraseMountPorts = {
     path: notePath, title: 'phrase_020', plan: 'score',
@@ -80,41 +80,41 @@ async function rig(phrase: PhraseParams, opts: { host?: boolean; composer?: bool
   return { handle, parent, files, pins, bars, click, field, type, press, flush, suggestion, count, creates, notePath, phraseWrites, calls: () => processCalls, ctl, buttons: () => dialogButtons(parent), entries: () => dialogEntries(parent), done: () => { off(); handle.dispose(); ctl.dispose(); clock.restore(); } };
 }
 
-test('type "Duplicate", click ANY bar of an extend with two forks: the name of the note that made THAT bar is appended (its fork, else the source bar), the preview is the usual one, focus is in the field, and NOTHING is pinned', async () => {
+// 2026-11-19-0996b (deliberate): 0992 said "type Duplicate, click a bar: its note's link and the preview of the copy". Since 0996b a click after the word Duplicate (or any bar word first in the text) inserts the bar's NUMBER, ` bar 3`; the note copy is the typed
+// `Duplicate [[bar_007]].` (the tests below, and bar-words-click-wiring.test.ts for the click).
+test('2026-11-19-0996b (deliberate): type "Duplicate", click ANY bar of an extend with two forks: " bar N" is inserted (the bar\'s number in the Score; it was the link of the note that made THAT bar and the usual preview), focus is in the field, NO preview, and NOTHING is pinned', async () => {
   const r = await rig(FORKED);
   try {
     assert.equal(r.bars().length, 8);
-    const expected = ['bar_005', 'bar_005', 'bar_009', 'bar_005', 'bar_005', 'bar_002', 'bar_005', 'bar_005'];
     for (let i = 0; i < 8; i++) {
       r.type('Duplicate'); r.click(r.bars()[i]); await r.flush();
-      assert.equal(r.field().value, `Duplicate [[${expected[i]}]].`, `bar ${i + 1}`);
+      assert.equal(r.field().value, `Duplicate bar ${i + 1}`, `bar ${i + 1}`);
       assert.ok(win.document.activeElement === r.field(), `bar ${i + 1}: focus is back in the field`);
-      assert.equal(r.suggestion(), `Copy [[${expected[i]}]] to a new bar.`, `bar ${i + 1}: the usual preview`);
-      assert.deepEqual(r.buttons(), ['apply-preview', 'cancel-preview']);
-      await r.press({ key: 'Escape' });                                                  // discard the preview; the next bar is tried from "Duplicate" again
+      assert.equal(r.suggestion(), '', `bar ${i + 1}: no preview`); assert.deepEqual(r.buttons(), []);
     }
     assert.deepEqual(r.pins, [], 'not one of the eight clicks pinned a bar');
-    assert.deepEqual(r.creates, [], 'and the clicks only previewed');
+    assert.deepEqual(r.creates, [], 'and the clicks created nothing');
   } finally { r.done(); }
 });
 
 // 2026-11-19-0992a (deliberate): 0992 said "the next click pins again (the text no longer ends with the word)"; now ANY text arms the click, so the next click ADDS a link (the reader will refuse two links: Duplicate takes one note); a click pins again once the field is empty.
-test('then the NEXT click appends its link too (any text arms the click: 0992a), no pin; when the field is empty again a click pins', async () => {
+test('then the NEXT click adds " and bar M" (any text arms the click: 0992a; 2026-11-19-0996b (deliberate): after a bar word it is a bar number, it was the note link), no pin; when the field is empty again a click pins', async () => {
   const r = await rig(FORKED);
   try {
     r.type('Duplicate'); r.click(r.bars()[1]); await r.flush();
-    assert.equal(r.field().value, 'Duplicate [[bar_005]].'); assert.deepEqual(r.pins, []);
+    assert.equal(r.field().value, 'Duplicate bar 2'); assert.deepEqual(r.pins, []);
     r.click(r.bars()[5]); await r.flush();
-    assert.equal(r.pins.length, 0, 'no pin: the field has text'); assert.equal(r.field().value, 'Duplicate [[bar_005]]. [[bar_002]]');       // 2026-11-19-0992a (deliberate): was pins.length 1 and the text unchanged
+    assert.equal(r.pins.length, 0, 'no pin: the field has text'); assert.equal(r.field().value, 'Duplicate bar 2 and bar 6');       // 2026-11-19-0992a (deliberate): was pins.length 1 and the text unchanged
     r.type(''); r.click(r.bars()[4]); assert.equal(r.pins.length, 1, 'an empty field: the pin it always was');
   } finally { r.done(); }
 });
 
-test('Enter on the preview creates the copy (bars/bar_010: one past the highest); the PHRASE is never written (no writePhrase, no process call, byte for byte); the copy opens from the dialog', async () => {
+test('Enter on the preview creates the copy (bars/bar_010: one past the highest); the PHRASE is never written (no writePhrase, no process call, byte for byte); the copy opens from the dialog (2026-11-19-0996b (deliberate): the sentence is TYPED now, the click gives a bar number)', async () => {
   const r = await rig(FORKED);
   try {
     const phraseBefore = r.files.get(r.notePath)!;
-    r.type('Duplicate'); r.click(r.bars()[2]); await r.flush();                          // bar 3 is the fork bar_009
+    r.type('Duplicate [[bar_009]].'); await r.flush();                                    // bar 3 is the fork bar_009
+    await r.press({ key: 'Enter' });
     await r.press({ key: 'Enter' });
     assert.deepEqual(r.creates, ['bars/bar_010.md']);
     assert.equal(r.files.get(r.notePath), phraseBefore); assert.deepEqual(r.phraseWrites, []); assert.equal(r.calls(), 0);
@@ -124,11 +124,12 @@ test('Enter on the preview creates the copy (bars/bar_010: one past the highest)
   } finally { r.done(); }
 });
 
-test('a TRANSFORM\'s bar was taken from a phrase: the click gives that phrase\'s name and the preview says "to a new phrase"', async () => {
+test('a TRANSFORM\'s bar was taken from a phrase: the link click gives that phrase\'s name (2026-11-19-0996b (deliberate): with "Foo", it was "Duplicate"), the typed Duplicate says "to a new phrase"', async () => {
   const r = await rig(TRANSFORM);
   try {
     assert.equal(r.bars().length, 8);
-    for (const i of [0, 4, 7]) { r.type('Duplicate'); r.click(r.bars()[i]); await r.flush(); assert.equal(r.field().value, 'Duplicate [[phrase_006]].', `bar ${i + 1}`); assert.equal(r.suggestion(), 'Copy [[phrase_006]] to a new phrase.'); await r.press({ key: 'Escape' }); }
+    for (const i of [0, 4, 7]) { r.type('Foo'); r.click(r.bars()[i]); await r.flush(); assert.equal(r.field().value, 'Foo [[phrase_006]]', `bar ${i + 1}`); }
+    r.type('Duplicate [[phrase_006]].'); await r.press({ key: 'Enter' }); assert.equal(r.suggestion(), 'Copy [[phrase_006]] to a new phrase.'); await r.press({ key: 'Escape' });
     assert.deepEqual(r.pins, []);
   } finally { r.done(); }
 });
@@ -143,7 +144,8 @@ test('in every OTHER state a click on a bar is what it was: the composer empty p
   const r = await rig(FORKED);
   try {
     r.type(''); r.click(r.bars()[1]); await r.flush(); assert.equal(r.field().value, '', 'the composer text is untouched'); assert.equal(r.pins.length, 1, 'one click, one pin');
-    for (const [i, t] of ['Keep bars 1 to 2.', 'Duplicate bars'].entries()) { r.type(t); r.click(r.bars()[i + 2]); await r.flush(); assert.equal(r.field().value, `${t} [[bar_009]]`.replace('bar_009', i === 0 ? 'bar_009' : 'bar_005'), `${t}: the link goes in (0992a, deliberate: it used to pin)`); }
+    for (const [i, t] of ['Make it 8 bars long.', 'Foo'].entries()) { r.type(t);       // 2026-11-19-0996b (deliberate): the texts were 'Keep bars 1 to 2.' and 'Duplicate bars', bar words now (their click inserts a bar number: bar-words-click-wiring.test.ts)
+       r.click(r.bars()[i + 2]); await r.flush(); assert.equal(r.field().value, `${t} [[bar_009]]`.replace('bar_009', i === 0 ? 'bar_009' : 'bar_005'), `${t}: the link goes in (0992a, deliberate: it used to pin)`); }
     assert.equal(r.pins.length, 1, 'no more pins');
     r.type('Duplicate'); r.click(r.bars()[2], { shiftKey: true }); r.click(r.bars()[4], { shiftKey: true }); await r.flush();
     assert.equal(r.pins.length, 1, 'a Shift-click is the selection gesture even while the word is in the composer'); assert.equal(r.count(), '3 bars selected: bars 3 to 5'); assert.equal(r.field().value, 'Duplicate');
@@ -168,8 +170,8 @@ test('R1: with "Foo" in the field a plain click on ANY bar of an extend with two
 test('R1: the link goes at the CARET of the field, not at the end', async () => {
   const r = await rig(FORKED);
   try {
-    r.type('Keep bars 1 to 2.'); r.field().setSelectionRange(4, 4); r.click(r.bars()[2]); await r.flush();
-    assert.equal(r.field().value, 'Keep [[bar_009]] bars 1 to 2.'); assert.deepEqual(r.pins, []);
+    r.type('Make it 8 bars long.'); r.field().setSelectionRange(4, 4); r.click(r.bars()[2]); await r.flush();       // 2026-11-19-0996b (deliberate): it was 'Keep bars 1 to 2.' (Keep is a bar word now)
+    assert.equal(r.field().value, 'Make [[bar_009]] it 8 bars long.'); assert.deepEqual(r.pins, []);
   } finally { r.done(); }
 });
 
@@ -184,11 +186,11 @@ test('R1: an EMPTY composer: a click pins as ever (P3: byte for byte; the field 
   try { t.type('Foo'); t.click(t.bars()[3]); await t.flush(); assert.equal(t.field().value, 'Foo [[phrase_006]]'); assert.deepEqual(t.pins, []); } finally { t.done(); }
 });
 
-test('R1: "Duplicate" is exactly 0992: " [[bar_005]]." with the full stop and the usual preview', async () => {
+test('R1: "Duplicate" is a bar word since 0996b (deliberate: it was 0992\'s " [[bar_005]]." with the full stop and the usual preview): " bar 2", no preview', async () => {
   const r = await rig(FORKED);
   try {
     r.type('Duplicate'); r.click(r.bars()[1]); await r.flush();
-    assert.equal(r.field().value, 'Duplicate [[bar_005]].'); assert.equal(r.suggestion(), 'Copy [[bar_005]] to a new bar.'); assert.deepEqual(r.pins, []);
+    assert.equal(r.field().value, 'Duplicate bar 2'); assert.equal(r.suggestion(), ''); assert.deepEqual(r.pins, []);
   } finally { r.done(); }
 });
 
@@ -203,7 +205,7 @@ test('P3: a tab with no host registered, and a tab whose composer is not there, 
 const SRC = (f: string) => fs.readFileSync(path.join(import.meta.dirname, f), 'utf8');
 test('MECHANISM PIN: the plugin registers the two host methods on the description controller; the three phrase inspectors (extend/transform, mix, morph) carry the copy click and it asks pinnedNoteFor; nobody else passes it (P3)', () => {
   const first = SRC('score-first.ts');
-  assert.match(first, /duplicateArmed: \(path\) => descriptions\.duplicateArmed\(path\)/); assert.match(first, /duplicateClick: \(path, noteId\) => descriptions\.duplicateClick\(path, noteId\)/);
+  assert.match(first, /duplicateArmed: \(path\) => descriptions\.duplicateArmed\(path\)/); assert.match(first, /duplicateClick: \(path, noteId, bar\) => descriptions\.duplicateClick\(path, noteId, bar\)/);       // 2026-11-19-0996b (deliberate): the bar's number rides along
   const dom = SRC('phrase-dom.ts');
   assert.equal((dom.match(/copyClick: copyClickPort\(\),/g) ?? []).length, 3, 'extend (and transform, which shares its inspector), mix and morph');
   assert.match(dom, /pinnedNoteFor\(e\.prov\)[\s\S]{0,200}duplicateClick|duplicateClick[\s\S]{0,200}pinnedNoteFor/);

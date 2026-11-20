@@ -38,7 +38,7 @@ import { REDO_ID, REDO_LABEL, UNDO_ID, UNDO_LABEL } from './composer-core.ts';
 import { isEmptyNote } from './empty-note-core.ts';
 import { FAMILY_KINDS } from './note-family-core.ts';
 import type { ComposerMenuItem, PreviewResult, PromptBoxPorts } from './prompt-box-dom.ts';
-import { armsDuplicate, duplicatePreviewLine, idParts, linkInsertion, readActionText, resolveDuplicateTarget, withDuplicateLink, type ActionRead, type ResolvedDuplicate } from './duplicate-sentence-core.ts';
+import { barInsertion, barWordVerb, duplicatePreviewLine, idParts, linkInsertion, readActionText, resolveDuplicateTarget, type ActionRead, type ResolvedDuplicate } from './duplicate-sentence-core.ts';
 import { copyNoteText, createdLine, type DuplicateResult } from './duplicate-note-core.ts';
 import type { CopyMark, UndoCopyResult } from './duplicate-undo-core.ts';
 import type { Proposal } from './composer-core.ts';
@@ -119,8 +119,8 @@ export interface DescriptionController {
   appendLine(path: string, sentence: string, opts?: BarAppendOpts): Promise<{ ok: boolean; message: string } & Partial<Pick<BarAppendResult, 'data' | 'reason' | 'unchanged'>>>;
   /** 2026-11-19-0992a (R1; it was "the text is Duplicate" in 0992): is the NEXT click on a bar of this note's Score a link click? True in a PHRASE tab whose composer has ANY text (trimmed). */
   duplicateArmed(path: string): boolean;
-  /** 2026-11-19-0992: the copy click: with the composer saying "Duplicate" (or ending with the word) append ` [[name]].` (the name of the note `noteId` - a lineage id like `bars/bar_007` - names), focus, and the usual preview; 2026-11-19-0992a: with any other text, insert ` [[name]]` at the caret and focus (no preview). `null` = the Score could not tell which note made the bar. */
-  duplicateClick(path: string, noteId: string | null): Promise<{ ok: boolean; message: string }>;
+  /** The click on a bar while the phrase composer has text. 2026-11-19-0996b: with a bar word FIRST in the text (Duplicate, Copy, Move, Delete, Remove, Keep, Morph, Mix, Extend) it inserts ` bar 3` (then ` and bar 5`) at the caret (`bar` = the bar's number in the Score now); 2026-11-19-0992a: with any other text the link ` [[name]]` of the note `noteId` (a lineage id like `bars/bar_007`) goes in at the caret. Focus back, no preview, no pin. */
+  duplicateClick(path: string, noteId: string | null, bar?: number | null): Promise<{ ok: boolean; message: string }>;
   /** 2026-11-19-0970 (the list model): take back the last sentence of an arrangement's or composition's list (Cmd/Ctrl+Z in an empty composer, the "+" menu), and put it back. One write each; the dialog says what was removed or added again. */
   undoLast(path: string): Promise<{ ok: boolean; message: string }>;
   redoLast(path: string): Promise<{ ok: boolean; message: string }>;
@@ -591,25 +591,29 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     return { ok: true, disk: '' };
   }
   const duplicateArmed = (path: string): boolean => familyOfPath(path) === 'phrase' && (boxText(path) ?? '').trim() !== '';       // 2026-11-19-0992a: ANY text (it was armsDuplicate: only the word)
-  async function duplicateClick(path: string, noteId: string | null): Promise<{ ok: boolean; message: string }> {
+  async function duplicateClick(path: string, noteId: string | null, bar?: number | null): Promise<{ ok: boolean; message: string }> {
     const box = [...boxes.values()].find((b) => b.path === path);
     if (box === undefined) return { ok: false, message: 'There is no composer open for this note.' };
     if (!duplicateArmed(path)) return { ok: false, message: 'The composer is empty: a click on a bar pins it.' };
+    if (barWordVerb(box.handle.state().text) !== null) {                                                    // 2026-11-19-0996b: the text starts with a bar word (Duplicate, Copy, Move, Delete, Remove, Keep, Morph, Mix, Extend): the click says WHICH BAR (its number in the Score now), at the caret, no preview, no pin
+      if (typeof bar !== 'number' || !Number.isInteger(bar) || bar < 1) {
+        const message = 'I cannot tell which bar that is, so I cannot write its number.';
+        say(path, { type: 'notice', message }); box.handle.focus();
+        return { ok: false, message };
+      }
+      pb(`bar click: bar ${bar}`);
+      box.handle.insertAtCaret((before) => barInsertion(before, bar));
+      return { ok: true, message: `Added bar ${bar} to the composer.` };
+    }
     const parts = idParts(noteId);
     if (parts === null) {
       const message = noteId === null ? 'I cannot tell which note made that bar, so I cannot copy it.' : `That bar comes from ${noteId}, which is not a bar, a phrase, an arrangement or a composition I can copy.`;
       say(path, { type: 'notice', message }); box.handle.focus();
       return { ok: false, message };
     }
-    if (!armsDuplicate(box.handle.state().text)) {                                                          // 2026-11-19-0992a (R1): any other text: the link goes in at the caret, focus back, no preview, nothing else
-      pb(`link click: ${noteId}`);
-      box.handle.insertAtCaret((before) => linkInsertion(before, parts.name));
-      return { ok: true, message: `Added [[${parts.name}]] to the composer.` };
-    }
-    pb(`copy click: ${noteId}`);
-    box.handle.suggest(withDuplicateLink(box.handle.state().text, parts.name));                              // the text, focus back in the field ...
-    box.handle.submit();                                                                                    // ... and the usual first Enter: the preview "Copy [[bar_007]] to a new bar."
-    return { ok: true, message: `Added [[${parts.name}]] to the composer.` };
+    pb(`link click: ${noteId}`);                                                                            // 2026-11-19-0992a (R1): any other text: the link goes in at the caret, focus back, no preview, nothing else
+    box.handle.insertAtCaret((before) => linkInsertion(before, parts.name));
+    return { ok: true, message: `Added [[${parts.name}]] to the composer.` };       // 2026-11-19-0996b: the 0992 branch (a text that ENDS with the word Duplicate got ` [[name]].` and a preview) is gone: a Duplicate sentence starts the text, so it is a bar word now, and the note copy is the typed `Duplicate [[bar_007]].`
   }
 
   /** 2026-11-19-0970 - the composer's FIRST Enter in an arrangement or a composition: the typed sentence(s) APPENDED to the list (or in place of the sentence they replace), nothing written. */

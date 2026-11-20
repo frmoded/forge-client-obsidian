@@ -40,6 +40,7 @@ export const sortedOverrides = (o: Record<string, string> | undefined): { overri
 function canonicalOp(o: TransformOp): TransformOp {
   if (o.op === 'keep' || o.op === 'delete' || o.op === 'copy') return { op: o.op, runs: o.runs.map(([a, b]): [number, number] => [a, b]) };
   if (o.op === 'move') return { op: 'move', runs: o.runs.map(([a, b]): [number, number] => [a, b]), by: o.by };
+  if (o.op === 'morph_between') return { op: 'morph_between', a: o.a, b: o.b, bars: o.bars, order: o.order, seed: o.order === 'seeded' ? o.seed : 0, after: o.after };       // 2026-11-19-0996b
   const base = { first: o.first, last: o.last, ...(o.row !== undefined ? { row: o.row } : {}) };
   if (o.op === 'double_up') return { op: 'double_up', ...base, grid: o.grid };
   return o.keep === 'seeded' ? { op: 'thin_out', ...base, amount: noNegZero(o.amount), keep: 'seeded', seed: o.seed ?? 0 } : { op: 'thin_out', ...base, amount: noNegZero(o.amount) };
@@ -74,7 +75,7 @@ const forkSentences = (o: Record<string, string> | undefined): string[] => (o ? 
 const amountWords = (a: number): string => (a === 0.5 ? 'half' : `${percentOf(a)} percent`);
 const rangeText = (first: number, last: number): string => (first === last ? `bar ${first}` : `bars ${first} to ${last}`);
 function opSentence(o: TransformOp): string {
-  if (o.op === 'keep' || o.op === 'delete' || o.op === 'copy' || o.op === 'move') return structureSentence(o);
+  if (o.op === 'keep' || o.op === 'delete' || o.op === 'copy' || o.op === 'move' || o.op === 'morph_between') return structureSentence(o);
   const where = `${rangeText(o.first, o.last)}${o.row !== undefined ? `, ${o.row} row` : ''}`;
   if (o.op === 'double_up') return `Double up ${where}${o.grid !== TRANSFORM_DEFAULTS.grid ? `, on a grid of ${o.grid}` : ''}.`;
   return `Thin out ${where}, by ${amountWords(o.amount)}, ${o.keep === 'seeded' ? `chosen by seed ${o.seed}` : 'keeping the downbeat'}.`;

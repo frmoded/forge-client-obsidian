@@ -22,7 +22,7 @@ import { extendGridSentence } from './engine-refusal-core.ts';
 import { installedNotePreflight, type NotePreflight } from './note-preflight-seam.ts';
 import { computeScore, type ScoreOutcome } from './rhythm-score-core.ts';
 import { TRANSFORM_DEFAULT_GRID, rangeWords } from './phrase-words-core.ts';
-import { applyStructureOps, isStructureOp } from './bar-structure-core.ts';
+import { applyStepsAsync, applyStructureOps, isRunsOp, isStructureOp, type StructureResult } from './bar-structure-core.ts';
 export { isStructureOp };
 export { rangeWords, selectionWords, transformOpWords } from './phrase-words-core.ts';
 import type { ProvenanceMap } from './provenance-core.ts';
@@ -132,9 +132,14 @@ export interface KeepOp { op: 'keep'; runs: BarRun[] }
 export interface DeleteOp { op: 'delete'; runs: BarRun[] }
 export interface CopyOp { op: 'copy'; runs: BarRun[] }
 export interface MoveOp { op: 'move'; runs: BarRun[]; by: -1 | 1 }
-export type StructureOp = KeepOp | DeleteOp | CopyOp | MoveOp;
+/** 2026-11-19-0996b: the steps that work on RANGES of bars (the four above). */
+export type RunsOp = KeepOp | DeleteOp | CopyOp | MoveOp;
+/** 2026-11-19-0996b (bar words inside a phrase): `Morph bars 2 and 3 across 5 bars.` makes `bars` NEW bars that change step by step from bar `a` to bar `b` of the bars as they are BEFORE the step (the engine's `morph_rhythm` between the two bars as data, asked for `bars + 2` bars
+ *  because its count includes both ends; the first and the last are dropped, so the ends stay exactly as they are) and puts them in the gap after bar `after` (0 = at the start, 'end' = after the last bar). It changes WHICH bars there are, so it is a structure step: after any head, before any density step. */
+export interface MorphBetweenOp { op: 'morph_between'; a: number; b: number; bars: number; order: MorphOrder; seed: number; after: number | 'end' }
+export type StructureOp = RunsOp | MorphBetweenOp;
 export type TransformOp = DensityOp | StructureOp;
-export const STRUCTURE_OPS = ['keep', 'delete', 'copy', 'move'] as const;
+export const STRUCTURE_OPS = ['keep', 'delete', 'copy', 'move', 'morph_between'] as const;
 export const TRANSFORM_OPS = ['thin_out', 'double_up', ...STRUCTURE_OPS] as const;
 export const STRUCTURE_RUNS_MAX = 16;
 export const TRANSFORM_KEEPS = ['downbeat', 'seeded'] as const;
@@ -208,7 +213,7 @@ function validateHeadSteps(raw: unknown): StructureOp[] | undefined | string {
   for (let i = 0; i < raw.length; i++) {
     const op = validateTransformOp(raw[i], i);
     if (typeof op === 'string') return op;
-    if (!isStructureOp(op)) return `ops[${i}]: only a change of which bars there are (keep, delete, copy, move) can follow an extend, a mix or a morph, got ${op.op} (a thin out and a double up are for a take).`;
+    if (!isStructureOp(op)) return `ops[${i}]: only a change of which bars there are (keep, delete, copy, move, morph_between) can follow an extend, a mix or a morph, got ${op.op} (a thin out and a double up are for a take).`;
     out.push(op);
   }
   return out.length > 0 ? out : undefined;
@@ -318,9 +323,26 @@ function validateTransform(raw: Record<string, unknown>): Validation<PhraseParam
   return { ok: true, value: { kind: 'transform', source: raw.source, ops, ...(overrides ? { overrides } : {}) } };
 }
 
+function validateMorphBetween(raw: Record<string, unknown>, at: string): MorphBetweenOp | string {
+  const allowed = ['op', 'a', 'b', 'bars', 'order', 'seed', 'after'];
+  for (const key of Object.keys(raw)) if (!allowed.includes(key)) return `${at}: unexpected field "${key}" (morph_between holds only ${allowed.join(', ')}).`;
+  const whole = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v);
+  if (!whole(raw.a) || raw.a < 1) return `${at}.a must be a bar number of this phrase (a whole number, 1 or more), got ${JSON.stringify(raw.a)}.`;
+  if (!whole(raw.b) || raw.b < 1) return `${at}.b must be a bar number of this phrase (a whole number, 1 or more), got ${JSON.stringify(raw.b)}.`;
+  if (raw.a === raw.b) return `${at}: a and b must be two different bars, got bar ${raw.a} twice.`;
+  if (!whole(raw.bars) || raw.bars < PHRASE_BARS_MIN || raw.bars > PHRASE_BARS_MAX) return `${at}.bars must be a whole number of NEW bars from ${PHRASE_BARS_MIN} to ${PHRASE_BARS_MAX}, got ${JSON.stringify(raw.bars)}.`;
+  const order = raw.order === undefined ? MORPH_DEFAULTS.order : raw.order;
+  if (typeof order !== 'string' || !(MORPH_ORDERS as readonly string[]).includes(order)) return `${at}.order must be one of ${MORPH_ORDERS.join(', ')}, got ${JSON.stringify(raw.order)}.`;
+  const seed = raw.seed === undefined ? MORPH_DEFAULTS.seed : raw.seed;
+  if (!whole(seed) || seed < 0) return `${at}.seed must be a whole number, 0 or more, got ${JSON.stringify(raw.seed)}.`;
+  if (!(raw.after === 'end' || (whole(raw.after) && raw.after >= 0))) return `${at}.after must be the bar the new bars follow (0 = at the start) or "end", got ${JSON.stringify(raw.after)}.`;
+  return { op: 'morph_between', a: raw.a, b: raw.b, bars: raw.bars, order: order as MorphOrder, seed: order === 'seeded' ? seed : 0, after: raw.after };
+}
+
 /** A structure op: `runs` is 1 to 16 whole bar ranges, each 1 <= first <= last, ascending and apart (a gap of at least one bar); a move also says `by` -1 (left) or 1 (right). */
 function validateStructureOp(raw: Record<string, unknown>, at: string): StructureOp | string {
-  const op = raw.op as StructureOp['op'];
+  if (raw.op === 'morph_between') return validateMorphBetween(raw, at);
+  const op = raw.op as RunsOp['op'];
   const allowed = op === 'move' ? ['op', 'runs', 'by'] : ['op', 'runs'];
   for (const key of Object.keys(raw)) if (!allowed.includes(key)) return `${at}: unexpected field "${key}" (${op} holds only ${allowed.join(', ')}).`;
   const whole = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v);
@@ -341,7 +363,7 @@ function validateTransformOp(raw: unknown, i: number): TransformOp | string {
   const at = `ops[${i}]`;
   if (!isPlainObject(raw)) return `${at} must be an object like {"op": "thin_out", "first": 3, "last": 5}, got ${JSON.stringify(raw)}.`;
   if ((STRUCTURE_OPS as readonly unknown[]).includes(raw.op)) return validateStructureOp(raw, at);
-  if (raw.op !== 'thin_out' && raw.op !== 'double_up') return `${at}.op must be "thin_out", "double_up", "keep", "delete", "copy" or "move", got ${JSON.stringify(raw.op)}.`;
+  if (raw.op !== 'thin_out' && raw.op !== 'double_up') return `${at}.op must be "thin_out", "double_up", "keep", "delete", "copy", "move" or "morph_between", got ${JSON.stringify(raw.op)}.`;
   const allowed = raw.op === 'thin_out' ? ['op', 'first', 'last', 'row', 'amount', 'keep', 'seed'] : ['op', 'first', 'last', 'row', 'grid'];
   for (const key of Object.keys(raw)) {
     if (allowed.includes(key)) continue;
@@ -534,6 +556,7 @@ export function readPhraseNote(text: string): Validation<PhraseParams> {
 
 /** One transform op as the json text shows it, on one line: {"op": "thin_out", "first": 3, "last": 5, "row": "kick", "amount": 0.5}. */
 export function formatTransformOp(o: TransformOp): string {
+  if (o.op === 'morph_between') return `{"op": "morph_between", "a": ${o.a}, "b": ${o.b}, "bars": ${o.bars}, "order": ${JSON.stringify(o.order)}, "seed": ${o.seed}, "after": ${JSON.stringify(o.after)}}`;
   if (isStructureOp(o)) return `{"op": ${JSON.stringify(o.op)}, "runs": ${JSON.stringify(o.runs)}${o.op === 'move' ? `, "by": ${o.by}` : ''}}`;
   const parts = [`"op": ${JSON.stringify(o.op)}`, `"first": ${o.first}`, `"last": ${o.last}`];
   if (o.row !== undefined) parts.push(`"row": ${JSON.stringify(o.row)}`);
@@ -1017,7 +1040,7 @@ async function produceWithSteps(deps: PhraseScoreDeps, params: ExtendPhrase | Mi
   if (made.kind !== 'score') return made;
   const bars = barsOfPayload(made.payload);
   if (bars === null) return { kind: 'refusal', message: `Phrase: the ${params.kind} gave no bars to change.` };
-  const done = applyStructureOps(bars, ops!);
+  const done = ops!.every(isRunsOp) ? applyStructureOps(bars, ops!) : await applyStepsAsync(bars, ops!, (a, b, op) => morphNewBars(deps, a, b, op, title));          // 2026-11-19-0996b: a Morph-between asks the engine; the other steps are TypeScript as before
   if (done.ok === false) return { kind: 'refusal', message: `Phrase: the ${params.kind} has ${bars.length} bar${bars.length === 1 ? '' : 's'}; ${done.message}` };
   let asked: PhraseParams = { kind: 'transform', source: 'phrases/head', ops: [] };
   if (overrides) {
@@ -1026,6 +1049,27 @@ async function produceWithSteps(deps: PhraseScoreDeps, params: ExtendPhrase | Mi
     asked = { ...asked, override_bars: forks } as unknown as PhraseParams;
   }
   return computeScore(async (_data, t) => deps.compute({ bars: done.items }, asked, t), bars[0], title);
+}
+
+/**
+ * 2026-11-19-0996b - the NEW bars of a Morph-between: the engine's `morph_rhythm` between bar `a` and bar `b` of the phrase AS DATA (the call a Morph head makes: `data.a`, `data.b`; no note is read, no engine file is touched), asked for `bars + 2` bars because its count includes
+ * both ends (bar 1 of the answer is `a`, the last is `b`); the first and the last are dropped, so the phrase's own two bars stay exactly as they are and EXACTLY `bars` new bars come back. The engine's own refusal (two bars on different grids) is the person's data: said in words.
+ */
+async function morphNewBars(deps: PhraseScoreDeps, a: RhythmData, b: RhythmData, op: MorphBetweenOp, title: string): Promise<StructureResult<RhythmData>> {
+  const asked: MorphPhrase = { kind: 'morph', a: 'bar_a', b: 'bar_b', bars: op.bars + 2, order: op.order, seed: op.seed };
+  let refused: string | null = null;
+  const out = await computeScore(async (_data, t) => {
+    try { return await deps.compute({ a, b }, asked, t); } catch (e) {
+      const line = morphRhythmRefusal((e as Error)?.message ?? String(e));
+      if (line !== null) { refused = line; return null; }
+      throw e;
+    }
+  }, a, title);
+  if (refused !== null) return { ok: false, message: `bars ${op.a} and ${op.b} cannot be morphed: ${refused}` };
+  if (out.kind !== 'score') return { ok: false, message: out.message };
+  const made = barsOfPayload(out.payload);
+  if (made === null || made.length !== op.bars + 2) return { ok: false, message: `the engine gave ${made === null ? 'no bars' : `${made.length} bars`} for the morph of bars ${op.a} and ${op.b} (it was asked for ${op.bars + 2}).` };
+  return { ok: true, items: made.slice(1, op.bars + 1) };
 }
 
 /** The data of every fork note of a phrase, by bar number, or the reason one cannot be used (naming the bar and the note). Each distinct note is read once. */
@@ -1150,7 +1194,7 @@ async function produceTransform(deps: PhraseScoreDeps, params: TransformPhrase, 
   const structure = params.ops.filter(isStructureOp);
   let working: RhythmData[] = bars;
   if (structure.length > 0) {
-    const done = applyStructureOps(bars, structure);
+    const done = structure.every(isRunsOp) ? applyStructureOps(bars, structure) : await applyStepsAsync(bars, structure, (a, b, op) => morphNewBars(deps, a, b, op, title));          // 2026-11-19-0996b
     if (done.ok === false) return { kind: 'refusal', message: `Phrase: the source ${what} ${name} has ${bars.length} bar${bars.length === 1 ? '' : 's'}; ${done.message}` };
     working = done.items;
   }

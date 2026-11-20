@@ -63,7 +63,7 @@ test('runsOfBars: the ranges of a set of bar numbers, ascending and apart; junk 
 });
 
 test('THE WORDS: one table of verbs; ranges listed the way a person lists them; a move says which way', () => {
-  assert.deepEqual(Object.keys(STRUCTURE_WORDS), ['keep', 'delete', 'copy', 'move']);
+  assert.deepEqual(Object.keys(STRUCTURE_WORDS), ['keep', 'delete', 'copy', 'move', 'morph_between']);       // 2026-11-19-0996b (deliberate): the Morph between two bars of the phrase is a fifth row
   assert.equal(runsWords([[3, 5]]), 'bars 3 to 5');
   assert.equal(runsWords([[3, 5], [8, 8]]), 'bars 3 to 5 and bar 8');
   assert.equal(runsWords([[2, 2], [4, 5], [9, 9]]), 'bar 2, bars 4 to 5 and bar 9');
@@ -109,8 +109,8 @@ test('REFUSED by the grammar, one sentence with a place: ranges out of order or 
   assert.match(bad('Take [[phrase_006]]. Keep bar 5 and bars 2 to 3.').message, /^Expected the bars in order with at least one bar between ranges, but bars 2 to 3 comes after bar 5\.$/);
   assert.match(bad('Take [[phrase_006]]. Delete bars 1 to 2 and bar 3.').message, /^Expected the bars in order with at least one bar between ranges, but bar 3 comes after bars 1 to 2\.$/);
   assert.match(bad('Take [[phrase_006]]. Thin out bar 1. Delete bar 2.').message, /^Expected "Delete" to come before any "Thin out" or "Double up"/);
-  assert.match(bad('Take [[phrase_006]]. Move bar 2.').message, /^Expected "one bar left" or "one bar right", but found the end of the sentence\.$/);
-  assert.match(bad('Take [[phrase_006]]. Move bar 2 two bars left.').message, /^Expected "one bar left" or "one bar right", but found "two"\.$/);
+  assert.match(bad('Take [[phrase_006]]. Move bar 2.').message, /^Expected "one bar left", "one bar right", "back" or "forward", but found the end of the sentence\.$/);       // 2026-11-19-0996b (deliberate): the driver's words are named too
+  assert.match(bad('Take [[phrase_006]]. Move bar 2 two bars left.').message, /^Move takes one bar at a time\. Say "Move bar 2 one bar left\." twice\.$/);       // 2026-11-19-0996b (deliberate): read and refused with the sentence to say instead (it was "Expected ... but found two")
   assert.match(bad('Take [[phrase_006]]. Keep bars 3 to 5 please.').message, /^Expected the end of the sentence, but found "please"\.$/);
   assert.match(bad('Take [[phrase_006]]. Keep.').message, /^Expected "bar N" or "bars N to M"/);
   const e = bad('Take [[phrase_006]]. Delete bar 9 and bar 4.');
@@ -132,7 +132,7 @@ test('THE VALIDATOR (the json block): runs, by, order of the steps, no foreign f
   assert.match(msg([{ op: 'move', runs: [[1, 1]] }]), /by must be -1 \(one bar left\) or 1/);
   assert.match(msg([{ op: 'move', runs: [[1, 1]], by: 2 }]), /by must be -1/);
   assert.match(msg([{ op: 'thin_out', first: 1, last: 2, amount: 0.5 }, { op: 'delete', runs: [[1, 1]] }]), /ops\[1\]: a change of which bars there are \(delete\) must come before/);
-  assert.match(msg([{ op: 'shuffle' }]), /must be "thin_out", "double_up", "keep", "delete", "copy" or "move"/);
+  assert.match(msg([{ op: 'shuffle' }]), /must be "thin_out", "double_up", "keep", "delete", "copy", "move" or "morph_between"/);       // 2026-11-19-0996b (deliberate)
   assert.match(msg([{ op: 'keep', runs: [[1, 1]], first: 1 }]), /unexpected field "first"/);
   assert.match(msg([{ op: 'keep', runs: Array.from({ length: 17 }, (_, i) => [i * 2 + 1, i * 2 + 1]) }]), /1 to 16 bar ranges/);
 });

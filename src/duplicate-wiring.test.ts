@@ -179,27 +179,31 @@ test('duplicateArmed: the next click is a copy click when the composer has ANY t
   assert.equal(arr.ctl.duplicateArmed(arr.path), false, 'P3: only a phrase tab has the gesture');
 });
 
-test('duplicateClick: appends " [[bar_007]]." to the text, returns focus to the field and shows the usual preview; Enter applies', async () => {
-  const r = rig(); await r.ready(); r.type('Duplicate');
-  const done = await r.ctl.duplicateClick(r.path, 'bars/bar_007'); await r.flush();
+// 2026-11-19-0996b (deliberate): 0992 pinned "Duplicate" + a click = ` [[bar_007]].` and the preview of the copy; the click after the word Duplicate (or any bar word first) gives the bar's NUMBER now (bar-words-click-wiring.test.ts), and the note copy is the typed
+// `Duplicate [[bar_007]].` (the tests of this file that type it). What the controller does for the other texts is pinned here as before.
+test('duplicateClick (2026-11-19-0996b, deliberate): with any text that is not a bar word the link goes in at the caret ("Please duplicate" too: no full stop, no preview, nothing created); with "Duplicate" it is the bar number', async () => {
+  const r = rig(); await r.ready(); r.type('Please duplicate');
+  const done = await r.ctl.duplicateClick(r.path, 'bars/bar_007', 4); await r.flush();
   assert.equal(done.ok, true);
-  assert.equal(r.field().value, 'Duplicate [[bar_007]].');
+  assert.equal(r.field().value, 'Please duplicate [[bar_007]]');
   assert.ok(win.document.activeElement === r.field(), 'focus is back in the field');
-  assert.equal(r.suggestion(), 'Copy [[bar_007]] to a new bar.'); assert.deepEqual(r.buttons(), ['apply-preview', 'cancel-preview']);
+  assert.equal(r.suggestion(), ''); assert.deepEqual(r.buttons(), []);
   assert.equal(r.ctl.duplicateArmed(r.path), true, 'any text arms the click now (0992a, deliberate: it was false: a normal click pinned again); the next click would add a second link');
-  assert.deepEqual(r.creates, [], 'the click only previews');
-  await r.enter(); assert.deepEqual(r.creates, ['bars/bar_008.md']);
+  assert.deepEqual(r.creates, [], 'the click only inserts');
+  const w = rig(); await w.ready(); w.type('Duplicate');
+  assert.equal((await w.ctl.duplicateClick(w.path, 'bars/bar_007', 4)).ok, true); await w.flush();
+  assert.equal(w.field().value, 'Duplicate bar 4'); assert.equal(w.suggestion(), ''); assert.deepEqual(w.creates, []);
 });
 
-test('duplicateClick: a click on a note of a phrase (a transform\'s bar) copies the PHRASE; a bar with no known source, and a kit, say so in words and change nothing', async () => {
-  const r = rig(); await r.ready(); r.type('Duplicate');
-  await r.ctl.duplicateClick(r.path, 'phrases/phrase_008'); await r.flush();
-  assert.equal(r.field().value, 'Duplicate [[phrase_008]].'); assert.equal(r.suggestion(), 'Copy [[phrase_008]] to a new phrase.');
-  const r2 = rig(); await r2.ready(); r2.type('Duplicate');
-  const none = await r2.ctl.duplicateClick(r2.path, null); await r2.flush();
-  assert.equal(none.ok, false); assert.match(none.message, /which note made that bar/i); assert.equal(r2.field().value, 'Duplicate');
-  const kit = await r2.ctl.duplicateClick(r2.path, 'kits/rock'); await r2.flush();
-  assert.equal(kit.ok, false); assert.equal(r2.field().value, 'Duplicate'); assert.deepEqual(r2.creates, []);
+test('duplicateClick: a click on a note of a phrase (a transform\'s bar) gives the PHRASE\'s link (2026-11-19-0996b, deliberate: with "Foo"; "Duplicate" gives the number); a bar with no known source, and a kit, say so in words and change nothing', async () => {
+  const r = rig(); await r.ready(); r.type('Foo');
+  await r.ctl.duplicateClick(r.path, 'phrases/phrase_008', 2); await r.flush();
+  assert.equal(r.field().value, 'Foo [[phrase_008]]');
+  const r2 = rig(); await r2.ready(); r2.type('Foo');
+  const none = await r2.ctl.duplicateClick(r2.path, null, 2); await r2.flush();
+  assert.equal(none.ok, false); assert.match(none.message, /which note made that bar/i); assert.equal(r2.field().value, 'Foo');
+  const kit = await r2.ctl.duplicateClick(r2.path, 'kits/rock', 2); await r2.flush();
+  assert.equal(kit.ok, false); assert.equal(r2.field().value, 'Foo'); assert.deepEqual(r2.creates, []);
 });
 
 // 2026-11-19-0992a (deliberate): 0992 said a click with other text in the field does nothing ("Keep bars 1 to 2." stayed as it was); now it inserts the link (duplicate-followups-wiring.test.ts); an EMPTY composer still does nothing (the Score pins).

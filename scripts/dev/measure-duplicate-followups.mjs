@@ -12,9 +12,9 @@
 //   clickAfterFooReturnsFocus        document.activeElement is the field after each click
 //   clickAfterFooShowsNoPreview      no live preview in the dialog after each click, nothing was created
 //   clickAfterFooDoesNotPin          the inspector's pin is null and nothing was told as pinned after all 8 clicks
-//   clickGoesAtTheCaret              "Keep bars 1 to 2." with the caret after "Keep", a click on bar 3: "Keep [[bar_009]] bars 1 to 2."
+//   clickGoesAtTheCaret              [MOVED by 0996b: "Keep" is a bar word now] "Make it 8 bars long." with the caret after "Make", a click on bar 3: "Make [[bar_009]] it 8 bars long." (it was "Keep bars 1 to 2." and "Keep [[bar_009]] bars 1 to 2.")
 //   emptyComposerPins                the field emptied, a click on bar 5 pins ph_bar_5 and the field stays empty
-//   duplicateWordIsUnchanged         "Duplicate", a click on bar 3: "Duplicate [[bar_009]]." + the preview "Copy [[bar_009]] to a new bar." + not pinned
+//   duplicateWordIsUnchanged         [MOVED by 0996b: Duplicate + a click is a BAR WORD click now] "Duplicate", a click on bar 3: "Duplicate bar 3", no preview, not pinned (it was "Duplicate [[bar_009]]." and the preview "Copy [[bar_009]] to a new bar."; the typed `Duplicate [[bar_009]].` is checked in measure-bar-words.mjs)
 //   shiftClickWithTextIsSelection    "Foo", a real Shift+click: nothing pinned, nothing appended, the selection gesture fired once
 //   noticeTextIsThePlainSentence     after Enter the dialog line (the check mark cut) is exactly "Created bar_010, a copy of bar_009."
 //   noticeButtonsShowTheNames        two link buttons whose text is "bar_010" and "bar_009", each wider than 8 px and underlined, not red, with a pointer cursor and no title
@@ -108,7 +108,7 @@ window.setup = function (width) {
     // the same eight lines phrase-dom.ts copyClickPort has: armed from the controller, the note that made the bar from pinnedNoteFor
     copyClick: {
       armed: function () { return window.ctl.duplicateArmed(PATH); },
-      onBar: function (e) { var pin = cp.pinnedNoteFor(e.prov); window.ctl.duplicateClick(PATH, pin ? pin.noteId : null); },
+      onBar: function (e) { var pin = cp.pinnedNoteFor(e.prov); window.ctl.duplicateClick(PATH, pin ? pin.noteId : null, e.prov.params.bar); },      // 2026-11-19-0996b: the bar's number rides along (a bar word first in the composer inserts it)
     },
   });
   var ports = cp.descriptionPortsFor({
@@ -185,19 +185,19 @@ for (const w of [800, 1100]) for (const theme of ['light', 'dark']) {
 
   // ---- at the caret; the empty composer pins; Duplicate unchanged; Shift+click ---------------------------------------------------------------------------------------------------------------------------------------
   await ev(`setup(${w})`); await mounted(); await sleep(300);
-  await typeText('Keep bars 1 to 2.'); await ev(`(function () { var f = document.querySelector('.forge-prompt-box-text'); f.setSelectionRange(4, 4); })()`); await clickBar(3);
-  verdict[`clickGoesAtTheCaret_${tag}`] = (await ev('fieldValue()')) === 'Keep [[bar_009]] bars 1 to 2.' && (await ev('pinned()')) === null;
+  await typeText('Make it 8 bars long.'); await ev(`(function () { var f = document.querySelector('.forge-prompt-box-text'); f.setSelectionRange(4, 4); })()`); await clickBar(3);      // 2026-11-19-0996b (MOVED): it was 'Keep bars 1 to 2.', and Keep is a bar word now
+  verdict[`clickGoesAtTheCaret_${tag}`] = (await ev('fieldValue()')) === 'Make [[bar_009]] it 8 bars long.' && (await ev('pinned()')) === null;
   await clearField(); await clickBar(5);
   verdict[`emptyComposerPins_${tag}`] = (await ev('pinned()')) === 'ph_bar_5' && (await ev('fieldValue()')) === '';
   await ev(`setup(${w})`); await mounted(); await sleep(300);
   await typeText('Duplicate'); await clickBar(3);
-  verdict[`duplicateWordIsUnchanged_${tag}`] = (await ev('fieldValue()')) === 'Duplicate [[bar_009]].' && (await ev('suggestion()')) === 'Copy [[bar_009]] to a new bar.' && (await ev('livePreview()')) === true && (await ev('pinned()')) === null;
-  await ESC(); await clearField(); await typeText('Foo'); const pinBefore = await ev('pinned()'); await clickBar(7, MOD.shift);
+  verdict[`duplicateWordIsUnchanged_${tag}`] = (await ev('fieldValue()')) === 'Duplicate bar 3' && (await ev('suggestion()')) === '' && (await ev('livePreview()')) === false && (await ev('pinned()')) === null;      // 2026-11-19-0996b (MOVED): see the verdict list
+  await clearField(); await typeText('Foo'); const pinBefore = await ev('pinned()'); await clickBar(7, MOD.shift);
   verdict[`shiftClickWithTextIsSelection_${tag}`] = (await ev('pinned()')) === pinBefore && (await ev('fieldValue()')) === 'Foo' && (await ev('window.shifted || 0')) === 1;
 
   // ---- the notice: plain sentence, visible names in link buttons, selectable --------------------------------------------------------------------------------------------------------------------------------------------
   await ev(`setup(${w})`); await mounted(); await sleep(300);
-  await typeText('Duplicate'); await clickBar(3); await ENTER(); await sleep(350);
+  await typeText('Duplicate [[bar_009]].'); await ENTER(); await sleep(200); await ENTER();      // (a typed sentence: the first Enter shows the preview, the second applies) await sleep(350);      // 2026-11-19-0996b (MOVED): typed, since Duplicate + a click is a bar word click now
   const made = await ev(`({ dialog: dialog(), links: [].map.call(document.querySelectorAll('.forge-chat-link'), function (b) { var r = b.getBoundingClientRect(); var cs = getComputedStyle(b); return { text: b.textContent, w: r.width, h: r.height, deco: cs.textDecorationLine, cursor: cs.cursor, title: b.hasAttribute('title') || b.hasAttribute('aria-label'), red: hueRed(cs.color), select: cs.userSelect, bg: cs.backgroundColor, shadow: cs.boxShadow, color: cs.color }; }) })`);
   const applied = made.dialog.filter((d) => d.kind === 'applied').pop();
   numbers[`notice@${tag}`] = { applied: applied && applied.text, links: made.links };
@@ -218,7 +218,7 @@ for (const w of [800, 1100]) for (const theme of ['light', 'dark']) {
   await ev(`setup(${w})`); await mounted(); await sleep(300);
   await sayApplied('Make it 20 percent slower.');
   const listAfterSentence = await ev('list()'); const callsBeforeCopy = await ev('processCalls');
-  await typeText('Duplicate [[bar_009]].'); await ENTER(); await sleep(250); await ENTER(); await sleep(350);
+  await typeText('Duplicate [[bar_009]].'); await ENTER(); await sleep(200); await ENTER();      // (a typed sentence: the first Enter shows the preview, the second applies) await sleep(250); await ENTER(); await sleep(350);
   const callsAfterCopy = await ev('processCalls');
   verdict[`cmdZRemovesAFreshCopyMadeFirst_${tag}`] = (await ev(`notes.has('bars/bar_010.md')`)) === true;
   await focusField(); await CMD_Z(); await sleep(300);
@@ -232,7 +232,7 @@ for (const w of [800, 1100]) for (const theme of ['light', 'dark']) {
   await ev(`setup(${w})`); await mounted(); await sleep(300);
   await sayApplied('Make it 20 percent slower.');
   const lenWithSentence = (await ev('list()')).length;
-  await typeText('Duplicate [[bar_009]].'); await ENTER(); await sleep(250); await ENTER(); await sleep(350);
+  await typeText('Duplicate [[bar_009]].'); await ENTER(); await sleep(200); await ENTER();      // (a typed sentence: the first Enter shows the preview, the second applies) await sleep(250); await ENTER(); await sleep(350);
   await ev(`notes.set('bars/bar_010.md', notes.get('bars/bar_010.md') + String.fromCharCode(10) + 'edited by hand' + String.fromCharCode(10))`);
   await focusField(); await CMD_Z(); await sleep(300);
   verdict[`cmdZLeavesAnEditedCopy_${tag}`] = (await ev(`notes.has('bars/bar_010.md')`)) === true && (await ev('trashed.length')) === 0 && (await lastNotice()) === 'bar_010 was edited since, so it was left in place. Delete it in the file list if you want it gone.';
@@ -241,7 +241,7 @@ for (const w of [800, 1100]) for (const theme of ['light', 'dark']) {
 
   // ---- general ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
   await ev(`setup(${w})`); await mounted(); await sleep(300);
-  await typeText('Duplicate'); await clickBar(3); await ENTER(); await sleep(300);
+  await typeText('Duplicate [[bar_009]].'); await ENTER(); await sleep(200); await ENTER();      // (a typed sentence: the first Enter shows the preview, the second applies) await sleep(300);      // 2026-11-19-0996b (MOVED): typed (the preview of the note copy is what the general checks looked at)
   const red = await ev('redFound()');
   const tips = await ev(`[].filter.call(document.querySelectorAll('#host *'), function (e) { return e.hasAttribute('title') || e.hasAttribute('aria-label'); }).map(function (e) { return String(e.className.baseVal !== undefined ? e.className.baseVal : e.className); })`);
   const over = await ev(`({ page: document.documentElement.scrollWidth - document.documentElement.clientWidth, host: document.getElementById('host').scrollWidth - document.getElementById('host').clientWidth, card: document.querySelector('.forge-prompt-box').scrollWidth - document.querySelector('.forge-prompt-box').clientWidth })`);

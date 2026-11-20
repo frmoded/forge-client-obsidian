@@ -72,7 +72,8 @@ test('R1: a click with "Foo" in the field appends " [[bar_007]]" (one space, NO 
 
 test('R1: where the link goes: at the CARET (the middle of the text too), one leading space unless the text before it already ends in a space or an opening bracket, none at the very start; a phrase link and the typed text after the caret are kept', async () => {
   const cases: Array<[string, number, string]> = [
-    ['Foo', 3, 'Foo [[bar_007]]'], ['Foo ', 4, 'Foo [[bar_007]]'], ['Foo\n', 4, 'Foo\n[[bar_007]]'], ['Keep (', 6, 'Keep ([[bar_007]]'], ['Keep [', 6, 'Keep [[[bar_007]]'], ['Foo{', 4, 'Foo{[[bar_007]]'],
+    ['Foo', 3, 'Foo [[bar_007]]'], ['Foo ', 4, 'Foo [[bar_007]]'], ['Foo\n', 4, 'Foo\n[[bar_007]]'], ['Make (', 6, 'Make ([[bar_007]]'], ['Make [', 6, 'Make [[[bar_007]]'],      // 2026-11-19-0996b (deliberate): it was 'Keep (' and 'Keep [': Keep is a bar word now
+     ['Foo{', 4, 'Foo{[[bar_007]]'],
     ['Foo bar', 3, 'Foo [[bar_007]] bar'], ['Foo bar', 0, '[[bar_007]]Foo bar'], ['Foo bar', 7, 'Foo bar [[bar_007]]'],
   ];
   for (const [text, caret, want] of cases) {
@@ -90,14 +91,15 @@ test('R1: the caret ends AFTER the inserted link (a second click goes after the 
   assert.equal(r.field().value, 'Foo [[bar_007]] [[bar_005]]'); assert.equal(r.field().selectionStart, r.field().value.length);
 });
 
-test('R1: the word Duplicate keeps 0992 EXACTLY: " [[bar_007]]." with the full stop, the usual preview "Copy [[bar_007]] to a new bar.", focus in the field; Enter makes the copy', async () => {
+test('R1 (2026-11-19-0996b, deliberate: it was "the word Duplicate keeps 0992 EXACTLY"): the word Duplicate first in the text now gives the bar NUMBER ("Duplicate bar 4", no preview); a text that only ENDS with the word is any other text: the link at the caret; a click with no bar number says so', async () => {
   const r = rig(); await r.ready(); r.type('Duplicate');
-  await r.ctl.duplicateClick(r.path, 'bars/bar_007'); await r.flush();
-  assert.equal(r.field().value, 'Duplicate [[bar_007]].'); assert.ok(win.document.activeElement === r.field());
-  assert.equal([...r.el.querySelectorAll('.forge-chat-suggestion-description')].pop()?.textContent, 'Copy [[bar_007]] to a new bar.', 'the usual preview');
-  await r.enter(); assert.deepEqual(r.creates, ['bars/bar_008.md']);
-  const kw = rig(); await kw.ready(); kw.type('Keep bars 1 to 2. duplicate'); await kw.ctl.duplicateClick(kw.path, 'bars/bar_007'); await kw.flush();
-  assert.equal(kw.field().value, 'Keep bars 1 to 2. duplicate [[bar_007]].', 'ends with the word: the old result');
+  await r.ctl.duplicateClick(r.path, 'bars/bar_007', 4); await r.flush();
+  assert.equal(r.field().value, 'Duplicate bar 4'); assert.ok(win.document.activeElement === r.field());
+  assert.equal([...r.el.querySelectorAll('.forge-chat-suggestion-description')].pop()?.textContent, undefined, 'no preview'); assert.deepEqual(r.creates, []);
+  const kw = rig(); await kw.ready(); kw.type('Make it long. duplicate'); await kw.ctl.duplicateClick(kw.path, 'bars/bar_007', 4); await kw.flush();
+  assert.equal(kw.field().value, 'Make it long. duplicate [[bar_007]]', 'ends with the word: the link, as any other text');
+  const nobar = rig(); await nobar.ready(); nobar.type('Duplicate'); const said = await nobar.ctl.duplicateClick(nobar.path, 'bars/bar_007'); await nobar.flush();
+  assert.equal(said.ok, false); assert.equal(nobar.field().value, 'Duplicate');
 });
 
 test('R1: a note the Score cannot name (null) or a kit: said in words, the text is unchanged (as 0992)', async () => {

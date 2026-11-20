@@ -111,7 +111,7 @@ window.setup = function (width) {
     // the same eight lines phrase-dom.ts copyClickPort has: armed from the controller, the note that made the bar from pinnedNoteFor
     copyClick: {
       armed: function () { return window.ctl.duplicateArmed(PATH); },
-      onBar: function (e) { var pin = cp.pinnedNoteFor(e.prov); window.ctl.duplicateClick(PATH, pin ? pin.noteId : null); },
+      onBar: function (e) { var pin = cp.pinnedNoteFor(e.prov); window.ctl.duplicateClick(PATH, pin ? pin.noteId : null, e.prov.params.bar); },      // 2026-11-19-0996b: the bar's number rides along
     },
   });
   var ports = cp.descriptionPortsFor({
@@ -168,39 +168,33 @@ for (const w of [800, 1100]) for (const theme of ['light', 'dark']) {
   const tag = `${w}_${theme}`;
   await ev(`theme('${theme}')`);
 
-  // ---- type Duplicate, click EVERY bar -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  // ---- 2026-11-19-0996b (MOVED): "Duplicate" + a click on a bar is a BAR WORD click now (" bar N": measure-bar-words.mjs). The four click verdicts of 0992 (copyClickAppendsTheNameOfEveryBar, copyClickShowsTheUsualPreview, copyClickReturnsFocusToTheField, copyClickDoesNotPin)
+  // are replaced by the TYPED sentence for every note the eight bars name: the usual preview, and nothing pinned.
   await ev(`setup(${w})`); await mounted(); await sleep(300);
-  const names = [], previews = [], focuses = [], live = [];
-  for (let i = 1; i <= 8; i++) {
-    await typeText('Duplicate'); await clickBar(i);
-    names.push(await ev('fieldValue()')); previews.push(await ev('suggestion()')); focuses.push(await ev('focusIsField()')); live.push(await ev('livePreview()'));
-    if (i === 3) await p.shot(path.join(OUT, `duplicate-armed-preview-${w}-${theme}.png`), { x: 0, y: 0, width: Math.min(w, 1100), height: 640 });
-    await ESC(); await clearField();
+  const names = [], previews = [], live = [];
+  for (let i = 0; i < 8; i++) {
+    await clearField(); await typeText(`Duplicate [[${EXPECT[i]}]].`); await ENTER(); await sleep(250);
+    names.push(await ev('fieldValue()')); previews.push(await ev('suggestion()')); live.push(await ev('livePreview()'));
+    if (i === 2) await p.shot(path.join(OUT, `duplicate-armed-preview-${w}-${theme}.png`), { x: 0, y: 0, width: Math.min(w, 1100), height: 640 });
+    await ESC();
   }
-  numbers[`clickEveryBar@${tag}`] = { names, previews };
-  verdict[`copyClickAppendsTheNameOfEveryBar_${tag}`] = names.length === 8 && names.every((n, i) => n === `Duplicate [[${EXPECT[i]}]].`);
-  verdict[`copyClickShowsTheUsualPreview_${tag}`] = previews.every((s, i) => s === `Copy [[${EXPECT[i]}]] to a new bar.`) && live.every((x) => x === true);
-  verdict[`copyClickReturnsFocusToTheField_${tag}`] = focuses.every((x) => x === true);
-  verdict[`copyClickDoesNotPin_${tag}`] = (await ev('pinned()')) === null && (await ev('pinTold.length')) === 0;
+  numbers[`typedEveryNote@${tag}`] = { names, previews };
+  verdict[`typedSentenceGivesTheUsualPreviewForEveryNote_${tag}`] = previews.every((s, i) => s === `Copy [[${EXPECT[i]}]] to a new bar.`) && live.length === 8 && live.every((x) => x === true) && (await ev('creates.length')) === 0;
+  verdict[`typedSentenceDoesNotPin_${tag}`] = (await ev('pinned()')) === null && (await ev('pinTold.length')) === 0;
 
-  // ---- the next click pins again; other states pin; Shift+click is still selection ---------------------------------------------------------------------------------------------------------------------------------------
+  // ---- other states pin; Shift+click is still selection ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
   await ev(`setup(${w})`); await mounted(); await sleep(300);
-  await typeText('Duplicate'); await clickBar(2);
-  const afterCopy = await ev('fieldValue()');
-  await clickBar(4);
-  // 2026-11-19-0992a (deliberate, MOVED): 0992 said the next click pins (the text no longer ended with the word); now ANY text arms the click, so it appends a second link and pins nothing (measure-duplicate-followups.mjs has the new verdicts); the name is kept, its meaning moved
-  verdict[`nextClickPinsAgain_${tag}`] = afterCopy === 'Duplicate [[bar_005]].' && (await ev('pinned()')) === null && (await ev('fieldValue()')) === 'Duplicate [[bar_005]]. [[bar_005]]';
-  await clearField(); await clickBar(5); const p5 = await ev('pinned()');
-  await typeText('Keep bars 1 to 2.'); await clickBar(6); const p6 = await ev('pinned()'); const f6 = await ev('fieldValue()');
-  // 2026-11-19-0992a (deliberate, MOVED): an EMPTY field still pins (bar 5); "Keep bars 1 to 2." now gets the link of the clicked bar (bar 6 is bars/bar_002) and the pin stays on bar 5
-  verdict[`clickPinsWhenTheTextIsNotDuplicate_${tag}`] = p5 === 'ph_bar_5' && p6 === 'ph_bar_5' && f6 === 'Keep bars 1 to 2. [[bar_002]]';
+  // 2026-11-19-0996b (MOVED): nextClickPinsAgain and clickPinsWhenTheTextIsNotDuplicate described the 0992 click on the word Duplicate; the click is a bar word click now (measure-bar-words.mjs: "Duplicate bar 3 and bar 5"). What stays true is checked here: an EMPTY field pins, other text gets the note link and pins nothing.
+  await clickBar(5); const p5 = await ev('pinned()');
+  await typeText('Make it 8 bars long.'); await clickBar(6); const p6 = await ev('pinned()'); const f6 = await ev('fieldValue()');
+  verdict[`clickPinsWhenTheTextIsNotDuplicate_${tag}`] = p5 === 'ph_bar_5' && p6 === 'ph_bar_5' && f6 === 'Make it 8 bars long. [[bar_002]]';
   await clearField(); await typeText('Duplicate'); const pinBefore = await ev('pinned()'); await clickBar(7, MOD.shift);
   verdict[`shiftClickIsStillSelectionWhileArmed_${tag}`] = (await ev('pinned()')) === pinBefore && (await ev('fieldValue()')) === 'Duplicate' && (await ev('window.shifted || 0')) === 1;
 
   // ---- Enter makes the copy of bar 3 (the fork, bar_009) -------------------------------------------------------------------------------------------------------------------------------------------------------------------
   await ev(`setup(${w})`); await mounted(); await sleep(300);
   const phraseBefore = await ev('phraseText'); const srcBefore = await ev(`notes.get('bars/bar_009.md')`);
-  await typeText('Duplicate'); await clickBar(3);
+  await typeText('Duplicate [[bar_009]].'); await ENTER(); await sleep(250);       // 2026-11-19-0996b (MOVED): typed (it was the word and a click on bar 3, the fork bar_009)
   await ENTER(); await sleep(300);
   const made = await ev(`({ creates: creates.slice(), copy: notes.get('bars/bar_010.md') || '', src: notes.get('bars/bar_009.md'), phrase: notes.get(PATH), calls: processCalls, dialog: dialog(), field: fieldValue(),
     links: [].map.call(document.querySelectorAll('.forge-chat-link'), function (b) { var r = b.getBoundingClientRect(); return { text: b.textContent, w: r.width, h: r.height }; }) })`);
@@ -221,7 +215,7 @@ for (const w of [800, 1100]) for (const theme of ['light', 'dark']) {
 
   // ---- Esc discards -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
   await ev(`setup(${w})`); await mounted(); await sleep(300);
-  await typeText('Duplicate'); await clickBar(1); await ESC(); await sleep(150);
+  await typeText('Duplicate [[bar_005]].'); await ENTER(); await sleep(250); await ESC(); await sleep(150);       // 2026-11-19-0996b (MOVED): typed
   verdict[`escDiscardsThePreview_${tag}`] = (await ev('creates.length')) === 0 && (await ev('livePreview()')) === false;
 
   // ---- typed by hand ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -238,7 +232,7 @@ for (const w of [800, 1100]) for (const theme of ['light', 'dark']) {
 
   // ---- general ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
   await ev(`setup(${w})`); await mounted(); await sleep(300);
-  await typeText('Duplicate'); await clickBar(3); await ENTER(); await sleep(300);
+  await typeText('Duplicate [[bar_009]].'); await ENTER(); await sleep(250); await ENTER(); await sleep(300);       // 2026-11-19-0996b (MOVED): typed
   const look = await ev(`(function () { var b = document.querySelector('.forge-chat-link'); if (!b) return null; var cs = getComputedStyle(b); return { deco: cs.textDecorationLine, cursor: cs.cursor, title: b.hasAttribute('title') || b.hasAttribute('aria-label'), red: hueRed(cs.color) }; })()`);
   numbers[`link@${tag}`] = look;
   verdict[`linkLooksLikeALink_${tag}`] = !!look && /underline/.test(look.deco) && look.cursor === 'pointer' && look.title === false && look.red === false;

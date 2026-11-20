@@ -28,6 +28,27 @@ export const withDuplicateLink = (text: string, name: string): string => `${Stri
 /** 2026-11-19-0992a (R1): what a click on a bar inserts into a composer that has ANY other text: the bar's link, ` [[bar_007]]` (no full stop). `before` is the text before the caret: one leading space unless there is nothing before the caret, or what is there already ends in white space or an opening bracket. */
 export const linkInsertion = (before: string, name: string): string => `${before === '' || /[\s(\[{]$/.test(before) ? '' : ' '}[[${name}]]`;
 
+/** 2026-11-19-0996b (BAR WORDS INSIDE A PHRASE): the words that make a click on a bar insert its POSITION instead of its note's link: the FIRST word of the composer's text (any case, whole word) is one of these. */
+export const BAR_WORD_VERBS = ['duplicate', 'copy', 'move', 'delete', 'remove', 'keep', 'morph', 'mix', 'extend'] as const;
+export function barWordVerb(text: string): (typeof BAR_WORD_VERBS)[number] | null {
+  const m = /^\s*([A-Za-z]+)(?![A-Za-z0-9_])/.exec(String(text ?? ''));
+  const word = m === null ? '' : m[1].toLowerCase();
+  return (BAR_WORD_VERBS as readonly string[]).includes(word) ? word as (typeof BAR_WORD_VERBS)[number] : null;
+}
+/** The bar's number in the Score now, from the provenance params of the element that was clicked (the lineage builders write `bar`, 1-based, as the selection menu reads it); a MIX is one bar and has none: bar 1; null = cannot tell. */
+export function barNumberOf(params: Record<string, unknown> | null | undefined, isMix: boolean): number | null {
+  const n = params?.bar;
+  return typeof n === 'number' && Number.isInteger(n) && n >= 1 ? n : isMix ? 1 : null;
+}
+/** What a click on bar `bar` of the Score inserts at the caret after `before` (the text before it): `bar 3` (with one leading space unless there is nothing before, or white space or an opening bracket), `and bar 5` after a bar reference ("bar 3", "bars 3 to 5", "bar 3 and bar 5", "bars 2, 4"), a new `bar 5` after anything else (a direction, "and", a comma). */
+export function barInsertion(before: string, bar: number): string {
+  const text = String(before ?? '');
+  const core = text.trimEnd();
+  const lead = text === '' || /[\s(\[{]$/.test(text) ? '' : ' ';
+  const afterRef = !/(?:\band|,)$/i.test(core) && /(?:\bbars?\s+\d+|\bto\s+\d+|,\s*\d+|\band\s+\d+)$/i.test(core);
+  return `${lead}${afterRef ? 'and ' : ''}bar ${bar}`;
+}
+
 const WHAT = 'Duplicate what? Click a bar on the Score, or write its link, for example: Duplicate [[bar_007]].';
 const ALONE = 'Duplicate is not a step of the list, so it has to be on its own: empty the box, then write Duplicate [[bar_007]]. by itself.';
 const ONE_AT_A_TIME = 'Duplicate takes one note at a time: write Duplicate [[bar_007]]. for one link.';
@@ -39,11 +60,12 @@ const NEEDS_LINK = 'Duplicate needs a link to the note: write it like Duplicate 
  */
 export function readActionText(text: string): ActionRead {
   const t = String(text ?? '').trim();
-  if (!/(^|[.!?]\s+|\n)duplicate(?![A-Za-z0-9_])/i.test(t)) return { kind: 'none' };
-  const sentences = t.split(/(?<=[.!?])\s+|\n+/).map((s) => s.trim()).filter((s) => s !== '');
+  const sentences = t.split(/(?<=[.!?])\s+|\n+/).map((x) => x.trim()).filter((x) => x !== '');
+  const isAction = (x: string): boolean => /^duplicate(?![A-Za-z0-9_])/i.test(x) && !/^duplicate\s+bars?(?![A-Za-z0-9_])/i.test(x);       // 2026-11-19-0996b: "Duplicate bar 3." has a number and is a sentence of the LIST (the copy step), never a link
+  if (!/(^|[.!?]\s+|\n)duplicate(?![A-Za-z0-9_])/i.test(t) || !sentences.some(isAction)) return { kind: 'none' };
   const links = [...t.matchAll(/\[\[([^\]]*)\]\]/g)];
   if (sentences.length > 1) {
-    const actions = sentences.filter((x) => /^duplicate(?![A-Za-z0-9_])/i.test(x)).length;
+    const actions = sentences.filter(isAction).length;
     return { kind: 'refused', message: actions > 1 ? ONE_AT_A_TIME : ALONE };
   }
   const one = /^duplicate(?![A-Za-z0-9_])\s*(.*?)\s*\.?$/is.exec(t);

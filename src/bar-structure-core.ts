@@ -5,11 +5,14 @@
 //   "Delete bars 3 to 5 and bar 8."                those bars go; the rest close up
 //   "Copy bars 3 to 5."                            each range is played again right after itself
 //   "Move bars 3 to 5 one bar left." / "... right."  each range swaps places with the one bar next to it
+//   "Morph bars 2 and 3 across 5 bars, in musical order, and put them between bars 2 and 3."   (2026-11-19-0996b) 5 NEW bars that change step by step from bar 2 to bar 3, put in a gap; the only step that needs the ENGINE (applyStepsAsync)
 //
 // Every range is of the bars as they are BEFORE the step; the ranges are ascending and apart (validatePhrase says so). Steps that change which bars there are come before steps that change what is in them.
-import type { BarRun, StructureOp, TransformOp } from './phrase-core.ts';
+import type { BarRun, MorphBetweenOp, MorphOrder, RunsOp, StructureOp, TransformOp } from './phrase-core.ts';
 
-export const isStructureOp = (o: TransformOp): o is StructureOp => o.op === 'keep' || o.op === 'delete' || o.op === 'copy' || o.op === 'move';
+export const isStructureOp = (o: TransformOp): o is StructureOp => o.op === 'keep' || o.op === 'delete' || o.op === 'copy' || o.op === 'move' || o.op === 'morph_between';
+/** The steps that work on ranges of bars (every structure step but the morph between two bars): synchronous TypeScript, never the engine. */
+export const isRunsOp = (o: TransformOp): o is RunsOp => o.op === 'keep' || o.op === 'delete' || o.op === 'copy' || o.op === 'move';
 /** "bar 4" / "bars 3 to 5" (the same words phrase-words-core.ts `rangeWords` says: this file stays a leaf, phrase-words-core.ts imports IT). */
 const rangeWords = (first: number, last: number): string => (first === last ? `bar ${first}` : `bars ${first} to ${last}`);
 
@@ -19,6 +22,7 @@ export const STRUCTURE_WORDS: Record<StructureOp['op'], { verb: string; example:
   delete: { verb: 'delete', example: 'Delete bars 3 to 5 and bar 8.' },
   copy: { verb: 'copy', example: 'Copy bars 3 to 5.' },
   move: { verb: 'move', example: 'Move bars 3 to 5 one bar left.' },
+  morph_between: { verb: 'morph', example: 'Morph bars 2 and 3 across 5 bars, in musical order, and put them between bars 2 and 3.' },
 };
 export const MOVE_WORDS = { '-1': 'one bar left', '1': 'one bar right' } as const;
 
@@ -28,8 +32,18 @@ export function runsWords(runs: readonly BarRun[]): string {
   return parts.length <= 1 ? (parts[0] ?? '') : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
 }
 
+/** 2026-11-19-0996b: where a Morph-between puts its new bars, in words: "at the start", "at the end", "between bars 2 and 3" (the two bars it morphs when they are neighbours and the gap is the one between them), else "after bar 4". */
+export function placeWords(o: MorphBetweenOp): string {
+  if (o.after === 0) return 'at the start';
+  if (o.after === 'end') return 'at the end';
+  return Math.abs(o.a - o.b) === 1 && o.after === Math.min(o.a, o.b) ? `between bars ${o.after} and ${o.after + 1}` : `after bar ${o.after}`;
+}
+/** "in musical order" / "in seeded order, seed 17" (a seed is said only with the seeded order). */
+const morphOrderWords = (o: MorphBetweenOp): string => `in ${(o.order as MorphOrder).replace(/_/g, '-')} order${o.order === 'seeded' ? `, seed ${o.seed}` : ''}`;
+
 /** One step in lower case, no full stop: "keep bars 3 to 5" (the notes' own wording for a step: the caller capitalises it and adds the full stop). */
 export function structureWords(o: StructureOp): string {
+  if (o.op === 'morph_between') return `morph bars ${o.a} and ${o.b} across ${o.bars} ${o.bars === 1 ? 'bar' : 'bars'}, ${morphOrderWords(o)}, and put ${o.bars === 1 ? 'it' : 'them'} ${placeWords(o)}`;
   return `${STRUCTURE_WORDS[o.op].verb} ${runsWords(o.runs)}${o.op === 'move' ? ` ${MOVE_WORDS[String(o.by) as '-1' | '1']}` : ''}`;
 }
 /** One step as a sentence of the Description: "Keep bars 3 to 5 and bar 8." */
@@ -49,7 +63,7 @@ export function runsOfBars(bars: Iterable<number>): BarRun[] {
 export type StructureResult<T> = { ok: true; items: T[] } | { ok: false; message: string };
 
 /** Run one step on `items` (the bars, in order). A range past the end, a delete that would leave nothing and a move off either end are refusals in one sentence naming the bar. Never changes `items`. */
-export function applyStructure<T>(items: readonly T[], op: StructureOp): StructureResult<T> {
+export function applyStructure<T>(items: readonly T[], op: RunsOp): StructureResult<T> {
   const n = items.length;
   for (const [a, b] of op.runs) {
     if (b > n) return { ok: false, message: `${rangeWords(a, b)} asked for, but there ${n === 1 ? 'is 1 bar' : `are ${n} bars`}.` };
@@ -86,7 +100,7 @@ export function applyStructure<T>(items: readonly T[], op: StructureOp): Structu
 }
 
 /** Run the steps in order. The first refusal is the answer (with the number of the step). */
-export function applyStructureOps<T>(items: readonly T[], ops: readonly StructureOp[]): StructureResult<T> {
+export function applyStructureOps<T>(items: readonly T[], ops: readonly RunsOp[]): StructureResult<T> {
   let cur: T[] = [...items];
   for (let i = 0; i < ops.length; i++) {
     const r = applyStructure(cur, ops[i]);
@@ -96,8 +110,35 @@ export function applyStructureOps<T>(items: readonly T[], ops: readonly Structur
   return { ok: true, items: cur };
 }
 
+/** 2026-11-19-0996b: the steps in order, where a Morph-between asks `morph` for its NEW bars (the engine: the caller's). Everything else is `applyStructure`; the first refusal is the answer (with the number of the step). A step that names a bar the bars do not have is refused in the same words as the others ("bar 5 asked for, but there are 3 bars."). */
+export async function applyStepsAsync<T>(items: readonly T[], ops: readonly StructureOp[], morph: (a: T, b: T, op: MorphBetweenOp) => Promise<StructureResult<T>>): Promise<StructureResult<T>> {
+  let cur: T[] = [...items];
+  for (let i = 0; i < ops.length; i++) {
+    const op = ops[i];
+    if (op.op !== 'morph_between') {
+      const r = applyStructure(cur, op);
+      if (r.ok === false) return { ok: false, message: `ops[${i}]: ${r.message}` };
+      cur = r.items; continue;
+    }
+    const n = cur.length;
+    const have = n === 1 ? 'is 1 bar' : `are ${n} bars`;
+    const ends = [op.a, op.b].find((x) => x > n);
+    if (ends !== undefined) return { ok: false, message: `ops[${i}]: bar ${ends} asked for, but there ${have}.` };
+    if (op.after !== 'end' && op.after > n) return { ok: false, message: `ops[${i}]: after bar ${op.after} asked for, but there ${have}.` };
+    const made = await morph(cur[op.a - 1], cur[op.b - 1], op);
+    if (made.ok === false) return { ok: false, message: `ops[${i}]: ${made.message}` };
+    const at = op.after === 'end' ? n : op.after;
+    cur = [...cur.slice(0, at), ...made.items, ...cur.slice(at)];
+  }
+  return { ok: true, items: cur };
+}
+
 /** The step as plain Python on the list `bars` (the transform note's Python facet: no engine function, so it runs anywhere the note's Python does). Ranges are 1-based inclusive, as in the sentence; it does the same as `applyStructure`. */
 export function structurePython(o: StructureOp): string[] {
+  if (o.op === 'morph_between') {                 // the engine's own morph_rhythm between the two bars, N + 2 bars asked, the middle N kept (the ends are part of its count)
+    const made = `morph_rhythm(a=bars[${o.a - 1}], b=bars[${o.b - 1}], bars=${o.bars + 2}, order='${o.order}', seed=${o.seed})[1:-1]`;
+    return [o.after === 'end' ? `  bars = bars + ${made}` : `  bars[${o.after}:${o.after}] = ${made}`];
+  }
   const runs = JSON.stringify(o.runs);
   if (o.op === 'keep') return [`  bars = [bars[i - 1] for a, b in ${runs} for i in range(a, b + 1)]`];
   if (o.op === 'delete') return [`  bars = [x for i, x in enumerate(bars, 1) if not any(a <= i <= b for a, b in ${runs})]`];

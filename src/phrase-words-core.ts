@@ -16,7 +16,7 @@ export function selectionWords(first: number, last: number, row?: string): strin
 }
 /** One transform op as a sentence (the Recipe step and the cell's line): what it does to which bars. */
 export function transformOpWords(o: TransformOp): string {
-  if (o.op === 'keep' || o.op === 'delete' || o.op === 'copy' || o.op === 'move') return structureWords(o);       // 2026-11-16-1000: the steps that change which bars there are
+  if (o.op === 'keep' || o.op === 'delete' || o.op === 'copy' || o.op === 'move' || o.op === 'morph_between') return structureWords(o);       // 2026-11-16-1000: the steps that change which bars there are
   const where = selectionWords(o.first, o.last, o.row);
   if (o.op === 'double_up') return `double up ${where}: every hit gets a second one a step later${o.grid !== TRANSFORM_DEFAULT_GRID ? ` (grid ${o.grid})` : ''}`;
   const amount = o.amount === 1 ? 'remove all the hits' : o.amount === 0 ? 'remove none of the hits' : o.amount === 0.5 ? 'remove half of the hits' : `remove ${percentOf(o.amount)} % of the hits`;
@@ -25,6 +25,6 @@ export function transformOpWords(o: TransformOp): string {
 
 /** An op in a few words for a chip: "thin out bars 3 to 5, kick row". */
 export function transformOpShort(o: TransformOp): string {
-  if (o.op === 'keep' || o.op === 'delete' || o.op === 'copy' || o.op === 'move') return structureWords(o);
+  if (o.op === 'keep' || o.op === 'delete' || o.op === 'copy' || o.op === 'move' || o.op === 'morph_between') return structureWords(o);
   return `${o.op === 'double_up' ? 'double up' : 'thin out'} ${selectionWords(o.first, o.last, o.row)}`;
 }
