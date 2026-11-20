@@ -63,7 +63,7 @@ test('runsOfBars: the ranges of a set of bar numbers, ascending and apart; junk 
 });
 
 test('THE WORDS: one table of verbs; ranges listed the way a person lists them; a move says which way', () => {
-  assert.deepEqual(Object.keys(STRUCTURE_WORDS), ['keep', 'delete', 'copy', 'move', 'morph_between']);       // 2026-11-19-0996b (deliberate): the Morph between two bars of the phrase is a fifth row
+  assert.deepEqual(Object.keys(STRUCTURE_WORDS), ['keep', 'delete', 'copy', 'move', 'morph_between', 'mix_bars', 'extend_bar']);       // 2026-11-19-0996b (deliberate): the Morph between two bars of the phrase is a fifth row; 2026-11-19-0999b (deliberate): the Mix and Extend steps are the sixth and seventh
   assert.equal(runsWords([[3, 5]]), 'bars 3 to 5');
   assert.equal(runsWords([[3, 5], [8, 8]]), 'bars 3 to 5 and bar 8');
   assert.equal(runsWords([[2, 2], [4, 5], [9, 9]]), 'bar 2, bars 4 to 5 and bar 9');
@@ -133,7 +133,7 @@ test('THE VALIDATOR (the json block): runs, by, order of the steps, no foreign f
   assert.match(msg([{ op: 'move', runs: [[1, 1]] }]), /by must be -1 \(one bar left\) or 1/);
   assert.match(msg([{ op: 'move', runs: [[1, 1]], by: 2 }]), /by must be -1/);
   assert.match(msg([{ op: 'thin_out', first: 1, last: 2, amount: 0.5 }, { op: 'delete', runs: [[1, 1]] }]), /ops\[1\]: a change of which bars there are \(delete\) must come before/);
-  assert.match(msg([{ op: 'shuffle' }]), /must be "thin_out", "double_up", "keep", "delete", "copy", "move" or "morph_between"/);       // 2026-11-19-0996b (deliberate)
+  assert.match(msg([{ op: 'shuffle' }]), /must be "thin_out", "double_up", "keep", "delete", "copy", "move", "morph_between", "mix_bars" or "extend_bar"/);       // 2026-11-19-0996b (deliberate); 2026-11-19-0999b (deliberate): the Mix and Extend steps are named too
   assert.match(msg([{ op: 'keep', runs: [[1, 1]], first: 1 }]), /unexpected field "first"/);
   assert.match(msg([{ op: 'keep', runs: Array.from({ length: 17 }, (_, i) => [i * 2 + 1, i * 2 + 1]) }]), /1 to 16 bar ranges/);
 });

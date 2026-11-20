@@ -317,7 +317,8 @@ test('validateMorphBetween: the exact answer for every field and every wrong val
 // 2026-11-19-0996b mutation survivor: src/phrase-core.ts:216 the refusal of a step that is not a structure step after a head -> "''" (and the words of the op list in it)
 test('after a head (an Extend, a Mix, a Morph) only a change of which bars there are can follow: the exact words, the name of the step and its place; every structure step is accepted', () => {
   const heads: PhraseParams[] = [{ kind: 'extend', source: 'bar_005', bars: 4, style: 'repeat_with_fills', tempo_change_pct: 0 }, { kind: 'mix', a: 'bar_005', b: 'bar_006', weight: 0.5, threshold: 0.5, ghost: false }, { kind: 'morph', a: 'bar_005', b: 'bar_006', bars: 5, order: 'musical', seed: 0 }];
-  const WORDS = (i: number, got: string): string => `ops[${i}]: only a change of which bars there are (keep, delete, copy, move, morph_between) can follow an extend, a mix or a morph, got ${got} (a thin out and a double up are for a take).`;
+  // 2026-11-19-0999b (deliberate): the list of steps in the message names the Mix and Extend steps too
+  const WORDS = (i: number, got: string): string => `ops[${i}]: only a change of which bars there are (keep, delete, copy, move, morph_between, mix_bars, extend_bar) can follow an extend, a mix or a morph, got ${got} (a thin out and a double up are for a take).`;
   for (const head of heads) {
     const keep = { op: 'keep', runs: [[1, 2]] };
     for (const [op, got] of [[{ op: 'thin_out', first: 1, last: 2, amount: 0.5 }, 'thin_out'], [{ op: 'double_up', first: 1, last: 2, grid: 16 }, 'double_up']] as const) {

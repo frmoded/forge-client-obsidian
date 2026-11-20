@@ -239,16 +239,19 @@ function addRun(f: Scan, runs: BarRun[], first: number, last: number, at: number
  * sentence starts with none of the verbs. The ranges are said in any order and kept ascending and apart (`addRun`: 2026-11-19-0999); a structure step may not come after a Thin out or a Double up (it changes WHICH bars there are, and those two have already counted them).
  * 2026-11-19-0996b (the driver's words, read and written as the canonical ones): "Duplicate" is Copy, "Remove" is Delete, "Move bar 3 back / left / earlier" and "forward / right / later" (with or without "one bar", also "to the left") are one bar left / right and
  * several places ("two bars left") are READ and refused in words (code `refused`: the service cannot fix them), and "Morph bars 2 and 3 across 5 bars ..." is a step of its own (`readMorphBetween`); a Morph that is followed by a note ("Morph [[a]] into [[b]]") is a head, not a step: null.
+ * 2026-11-19-0999b: "Mix bars 2 and 3 ..." (`readMixBars`: ONE new bar, in a gap) and "Extend bar 2 to 4 bars ..." (`readExtendBar`: bar 2 REPLACED by 4 bars, or with a place word the bar stays and they are inserted) are steps of their own too; a Mix or an Extend followed by a note is a head: null.
  */
-const STEP_VERBS: ReadonlyArray<readonly [string, 'keep' | 'delete' | 'copy' | 'move' | 'morph']> = [['keep', 'keep'], ['delete', 'delete'], ['remove', 'delete'], ['copy', 'copy'], ['duplicate', 'copy'], ['move', 'move'], ['morph', 'morph']];
+const STEP_VERBS: ReadonlyArray<readonly [string, 'keep' | 'delete' | 'copy' | 'move' | 'morph' | 'mix' | 'extend']> = [['keep', 'keep'], ['delete', 'delete'], ['remove', 'delete'], ['copy', 'copy'], ['duplicate', 'copy'], ['move', 'move'], ['morph', 'morph'], ['mix', 'mix'], ['extend', 'extend']];
 export function readStructureStep(f: Scan, afterDensity: boolean): StructureOp | null {
   const start = f.i;
   const hit = STEP_VERBS.find(([word]) => f.kw(word));
   if (hit === undefined) { f.i = start; return null; }
   const [word, verb] = hit;
-  if (verb === 'morph' && !/^\s*bars?\s+\d/i.test(f.s.slice(f.i))) { f.i = start; return null; }          // "Morph [[a]] into [[b]]": a head
+  if ((verb === 'morph' || verb === 'mix' || verb === 'extend') && !/^\s*bars?\s+\d/i.test(f.s.slice(f.i))) { f.i = start; return null; }          // "Morph [[a]] into [[b]]", "Mix [[a]] and [[b]]", "Extend [[a]] to 8 bars": a head (2026-11-19-0999b: the same for Mix and Extend)
   if (afterDensity) f.failAt(`Expected "${word[0].toUpperCase()}${word.slice(1)}" to come before any "Thin out" or "Double up" (a change of which bars there are comes first), but it comes after one.`, start, 'order');
   if (verb === 'morph') return readMorphBetween(f);
+  if (verb === 'mix') return readMixBars(f);
+  if (verb === 'extend') return readExtendBar(f);
   const runs: BarRun[] = [];
   for (;;) {
     const at = f.at;
@@ -301,6 +304,12 @@ function readPlace(f: Scan): number | 'end' | null {
   return null;
 }
 
+/** 2026-11-19-0999b: the place segment of a step that makes new bars (Morph-between, Mix, Extend), in the one set of words: an optional "and", an optional "put them" / "put it" / "place them", then `readPlace`. `set` gets the gap (0 = the start, 'end', or the bar it follows). */
+const PLACE_EXPECTED = 'a place ("after bar N", "before bar N", "between bars N and M", "at the start" or "at the end")';
+function placeSegment(f: Scan, set: (place: number | 'end') => void): { name: string; read: () => boolean } {
+  return { name: 'the place', read: () => { const s = f.i; f.kw('and'); const put = f.kw('put them') || f.kw('put it') || f.kw('put those') || f.kw('place them') || f.kw('place it'); const p = readPlace(f); if (p === null) { if (put) f.fail(PLACE_EXPECTED); f.i = s; return false; } set(p); return true; } };
+}
+
 /** "Morph bars 2 and 3 across 5 bars, in seeded order, seed 7, and put them after bar 3." (the verb is eaten): the two bars of the phrase as it is before the step, the number of NEW bars between them, the order, the seed (only with the seeded order) and the place; the place defaults to between two neighbouring bars, else after the later one. */
 function readMorphBetween(f: Scan): StructureOp {
   const at = f.at;
@@ -313,7 +322,7 @@ function readMorphBetween(f: Scan): StructureOp {
   if (a === b) f.failAt(`Expected two different bars to morph between, but found bar ${a} twice.`, bAt);
   let bars = 0, order: MorphOrder = MORPH_DEFAULTS.order, seed: number | null = null, after: number | 'end' | null = null, seedAt = -1;
   segments(f, [
-    { name: 'the place', read: () => { const s = f.i; f.kw('and'); const put = f.kw('put them') || f.kw('put it') || f.kw('put those') || f.kw('place them') || f.kw('place it'); const p = readPlace(f); if (p === null) { if (put) f.fail('a place ("after bar N", "before bar N", "between bars N and M", "at the start" or "at the end")'); f.i = s; return false; } after = p; return true; } },
+    placeSegment(f, (p) => { after = p; }),
     { name: '"across N bars"', read: () => { if (!(f.kw('across') || f.kw('over'))) return false; bars = f.whole('a number of new bars', PHRASE_BARS_MIN, PHRASE_BARS_MAX); f.kw('new'); if (!(f.kw('bars') || f.kw('bar'))) f.fail('"bars"'); return true; } },
     { name: 'the order', read: () => { const s = f.i; if (!f.kw('in')) return false; const o = orderFromWords(f); if (o === null) { f.i = s; return false; } order = o; return true; } },
     { name: '"seed N"', read: () => { if (!f.kw('seed')) return false; seedAt = f.at; seed = f.whole('a seed', 0); return true; } },
@@ -321,6 +330,87 @@ function readMorphBetween(f: Scan): StructureOp {
   if (bars === 0) f.failAt('Expected "across N bars" (how many new bars to make between them), but found none.', at);
   if (seed !== null && order !== 'seeded') f.failAt(`Expected a seed only with the seeded order, but this morph is in ${orderWords(order)}.`, seedAt);
   return { op: 'morph_between', a, b, bars, order, seed: order === 'seeded' ? seed ?? 0 : 0, after: after ?? (Math.abs(a - b) === 1 ? Math.min(a, b) : Math.max(a, b)) };
+}
+
+/** "70 percent slower" / "20% faster" (the Extend head's tempo words, a step's too): the change as a number (-90 to 100), or null (nothing eaten) when no number and "percent" start here. */
+function readTempoChange(sc: Scan): number | null {
+  const at = sc.i; const n = sc.number(); if (n === null) return null;
+  if (!(sc.kw('percent') || sc.eatPercentSign())) { sc.i = at; return null; }
+  const slower = sc.kw('slower');
+  if (!slower && !sc.kw('faster')) sc.fail('"slower" or "faster"');
+  if (n.value < 0 || n.value > (slower ? -PHRASE_PCT_MIN : PHRASE_PCT_MAX)) sc.failAt(`Expected a tempo change of 0 to ${slower ? -PHRASE_PCT_MIN : PHRASE_PCT_MAX} percent ${slower ? 'slower' : 'faster'}, but found ${n.text}.`, n.at);
+  return slower ? noNegZero(-n.value) : n.value;
+}
+
+/**
+ * 2026-11-19-0999b: "Mix bars 2 and 3, 70 percent bar 2, as a path, in seeded order, seed 7, and put it after bar 3." (the verb is eaten): the Mix HEAD's words about two bars of the phrase as it is before the step - the share (`N percent bar K`, `the first`, `the second`; a's weight, default 50), "as a vote" (default)
+ * with "threshold N percent" and "with ghost notes" or "as a path" with an order and a seed (the head's own words, in the one sentence: a following "Threshold" line would belong to a Mix head) - and the place the ONE new bar goes (default: between two neighbouring bars, else after the later one).
+ */
+function readMixBars(f: Scan): StructureOp {
+  if (!(f.kw('bars') || f.kw('bar'))) f.fail('"bars"');
+  const a = f.whole('a bar number', 1);
+  if (!(f.kw('and') || f.kw('with'))) f.fail('"and"');
+  f.kw('bars') || f.kw('bar');
+  const bAt = f.at;
+  const b = f.whole('a bar number', 1);
+  if (a === b) f.failAt(`Expected two different bars to mix, but found bar ${a} twice.`, bAt);
+  let weight: number = MIX_DEFAULTS.weight, mode: 'vote' | 'path' | null = null, order: MorphOrder | null = null, seed: number | null = null, orderAt = -1, seedAt = -1, voteAt = -1;
+  let threshold: number = MIX_DEFAULTS.threshold, ghost = false, after: number | 'end' | null = null;
+  segments(f, [
+    placeSegment(f, (p) => { after = p; }),
+    { name: 'the share', read: () => {
+      const s0 = f.i; const n = f.number(); if (n === null) return false;
+      if (!(f.kw('percent') || f.eatPercentSign())) { f.i = s0; return false; }
+      if (n.value < 0 || n.value > 100) f.failAt(`Expected a share from 0 to 100 percent, but found ${n.text}.`, n.at);
+      const refAt = f.at;
+      let named: 'a' | 'b';
+      if (f.kw('the first') || f.kw('of the first')) named = 'a';
+      else if (f.kw('the second') || f.kw('of the second')) named = 'b';
+      else {
+        if (!(f.kw('bars') || f.kw('bar'))) f.fail('"bar N", "the first" or "the second" for the share');
+        const k = f.whole('a bar number', 1);
+        if (k !== a && k !== b) f.failAt(`Expected bar ${a} or bar ${b} for the share, but found bar ${k}.`, refAt);
+        named = k === a ? 'a' : 'b';
+      }
+      const share = Number(shiftDecimal(n.text, -2));
+      weight = named === 'a' ? share : Number(shiftDecimal(complementOf100(n.text), -2)); return true;
+    } },
+    { name: '"as a vote" or "as a path"', read: () => { if (f.kw('as a vote')) { mode = 'vote'; return true; } if (f.kw('as a path')) { mode = 'path'; return true; } return false; } },
+    { name: 'the order', read: () => { const s0 = f.i; if (!f.kw('in')) return false; orderAt = f.at; const o = orderFromWords(f); if (o === null) { f.i = s0; return false; } order = o; return true; } },
+    { name: '"seed N"', read: () => { if (!f.kw('seed')) return false; seedAt = f.at; seed = f.whole('a seed', 0); return true; } },
+    { name: 'the threshold', read: () => { if (!f.kw('threshold')) return false; voteAt = f.at; threshold = f.percent('a threshold', 0, 100); return true; } },
+    { name: 'the ghost notes', read: () => { if (!f.kw('with ghost notes')) return false; voteAt = f.at; ghost = true; return true; } },
+  ], `"N percent bar K", "as a vote" (with "threshold N percent" and "with ghost notes") or "as a path, in musical order", or a place ("after bar N", "before bar N", "between bars N and M", "at the start", "at the end")`);
+  if ((order !== null || seed !== null) && mode !== 'path') f.failAt('Expected an order and a seed only for a mix as a path, but this mix is a vote.', orderAt >= 0 ? orderAt : seedAt);
+  if (seed !== null && order !== 'seeded') f.failAt(`Expected a seed only with the seeded order, but this mix is in ${orderWords((order ?? MORPH_DEFAULTS.order) as MorphOrder)}.`, seedAt);
+  if (mode === 'path' && (voteAt >= 0)) f.failAt('Expected a threshold and ghost notes only for a mix as a vote, but this mix is a path.', voteAt);
+  const gap = after ?? (Math.abs(a - b) === 1 ? Math.min(a, b) : Math.max(a, b));
+  const base = { op: 'mix_bars' as const, a, b, weight, threshold, ghost };
+  if (mode !== 'path') return { ...base, mode: 'vote', after: gap };
+  const o: MorphOrder = order ?? MORPH_DEFAULTS.order;
+  return { ...base, mode: 'path', order: o, seed: o === 'seeded' ? seed ?? 0 : 0, after: gap };
+}
+
+/**
+ * 2026-11-19-0999b: "Extend bar 2 to 4 bars, building up, 20 percent slower, and put them at the end." (the verb is eaten): the Extend HEAD's words about ONE bar of the phrase as it is before the step - "to N bars" (default 4), the style (default repeating with fills), the tempo change (default 0).
+ * With NO place the bar is REPLACED by the N bars; a place ("and put them after bar 3", "at the start", ...) means INSERT: the bar stays. Several bars ("Extend bars 2 and 3 to 4 bars") are read and refused in words (code `refused`).
+ */
+function readExtendBar(f: Scan): StructureOp {
+  const at = f.at;
+  if (!(f.kw('bars') || f.kw('bar'))) f.fail('"bar"');
+  const bar = f.whole('a bar number', 1);
+  const s0 = f.i; const sep = f.comma(); const and = f.kw('and');
+  const several = (sep || and) && (f.peekKw('bars') || f.peekKw('bar') || f.number() !== null);
+  f.i = s0;
+  if (several) { const m = /\bto\s+(\d+)\s+bars?\b/i.exec(f.s.slice(f.i)); f.failAt(`Extend takes one bar at a time. Say "Extend bar ${bar} to ${m ? m[1] : PHRASE_DEFAULTS.bars} bars." for one bar, and again for the next.`, at, 'refused'); }
+  let bars: number = PHRASE_DEFAULTS.bars, style: PhraseStyle = PHRASE_DEFAULTS.style, pct: number = PHRASE_DEFAULTS.tempo_change_pct, after: number | 'end' | null = null;
+  segments(f, [
+    placeSegment(f, (p) => { after = p; }),
+    { name: '"to N bars"', read: () => { if (!f.kw('to')) return false; bars = f.whole('a number of bars', PHRASE_BARS_MIN, PHRASE_BARS_MAX); if (!(f.kw('bars') || f.kw('bar'))) f.fail('"bars"'); return true; } },
+    { name: 'the style', read: () => { const st = styleFromWords(f); if (st === null) return false; style = st; return true; } },
+    { name: 'the tempo change', read: () => { const t = readTempoChange(f); if (t === null) return false; pct = t; return true; } },
+  ], `"to N bars", a style (${PHRASE_STYLES.map((x) => STYLE_WORDS[x]).join(', ')}), "N percent slower" / "N percent faster" or a place ("after bar N", "before bar N", "at the start", "at the end")`);
+  return { op: 'extend_bar', bar, bars, style, tempo_change_pct: pct, ...(after !== null ? { after } : {}) };
 }
 
 /** The comma-separated segments of a head sentence, each at most once, in any order; `try` returns true when one was read. */
@@ -346,14 +436,7 @@ function parseExtend(ss: Sentence[], vault: GrammarVault): ExtendPhrase {
   segments(sc, [
     { name: '"to N bars"', read: () => { if (!sc.kw('to')) return false; bars = sc.whole('a number of bars', PHRASE_BARS_MIN, PHRASE_BARS_MAX); if (!(sc.kw('bars') || sc.kw('bar'))) sc.fail('"bars"'); return true; } },
     { name: 'the style', read: () => { const s = styleFromWords(sc); if (s === null) return false; style = s; return true; } },
-    { name: 'the tempo change', read: () => {
-      const at = sc.i; const n = sc.number(); if (n === null) return false;
-      if (!(sc.kw('percent') || sc.eatPercentSign())) { sc.i = at; return false; }
-      const slower = sc.kw('slower');
-      if (!slower && !sc.kw('faster')) sc.fail('"slower" or "faster"');
-      if (n.value < 0 || n.value > (slower ? -PHRASE_PCT_MIN : PHRASE_PCT_MAX)) sc.failAt(`Expected a tempo change of 0 to ${slower ? -PHRASE_PCT_MIN : PHRASE_PCT_MAX} percent ${slower ? 'slower' : 'faster'}, but found ${n.text}.`, n.at);
-      pct = slower ? noNegZero(-n.value) : n.value; return true;
-    } },
+    { name: 'the tempo change', read: () => { const t = readTempoChange(sc); if (t === null) return false; pct = t; return true; } },       // 2026-11-19-0999b: the same words as the Extend step's (`readTempoChange`)
   ], `"to N bars", a style (${PHRASE_STYLES.map((s) => STYLE_WORDS[s]).join(', ')}) or "N percent slower" / "N percent faster"`);
   const tail = readTail(ss.slice(1), vault, 'extend', { bars, pct });
   return { kind: 'extend', source, bars: tail.bars, style, tempo_change_pct: tail.pct, ...tail.overrides, ...(tail.ops.length > 0 ? { ops: tail.ops } : {}) };
@@ -691,6 +774,8 @@ export const placeOf = (text: string, offset: number): { line: number; column: n
   return { line, column: before.length - (before.lastIndexOf('\n') + 1) + 1 };
 };
 
+/** 2026-11-19-0999b: how a step that makes new bars is said in the refusal of a phrase that starts with one. */
+const STEP_EXAMPLES: Record<string, string> = { morph: '"Morph bars N and M across K bars"', mix: '"Mix bars N and M"', extend: '"Extend bar N to K bars"' };
 /** A description -> its params, or the first thing that is wrong, with the line and column it is at and one sentence saying what was expected. Never throws. `vault` is what the names are checked against. */
 export function parse(text: string, vault: GrammarVault): ParseResult {
   const err = (offset: number, message: string): ParseResult => ({ ok: false, error: { message, ...placeOf(text, offset) } });
@@ -703,7 +788,8 @@ export function parse(text: string, vault: GrammarVault): ParseResult {
       return c.ok === false ? err(ss[0].start, c.message) : { ok: true, params: c.value };
     }
     reservedGuard(first);
-    if (/^morph\s+bars?\s+\d/i.test(ss[0].text)) first.failAt('A phrase starts with Extend, Mix, Morph or Take: "Morph bars N and M across K bars" works on the bars the phrase already has, so it comes after the first line.', ss[0].start, 'head');          // 2026-11-19-0996b: a step, not a head
+    const asStep = /^(morph|mix|extend)\s+bars?\s+\d/i.exec(ss[0].text);
+    if (asStep) first.failAt(`A phrase starts with Extend, Mix, Morph or Take: ${STEP_EXAMPLES[asStep[1].toLowerCase()]} works on the bars the phrase already has, so it comes after the first line.`, ss[0].start, 'head');          // 2026-11-19-0996b: a step, not a head (2026-11-19-0999b: Mix and Extend too)
     const open = OPEN_VERBS.find((v) => v.re.test(ss[0].text));
     if (!open) first.fail(`a description that starts with ${OPEN_EXAMPLES}`);
     const params: GrammarParams = open.kind === 'extend' ? parseExtend(ss, vault) : open.kind === 'mix' ? parseMix(ss, vault) : open.kind === 'morph' ? parseMorph(ss, vault) : open.kind === 'transform' ? parseTransform(ss, vault) : parseArrangement(ss, vault);

@@ -29,7 +29,7 @@ const forks = (p: PhraseParams): Array<{ bar: number; note: string }> => {
 export function barCount(p: PhraseParams, known?: number): number {
   if (p.kind !== 'transform' && p.ops !== undefined && p.ops.length > 0 && known !== undefined) return known;       // 2026-11-19-0980: a head followed by structure steps has the bars the Score on screen has (the steps change how many there are)
   if (p.kind === 'mix') return 1;
-  if (p.kind === 'transform') return known ?? Math.max(0, ...p.ops.flatMap((o) => (o.op === 'morph_between' ? [o.a, o.b] : o.op === 'keep' || o.op === 'delete' || o.op === 'copy' || o.op === 'move' ? o.runs.map((r) => r[1]) : [o.last])));       // 2026-11-19-0980: a copy of its source (no change) has no op to count: 0 until the Score says
+  if (p.kind === 'transform') return known ?? Math.max(0, ...p.ops.flatMap((o) => (o.op === 'morph_between' || o.op === 'mix_bars' ? [o.a, o.b] : o.op === 'extend_bar' ? [o.bar] : o.op === 'keep' || o.op === 'delete' || o.op === 'copy' || o.op === 'move' ? o.runs.map((r) => r[1]) : [o.last])));       // 2026-11-19-0980: a copy of its source (no change) has no op to count: 0 until the Score says
   return p.bars;
 }
 

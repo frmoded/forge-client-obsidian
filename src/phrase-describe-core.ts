@@ -1,8 +1,9 @@
 // 2026-10-30-1050 (M15b) - the SAYING half of the description grammar (phrase-grammar-core.ts, M15a): `describe` (the canonical text of a phrase or an arrangement), `canonical` (the params as that text carries them) and the
 // words and numbers they use. Split out of phrase-grammar-core.ts so the note writers in phrase-core.ts and arrangement-core.ts can call `describe` without importing the parser (which imports them): this file takes from phrase-core.ts
 // only the three DEFAULTS objects, read INSIDE functions (never at load), so the two modules may load in either order (a test loads each first, in its own process). Pure: no Obsidian.
-import { MIX_DEFAULTS, MORPH_DEFAULTS, TRANSFORM_DEFAULTS, type MorphOrder, type PhraseParams, type PhraseStyle, type StructureOp, type TransformOp } from './phrase-core.ts';
-import { structureSentence } from './bar-structure-core.ts';
+import { MIX_DEFAULTS, MORPH_DEFAULTS, TRANSFORM_DEFAULTS, type MorphOrder, type PhraseParams, type StructureOp, type TransformOp } from './phrase-core.ts';
+import { structureSentence, isStructureOp } from './bar-structure-core.ts';
+import { STYLE_WORDS, orderWords } from './step-words-core.ts';
 import type { ArrangementParams, ArrangementTrack } from './arrangement-core.ts';
 import type { CompositionParams, CompositionSection } from './composition-core.ts';
 
@@ -10,10 +11,8 @@ export type GrammarParams = PhraseParams | ArrangementParams | CompositionParams
 
 // ---- the vocabulary: ONE source (the validators' lists), words keyed by them so a new style or order is a compile error here and a failing test ------------------------------------------------------------------------------------
 
-/** How a style is said. Keyed by `PHRASE_STYLES` (phrase-core.ts): a style that is added there and not here does not compile. */
-export const STYLE_WORDS: Record<PhraseStyle, string> = { repeat_with_fills: 'repeating with fills', building: 'building up', ghost_notes: 'adding ghost notes' };
-/** How an order is said: its engine name with the underscore a hyphen, then "order" (the notes' own words: `morphOrderWords` in phrase-core.ts says the same). */
-export const orderWords = (order: MorphOrder): string => `${order.replace(/_/g, '-')} order`;
+// 2026-11-19-0999b: STYLE_WORDS and orderWords moved, unchanged, to the leaf step-words-core.ts (the Extend and Mix steps of bar-structure-core.ts say them too); re-exported so every importer is unchanged.
+export { STYLE_WORDS, orderWords };
 
 /** 2026-11-19-0980 (the list model, stage 2): the MODIFIER lines of a phrase's list, which edit a segment of the head ("Make it 20 percent slower.", "Make it 8 bars long."). `describe` itself still says a head as ONE sentence with every segment (every note written before is byte for byte what it was);
  *  these are the lines the composer, the strip and the list write: the number as a person says it, "1 bar" for one. */
@@ -41,6 +40,11 @@ function canonicalOp(o: TransformOp): TransformOp {
   if (o.op === 'keep' || o.op === 'delete' || o.op === 'copy') return { op: o.op, runs: o.runs.map(([a, b]): [number, number] => [a, b]) };
   if (o.op === 'move') return { op: 'move', runs: o.runs.map(([a, b]): [number, number] => [a, b]), by: o.by };
   if (o.op === 'morph_between') return { op: 'morph_between', a: o.a, b: o.b, bars: o.bars, order: o.order, seed: o.order === 'seeded' ? o.seed : 0, after: o.after };       // 2026-11-19-0996b
+  if (o.op === 'mix_bars') {                                                                                                                                                  // 2026-11-19-0999b: a path says its order and seed (0 unless seeded), a vote neither
+    const base = { op: 'mix_bars' as const, a: o.a, b: o.b, weight: o.weight, threshold: o.threshold, ghost: o.ghost, mode: o.mode };
+    return o.mode === 'path' ? { ...base, order: o.order ?? MORPH_DEFAULTS.order, seed: (o.order ?? MORPH_DEFAULTS.order) === 'seeded' ? o.seed ?? 0 : 0, after: o.after } : { ...base, after: o.after };
+  }
+  if (o.op === 'extend_bar') return { op: 'extend_bar', bar: o.bar, bars: o.bars, style: o.style, tempo_change_pct: noNegZero(o.tempo_change_pct), ...(o.after !== undefined ? { after: o.after } : {}) };       // 2026-11-19-0999b
   const base = { first: o.first, last: o.last, ...(o.row !== undefined ? { row: o.row } : {}) };
   if (o.op === 'double_up') return { op: 'double_up', ...base, grid: o.grid };
   return o.keep === 'seeded' ? { op: 'thin_out', ...base, amount: noNegZero(o.amount), keep: 'seeded', seed: o.seed ?? 0 } : { op: 'thin_out', ...base, amount: noNegZero(o.amount) };
@@ -75,7 +79,7 @@ const forkSentences = (o: Record<string, string> | undefined): string[] => (o ? 
 const amountWords = (a: number): string => (a === 0.5 ? 'half' : `${percentOf(a)} percent`);
 const rangeText = (first: number, last: number): string => (first === last ? `bar ${first}` : `bars ${first} to ${last}`);
 function opSentence(o: TransformOp): string {
-  if (o.op === 'keep' || o.op === 'delete' || o.op === 'copy' || o.op === 'move' || o.op === 'morph_between') return structureSentence(o);
+  if (isStructureOp(o)) return structureSentence(o);
   const where = `${rangeText(o.first, o.last)}${o.row !== undefined ? `, ${o.row} row` : ''}`;
   if (o.op === 'double_up') return `Double up ${where}${o.grid !== TRANSFORM_DEFAULTS.grid ? `, on a grid of ${o.grid}` : ''}.`;
   return `Thin out ${where}, by ${amountWords(o.amount)}, ${o.keep === 'seeded' ? `chosen by seed ${o.seed}` : 'keeping the downbeat'}.`;

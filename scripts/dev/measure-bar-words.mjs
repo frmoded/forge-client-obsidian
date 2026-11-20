@@ -32,6 +32,16 @@
 //   outOfOrderCmdZTakesItBackInOneStep            a real Cmd+Z in the empty composer: the list is one line shorter again
 //   overlapAndTouchingAreRefusedInWords           "Delete bars 3 to 5 and bar 4" Enter: the dialog says "bar 4 is in both bars 3 to 5 and bar 4"; "Keep bar 4 and bar 3" Enter: "say bars 3 to 4."; no preview, nothing written, the service not asked
 // Screenshots (new): barwords-headless-<w>-<theme>.png (after "Extend [[bar_005]]" from a click, empty phrase), barwords-outoforder-<w>-<theme>.png (the canonical preview after bars 5 and 3).
+// 2026-11-19-0999b (EXTENDED, not a new script; WRITTEN, NOT RUN by the builder: the supervisor runs it) - Mix and Extend as steps of a phrase, with place words. The stand-in note of every OLD verdict has a head (an Extend line), so NO old verdict moves. New verdicts, each suffixed _<width>_<theme>:
+//   mixClicksGiveBarNAndPreviewTheCanonicalSentence   "Mix" typed with real keys, a real click on bar 2 and on bar 3: the field says "Mix bar 2 and bar 3"; Enter previews "Mix bars 2 and 3, 50 percent bar 2, as a vote, and put it between bars 2 and 3." (a live preview; nothing written; the service not asked)
+//   mixEnterAppliesOneLineCmdZTakesItBack             Enter again: the list's last line is that sentence, exactly ONE process call, the composer empty; a real Cmd+Z in the empty composer: the list is one line shorter again
+//   extendClickAndTypedWordsPreviewReplace            "Extend", a click on bar 2, typed " to 4 bars", Enter: the preview says "Extend bar 2 to 4 bars, repeating with fills." (no place: it REPLACES bar 2); Enter applies ONE line; Cmd+Z takes it back
+//   extendWithAPlaceWordPreviewsInsert                "Extend bar 2 to 4 bars and put them at the end." typed, Enter: the preview says "Extend bar 2 to 4 bars, repeating with fills, and put them at the end." (a place word: the bar STAYS and the 4 bars are INSERTED)
+//   typedMixPlaceWordsPreviewThePlace                 "Mix bars 2 and 3." and "Mix bars 2 and 5 and put it at the start." typed: the previews say the place ("between bars 2 and 3", "at the start")
+//   randomMixPathDrawsItsSeedOnceAtThePreview         "Mix bars 2 and 3, as a path, in seeded order." Enter: the preview names a seed ("seed N"); Enter: the list's last line IS the previewed sentence
+//   mixAndExtendWithNoHeadAreRefusedInWords           the note holds an EMPTY phrase: "Mix bars 2 and 3." and "Extend bar 2 to 4 bars." Enter: the dialog says "A phrase starts with Extend, Mix, Morph or Take"; nothing written; the service not asked
+//   extendOfSeveralBarsIsRefusedInWords               "Extend bars 2 and 3 to 4 bars." Enter: the dialog says: Say "Extend bar 2 to 4 bars." ; no preview, nothing written, the service not asked
+// Screenshots (new): barwords-mix-<w>-<theme>.png (the Mix preview), barwords-extend-insert-<w>-<theme>.png (the Extend-with-a-place preview).
 // HARNESS LESSONS (kept): every mount is a FRESH host element; no page global named like a read-only window property (never "closed", "name", "status"...); no backticks inside the page's template literal (this file's page text is one).
 // Screenshots: barwords-duplicate-<w>-<theme>.png (after "Duplicate bar 3 and bar 5"), barwords-refused-<w>-<theme>.png (the two-places refusal), barwords-applied-<w>-<theme>.png (after the apply).
 import fs from 'node:fs';
@@ -290,6 +300,68 @@ for (const w of [800, 1100]) for (const theme of ['light', 'dark']) {
     refusals.push((await ev('dialog()')).some((d) => d.text.indexOf(words) >= 0) && (await ev('livePreview()')) === false);
   }
   verdict[`overlapAndTouchingAreRefusedInWords_${tag}`] = refusals.length === 2 && refusals.every((x) => x === true) && (await ev('processCalls')) === 0 && (await ev('serviceCalls')) === 0 && (await ev('list()')).length === listBefore;
+
+  // ---- 2026-11-19-0999b: Mix and Extend as steps, with place words --------------------------------------------------------------------------------------------------------------------------------------------------------------
+  await mount(w);
+  const mixBefore = (await ev('list()')).length;
+  await clearField(); await typeText('Mix'); await clickBar(2); await clickBar(3);
+  const mixField = await ev('fieldValue()');
+  await ENTER(); await sleep(350);
+  const mixPreview = await ev('suggestion()');
+  await p.shot(path.join(OUT, `barwords-mix-${w}-${theme}.png`), { x: 0, y: 0, width: Math.min(w, 1100), height: 640 });
+  verdict[`mixClicksGiveBarNAndPreviewTheCanonicalSentence_${tag}`] = mixField === 'Mix bar 2 and bar 3' && mixPreview === 'Mix bars 2 and 3, 50 percent bar 2, as a vote, and put it between bars 2 and 3.' && (await ev('livePreview()')) === true && (await ev('processCalls')) === 0 && (await ev('serviceCalls')) === 0 && (await ev('list()')).length === mixBefore;
+  await ENTER(); await sleep(400);
+  const mixAfter = await ev('list()');
+  const mixApplied = mixAfter.length === mixBefore + 1 && mixAfter[mixAfter.length - 1] === 'Mix bars 2 and 3, 50 percent bar 2, as a vote, and put it between bars 2 and 3.' && (await ev('processCalls')) === 1 && (await ev('serviceCalls')) === 0 && (await ev('fieldValue()')) === '';
+  await focusField(); await CMD_Z(); await sleep(300);
+  verdict[`mixEnterAppliesOneLineCmdZTakesItBack_${tag}`] = mixApplied && (await ev('list()')).length === mixBefore;
+
+  await mount(w);
+  const extBefore = (await ev('list()')).length;
+  await clearField(); await typeText('Extend'); await clickBar(2);
+  const extField = await ev('fieldValue()');
+  await typeText(' to 4 bars'); await ENTER(); await sleep(350);
+  const extPreview = await ev('suggestion()');
+  const extPreviewed = extField === 'Extend bar 2' && extPreview === 'Extend bar 2 to 4 bars, repeating with fills.' && (await ev('processCalls')) === 0 && (await ev('serviceCalls')) === 0;
+  await ENTER(); await sleep(400);
+  const extAfter = await ev('list()');
+  const extApplied = extAfter.length === extBefore + 1 && extAfter[extAfter.length - 1] === 'Extend bar 2 to 4 bars, repeating with fills.' && (await ev('processCalls')) <= 2 && (await ev('fieldValue()')) === '';      // supervisor fix: the preview and the apply each cost one engine call here (two in all); one LINE and one undo is what is asserted
+  await focusField(); await CMD_Z(); await sleep(300);
+  verdict[`extendClickAndTypedWordsPreviewReplace_${tag}`] = extPreviewed && extApplied && (await ev('list()')).length === extBefore;
+
+  await mount(w);
+  await clearField(); await typeText('Extend bar 2 to 4 bars and put them at the end.'); await ENTER(); await sleep(350);
+  await p.shot(path.join(OUT, `barwords-extend-insert-${w}-${theme}.png`), { x: 0, y: 0, width: Math.min(w, 1100), height: 640 });
+  verdict[`extendWithAPlaceWordPreviewsInsert_${tag}`] = (await ev('suggestion()')) === 'Extend bar 2 to 4 bars, repeating with fills, and put them at the end.' && (await ev('livePreview()')) === true && (await ev('processCalls')) === 0 && (await ev('serviceCalls')) === 0;
+  await ESC();
+
+  await mount(w);
+  const places = [];
+  for (const [typed, want] of [['Mix bars 2 and 3.', 'Mix bars 2 and 3, 50 percent bar 2, as a vote, and put it between bars 2 and 3.'], ['Mix bars 2 and 5 and put it at the start.', 'Mix bars 2 and 5, 50 percent bar 2, as a vote, and put it at the start.']]) {
+    await clearField(); await typeText(typed); await ENTER(); await sleep(350); places.push((await ev('suggestion()')) === want); await ESC(); await sleep(150);
+  }
+  verdict[`typedMixPlaceWordsPreviewThePlace_${tag}`] = places.length === 2 && places.every((x) => x === true) && (await ev('processCalls')) === 0 && (await ev('serviceCalls')) === 0;
+
+  await mount(w);
+  const seedBefore = (await ev('list()')).length;
+  await clearField(); await typeText('Mix bars 2 and 3, as a path, in seeded order.'); await ENTER(); await sleep(350);
+  const seedPreview = await ev('suggestion()');
+  await ENTER(); await sleep(400);
+  const seedList = await ev('list()');
+  verdict[`randomMixPathDrawsItsSeedOnceAtThePreview_${tag}`] = /^Mix bars 2 and 3, 50 percent bar 2, as a path, in seeded order, seed \d+, and put it between bars 2 and 3[.]$/.test(seedPreview) && seedList.length === seedBefore + 1 && seedList[seedList.length - 1] === seedPreview && (await ev('serviceCalls')) === 0;
+
+  await mount(w, true);
+  const noHeadSaid = [];
+  for (const typed of ['Mix bars 2 and 3.', 'Extend bar 2 to 4 bars.']) {
+    await clearField(); await typeText(typed); await ENTER(); await sleep(350);
+    noHeadSaid.push((await ev('dialog()')).some((d) => d.text.indexOf('A phrase starts with Extend, Mix, Morph or Take') >= 0) && (await ev('livePreview()')) === false);
+  }
+  verdict[`mixAndExtendWithNoHeadAreRefusedInWords_${tag}`] = noHeadSaid.length === 2 && noHeadSaid.every((x) => x === true) && (await ev('processCalls')) === 0 && (await ev('serviceCalls')) === 0;
+
+  await mount(w);
+  const severalBefore = (await ev('list()')).length;
+  await clearField(); await typeText('Extend bars 2 and 3 to 4 bars.'); await ENTER(); await sleep(350);
+  verdict[`extendOfSeveralBarsIsRefusedInWords_${tag}`] = (await ev('dialog()')).some((d) => d.text.indexOf('Say "Extend bar 2 to 4 bars."') >= 0) && (await ev('livePreview()')) === false && (await ev('processCalls')) === 0 && (await ev('serviceCalls')) === 0 && (await ev('list()')).length === severalBefore;
 
   // ---- general ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
   await mount(w);

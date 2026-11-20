@@ -94,7 +94,7 @@ export function subjectOf(sentence: string, kind: ListKind): string | null {
 }
 
 // ---- the conflict subjects of a phrase (2026-11-19-0980): a SHAPE reading, like the arrangement's above -------------------------------------------------------------------------------------------------------------------
-const HEAD_LINE = /^\s*(?:extend|mix|take|morph(?!\s+bars?\s+\d))\b/i;       // 2026-11-19-0996b: "Morph bars 2 and 3 across 5 bars." is a STEP of the phrase, not a head
+const HEAD_LINE = /^\s*(?:take|(?:extend|mix|morph)(?!\s+bars?\s+\d))\b/i;       // 2026-11-19-0996b: "Morph bars 2 and 3 across 5 bars." is a STEP of the phrase, not a head (2026-11-19-0999b: so are "Mix bars 2 and 3." and "Extend bar 2 to 4 bars.")
 const TEMPO_LINE = /^\s*make\s+it\s+[^\s]+\s*(?:percent|%)\s*(?:slower|faster)\b/i;
 const LENGTH_LINE = /^\s*make\s+it\s+[^\s]+\s+bars?\s+long\b/i;
 const FORK_LINE = /^\s*bar\s+(\d+)\s+is\b/i;

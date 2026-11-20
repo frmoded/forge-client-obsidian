@@ -73,14 +73,16 @@ test('applyStepsAsync: refusals are words with the number of the step: a bar pas
 // ---- 2026-11-19-0996b mutation triage ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // 2026-11-19-0996b mutation survivor: src/bar-structure-core.ts:25 "'morph'" -> "''" (the verb of the table entry of morph_between)
 test('STRUCTURE_WORDS: the verb of every step is the first word its words say (the table and structureWords agree), the morph verb is "morph", every example is read by the words of its own verb', () => {
-  assert.deepEqual(Object.entries(STRUCTURE_WORDS).map(([op, w]) => [op, w.verb]), [['keep', 'keep'], ['delete', 'delete'], ['copy', 'copy'], ['move', 'move'], ['morph_between', 'morph']]);
-  const one: Record<string, StructureOp> = { keep: { op: 'keep', runs: [[1, 2]] }, delete: { op: 'delete', runs: [[1, 2]] }, copy: { op: 'copy', runs: [[1, 2]] }, move: { op: 'move', runs: [[1, 2]], by: -1 }, morph_between: MB() };
+  assert.deepEqual(Object.entries(STRUCTURE_WORDS).map(([op, w]) => [op, w.verb]), [['keep', 'keep'], ['delete', 'delete'], ['copy', 'copy'], ['move', 'move'], ['morph_between', 'morph'], ['mix_bars', 'mix'], ['extend_bar', 'extend']]);       // 2026-11-19-0999b (deliberate): the Mix and Extend steps are two more rows
+  const one: Record<string, StructureOp> = { keep: { op: 'keep', runs: [[1, 2]] }, delete: { op: 'delete', runs: [[1, 2]] }, copy: { op: 'copy', runs: [[1, 2]] }, move: { op: 'move', runs: [[1, 2]], by: -1 }, morph_between: MB(), mix_bars: { op: 'mix_bars', a: 2, b: 3, weight: 0.5, threshold: 0.5, ghost: false, mode: 'vote', after: 2 }, extend_bar: { op: 'extend_bar', bar: 2, bars: 4, style: 'repeat_with_fills', tempo_change_pct: 0 } };
   for (const [op, w] of Object.entries(STRUCTURE_WORDS)) {
     assert.ok(structureWords(one[op]).startsWith(`${w.verb} `), `${op}: "${structureWords(one[op])}" starts with its table verb "${w.verb}"`);
     assert.ok(w.example.toLowerCase().startsWith(`${w.verb} `), `${op}: the example "${w.example}" starts with its verb`);
     assert.ok(structureSentence(one[op]).startsWith(`${w.verb[0].toUpperCase()}${w.verb.slice(1)} `));
   }
   assert.equal(STRUCTURE_WORDS.morph_between.example, structureSentence(MB()), 'the example of the morph step is exactly the sentence of the default step');
+  assert.equal(STRUCTURE_WORDS.mix_bars.example, structureSentence(one.mix_bars), 'the example of the Mix step is exactly the sentence of the default step');      // 2026-11-19-0999b
+  assert.equal(STRUCTURE_WORDS.extend_bar.example, structureSentence(one.extend_bar), 'the example of the Extend step is exactly the sentence of the default step');
 });
 
 // 2026-11-19-0996b mutation survivor: src/bar-structure-core.ts:120 "false" -> "true" (the refusal of another step is { ok: false, ... }, not { ok: true, message })

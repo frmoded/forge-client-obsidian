@@ -48,7 +48,7 @@ test('every refusal names the field', () => {
   assert.match(msg(T({ ops: 'thin' })), /ops must be a list of 0 to 16 operations/);
   assert.match(msg(T({ ops: Array.from({ length: TRANSFORM_OPS_MAX + 1 }, () => ({ op: 'double_up', first: 1, last: 1 })) })), /ops must be a list of 0 to 16/);
   assert.match(msg(T({ ops: [null] })), /ops\[0\] must be an object/);
-  assert.match(msg(T({ ops: [{ op: 'melt', first: 1, last: 1 }] })), /ops\[0\]\.op must be "thin_out", "double_up", "keep", "delete", "copy", "move" or "morph_between", got "melt"/);       // 2026-11-19-0996b (deliberate): morph_between is a step now
+  assert.match(msg(T({ ops: [{ op: 'melt', first: 1, last: 1 }] })), /ops\[0\]\.op must be "thin_out", "double_up", "keep", "delete", "copy", "move", "morph_between", "mix_bars" or "extend_bar", got "melt"/);       // 2026-11-19-0996b (deliberate): morph_between is a step now; 2026-11-19-0999b (deliberate): so are mix_bars and extend_bar
   for (const [first, last] of [[0, 1], [2, 1], [1.5, 2], ['1', 2], [1, undefined], [-1, 2]]) {
     assert.match(msg(T({ ops: [{ op: 'double_up', first, last }] })), /ops\[0\]: first and last must be whole bar numbers with 1 <= first <= last/);
   }

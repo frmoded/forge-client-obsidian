@@ -137,9 +137,13 @@ export type RunsOp = KeepOp | DeleteOp | CopyOp | MoveOp;
 /** 2026-11-19-0996b (bar words inside a phrase): `Morph bars 2 and 3 across 5 bars.` makes `bars` NEW bars that change step by step from bar `a` to bar `b` of the bars as they are BEFORE the step (the engine's `morph_rhythm` between the two bars as data, asked for `bars + 2` bars
  *  because its count includes both ends; the first and the last are dropped, so the ends stay exactly as they are) and puts them in the gap after bar `after` (0 = at the start, 'end' = after the last bar). It changes WHICH bars there are, so it is a structure step: after any head, before any density step. */
 export interface MorphBetweenOp { op: 'morph_between'; a: number; b: number; bars: number; order: MorphOrder; seed: number; after: number | 'end' }
-export type StructureOp = RunsOp | MorphBetweenOp;
+/** 2026-11-19-0999b: `Mix bars 2 and 3.` makes the mix of bar `a` and bar `b` of the bars as they are BEFORE the step (the Mix HEAD's own call: `weight` is a's, `mode` 'vote' with `threshold` and `ghost`, or 'path' with `order` and `seed`) and INSERTS the ONE bar it makes in the gap after bar `after` (0 = at the start, 'end'); a and b stay. */
+export interface MixBarsOp { op: 'mix_bars'; a: number; b: number; weight: number; threshold: number; ghost: boolean; mode: MixMode; order?: MorphOrder; seed?: number; after: number | 'end' }
+/** 2026-11-19-0999b: `Extend bar 2 to 4 bars.` makes `bars` bars out of bar `bar` of the bars as they are BEFORE the step (the Extend HEAD's own call: `style`, `tempo_change_pct`). With no `after` it REPLACES bar `bar` by them; with `after` (0 = at the start, 'end') the bar STAYS and they are INSERTED in the gap after bar `after`. */
+export interface ExtendBarOp { op: 'extend_bar'; bar: number; bars: number; style: PhraseStyle; tempo_change_pct: number; after?: number | 'end' }
+export type StructureOp = RunsOp | MorphBetweenOp | MixBarsOp | ExtendBarOp;
 export type TransformOp = DensityOp | StructureOp;
-export const STRUCTURE_OPS = ['keep', 'delete', 'copy', 'move', 'morph_between'] as const;
+export const STRUCTURE_OPS = ['keep', 'delete', 'copy', 'move', 'morph_between', 'mix_bars', 'extend_bar'] as const;
 export const TRANSFORM_OPS = ['thin_out', 'double_up', ...STRUCTURE_OPS] as const;
 export const STRUCTURE_RUNS_MAX = 16;
 export const TRANSFORM_KEEPS = ['downbeat', 'seeded'] as const;
@@ -213,7 +217,7 @@ function validateHeadSteps(raw: unknown): StructureOp[] | undefined | string {
   for (let i = 0; i < raw.length; i++) {
     const op = validateTransformOp(raw[i], i);
     if (typeof op === 'string') return op;
-    if (!isStructureOp(op)) return `ops[${i}]: only a change of which bars there are (keep, delete, copy, move, morph_between) can follow an extend, a mix or a morph, got ${op.op} (a thin out and a double up are for a take).`;
+    if (!isStructureOp(op)) return `ops[${i}]: only a change of which bars there are (${STRUCTURE_OPS.join(', ')}) can follow an extend, a mix or a morph, got ${op.op} (a thin out and a double up are for a take).`;
     out.push(op);
   }
   return out.length > 0 ? out : undefined;
@@ -339,9 +343,63 @@ function validateMorphBetween(raw: Record<string, unknown>, at: string): MorphBe
   return { op: 'morph_between', a: raw.a, b: raw.b, bars: raw.bars, order: order as MorphOrder, seed: order === 'seeded' ? seed : 0, after: raw.after };
 }
 
+const wholeNumber = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v);
+const barNumberProblem = (at: string, field: string, v: unknown): string | null => (!wholeNumber(v) || v < 1 ? `${at}.${field} must be a bar number of this phrase (a whole number, 1 or more), got ${JSON.stringify(v)}.` : null);
+const afterProblem = (at: string, v: unknown, what: string): string | null => (v === 'end' || (wholeNumber(v) && v >= 0) ? null : `${at}.after must be the bar the ${what} (0 = at the start) or "end", got ${JSON.stringify(v)}.`);
+const unexpectedField = (raw: Record<string, unknown>, at: string, op: string, allowed: readonly string[]): string | null => {
+  for (const key of Object.keys(raw)) if (!allowed.includes(key)) return `${at}: unexpected field "${key}" (${op} holds only ${allowed.join(', ')}).`;
+  return null;
+};
+
+/** 2026-11-19-0999b: `Mix bars 2 and 3.` as a json step: the fields of the Mix head (weight, threshold, ghost, mode, order, seed) between two bars of the phrase and the gap the one new bar goes in. A path has an order and a seed (0 unless seeded) and no threshold or ghost notes (they would do nothing: refused, not ignored). */
+function validateMixBars(raw: Record<string, unknown>, at: string): MixBarsOp | string {
+  const bad = unexpectedField(raw, at, 'mix_bars', ['op', 'a', 'b', 'weight', 'threshold', 'ghost', 'mode', 'order', 'seed', 'after']) ?? barNumberProblem(at, 'a', raw.a) ?? barNumberProblem(at, 'b', raw.b);
+  if (bad !== null) return bad;
+  if (raw.a === raw.b) return `${at}: a and b must be two different bars, got bar ${raw.a} twice.`;
+  const unit = (field: 'weight' | 'threshold'): number | string => {
+    const v = raw[field] === undefined ? MIX_DEFAULTS[field] : raw[field];
+    return typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1 ? v : `${at}.${field} must be a number from 0 to 1, got ${JSON.stringify(raw[field])}.`;
+  };
+  const weight = unit('weight'); if (typeof weight === 'string') return weight;
+  const threshold = unit('threshold'); if (typeof threshold === 'string') return threshold;
+  const ghost = raw.ghost === undefined ? MIX_DEFAULTS.ghost : raw.ghost;
+  if (typeof ghost !== 'boolean') return `${at}.ghost must be true or false, got ${JSON.stringify(raw.ghost)}.`;
+  const mode = raw.mode === undefined ? 'vote' : raw.mode;
+  if (mode !== 'vote' && mode !== 'path') return `${at}.mode must be "vote" or "path", got ${JSON.stringify(raw.mode)}.`;
+  const after = afterProblem(at, raw.after, 'new bar follows'); if (after !== null) return after;
+  const base = { op: 'mix_bars' as const, a: raw.a as number, b: raw.b as number, weight, threshold, ghost, mode: mode as MixMode };
+  if (mode === 'vote') {
+    if (raw.order !== undefined || raw.seed !== undefined) return `${at}: order and seed only apply to a mix as a path (set "mode": "path").`;
+    return { ...base, after: raw.after as number | 'end' };
+  }
+  if (threshold !== MIX_DEFAULTS.threshold || ghost) return `${at}: threshold and ghost notes only apply to a mix as a vote.`;
+  const order = raw.order === undefined ? MORPH_DEFAULTS.order : raw.order;
+  if (typeof order !== 'string' || !(MORPH_ORDERS as readonly string[]).includes(order)) return `${at}.order must be one of ${MORPH_ORDERS.join(', ')}, got ${JSON.stringify(raw.order)}.`;
+  const seed = raw.seed === undefined ? MORPH_DEFAULTS.seed : raw.seed;
+  if (!wholeNumber(seed) || seed < 0) return `${at}.seed must be a whole number, 0 or more, got ${JSON.stringify(raw.seed)}.`;
+  return { ...base, order: order as MorphOrder, seed: order === 'seeded' ? seed : 0, after: raw.after as number | 'end' };
+}
+
+/** 2026-11-19-0999b: `Extend bar 2 to 4 bars.` as a json step: the fields of the Extend head (bars, style, tempo change) for one bar of the phrase; `after` absent = the bar is replaced, present = the bars are inserted there. */
+function validateExtendBar(raw: Record<string, unknown>, at: string): ExtendBarOp | string {
+  const bad = unexpectedField(raw, at, 'extend_bar', ['op', 'bar', 'bars', 'style', 'tempo_change_pct', 'after']) ?? barNumberProblem(at, 'bar', raw.bar);
+  if (bad !== null) return bad;
+  if (!wholeNumber(raw.bars) || raw.bars < PHRASE_BARS_MIN || raw.bars > PHRASE_BARS_MAX) return `${at}.bars must be a whole number of bars from ${PHRASE_BARS_MIN} to ${PHRASE_BARS_MAX}, got ${JSON.stringify(raw.bars)}.`;
+  const style = raw.style === undefined ? PHRASE_DEFAULTS.style : raw.style;
+  if (typeof style !== 'string' || !(PHRASE_STYLES as readonly string[]).includes(style)) return `${at}.style must be one of ${PHRASE_STYLES.join(', ')}, got ${JSON.stringify(raw.style)}.`;
+  const pct = raw.tempo_change_pct === undefined ? PHRASE_DEFAULTS.tempo_change_pct : raw.tempo_change_pct;
+  if (typeof pct !== 'number' || !Number.isFinite(pct) || pct < PHRASE_PCT_MIN || pct > PHRASE_PCT_MAX) return `${at}.tempo_change_pct must be a number from ${PHRASE_PCT_MIN} to ${PHRASE_PCT_MAX}, got ${JSON.stringify(raw.tempo_change_pct)}.`;
+  const base = { op: 'extend_bar' as const, bar: raw.bar as number, bars: raw.bars, style: style as PhraseStyle, tempo_change_pct: pct === 0 ? 0 : pct };
+  if (!('after' in raw)) return base;
+  const after = afterProblem(at, raw.after, 'new bars follow'); if (after !== null) return after;
+  return { ...base, after: raw.after as number | 'end' };
+}
+
 /** A structure op: `runs` is 1 to 16 whole bar ranges, each 1 <= first <= last, ascending and apart (a gap of at least one bar); a move also says `by` -1 (left) or 1 (right). */
 function validateStructureOp(raw: Record<string, unknown>, at: string): StructureOp | string {
   if (raw.op === 'morph_between') return validateMorphBetween(raw, at);
+  if (raw.op === 'mix_bars') return validateMixBars(raw, at);
+  if (raw.op === 'extend_bar') return validateExtendBar(raw, at);
   const op = raw.op as RunsOp['op'];
   const allowed = op === 'move' ? ['op', 'runs', 'by'] : ['op', 'runs'];
   for (const key of Object.keys(raw)) if (!allowed.includes(key)) return `${at}: unexpected field "${key}" (${op} holds only ${allowed.join(', ')}).`;
@@ -363,7 +421,7 @@ function validateTransformOp(raw: unknown, i: number): TransformOp | string {
   const at = `ops[${i}]`;
   if (!isPlainObject(raw)) return `${at} must be an object like {"op": "thin_out", "first": 3, "last": 5}, got ${JSON.stringify(raw)}.`;
   if ((STRUCTURE_OPS as readonly unknown[]).includes(raw.op)) return validateStructureOp(raw, at);
-  if (raw.op !== 'thin_out' && raw.op !== 'double_up') return `${at}.op must be "thin_out", "double_up", "keep", "delete", "copy", "move" or "morph_between", got ${JSON.stringify(raw.op)}.`;
+  if (raw.op !== 'thin_out' && raw.op !== 'double_up') return `${at}.op must be "thin_out", "double_up", "keep", "delete", "copy", "move", "morph_between", "mix_bars" or "extend_bar", got ${JSON.stringify(raw.op)}.`;
   const allowed = raw.op === 'thin_out' ? ['op', 'first', 'last', 'row', 'amount', 'keep', 'seed'] : ['op', 'first', 'last', 'row', 'grid'];
   for (const key of Object.keys(raw)) {
     if (allowed.includes(key)) continue;
@@ -557,6 +615,8 @@ export function readPhraseNote(text: string): Validation<PhraseParams> {
 /** One transform op as the json text shows it, on one line: {"op": "thin_out", "first": 3, "last": 5, "row": "kick", "amount": 0.5}. */
 export function formatTransformOp(o: TransformOp): string {
   if (o.op === 'morph_between') return `{"op": "morph_between", "a": ${o.a}, "b": ${o.b}, "bars": ${o.bars}, "order": ${JSON.stringify(o.order)}, "seed": ${o.seed}, "after": ${JSON.stringify(o.after)}}`;
+  if (o.op === 'mix_bars') return `{"op": "mix_bars", "a": ${o.a}, "b": ${o.b}, "weight": ${o.weight}, "threshold": ${o.threshold}, "ghost": ${o.ghost}, "mode": ${JSON.stringify(o.mode)}${o.mode === 'path' ? `, "order": ${JSON.stringify(o.order)}, "seed": ${o.seed}` : ''}, "after": ${JSON.stringify(o.after)}}`;
+  if (o.op === 'extend_bar') return `{"op": "extend_bar", "bar": ${o.bar}, "bars": ${o.bars}, "style": ${JSON.stringify(o.style)}, "tempo_change_pct": ${o.tempo_change_pct}${o.after !== undefined ? `, "after": ${JSON.stringify(o.after)}` : ''}}`;
   if (isStructureOp(o)) return `{"op": ${JSON.stringify(o.op)}, "runs": ${JSON.stringify(o.runs)}${o.op === 'move' ? `, "by": ${o.by}` : ''}}`;
   const parts = [`"op": ${JSON.stringify(o.op)}`, `"first": ${o.first}`, `"last": ${o.last}`];
   if (o.row !== undefined) parts.push(`"row": ${JSON.stringify(o.row)}`);
@@ -1040,7 +1100,7 @@ async function produceWithSteps(deps: PhraseScoreDeps, params: ExtendPhrase | Mi
   if (made.kind !== 'score') return made;
   const bars = barsOfPayload(made.payload);
   if (bars === null) return { kind: 'refusal', message: `Phrase: the ${params.kind} gave no bars to change.` };
-  const done = ops!.every(isRunsOp) ? applyStructureOps(bars, ops!) : await applyStepsAsync(bars, ops!, (a, b, op) => morphNewBars(deps, a, b, op, title));          // 2026-11-19-0996b: a Morph-between asks the engine; the other steps are TypeScript as before
+  const done = ops!.every(isRunsOp) ? applyStructureOps(bars, ops!) : await runEngineSteps(deps, bars, ops!, title);          // 2026-11-19-0996b: a Morph-between asks the engine (2026-11-19-0999b: so do Mix and Extend); the other steps are TypeScript as before
   if (done.ok === false) return { kind: 'refusal', message: `Phrase: the ${params.kind} has ${bars.length} bar${bars.length === 1 ? '' : 's'}; ${done.message}` };
   let asked: PhraseParams = { kind: 'transform', source: 'phrases/head', ops: [] };
   if (overrides) {
@@ -1051,25 +1111,57 @@ async function produceWithSteps(deps: PhraseScoreDeps, params: ExtendPhrase | Mi
   return computeScore(async (_data, t) => deps.compute({ bars: done.items }, asked, t), bars[0], title);
 }
 
+/** 2026-11-19-0999b: the steps of a phrase with at least one that asks the engine for NEW bars (a Morph-between, a Mix, an Extend), run in order by `applyStepsAsync`. */
+function runEngineSteps(deps: PhraseScoreDeps, bars: RhythmData[], ops: readonly StructureOp[], title: string): Promise<StructureResult<RhythmData>> {
+  return applyStepsAsync(bars, ops, (a, b, op) => morphNewBars(deps, a, b, op, title), { mix: (a, b, op) => mixNewBars(deps, a, b, op, title), extend: (bar, op) => extendNewBars(deps, bar, op, title) });
+}
+
+/**
+ * 2026-11-19-0999b - the ONE call the three steps share: ask the engine the way a head does (`deps.compute`), say its own refusal of the person's data in words (`refusal` gives the whole sentence or null: any other engine error stays an engine error), and check it
+ * gave exactly `want` bars (`what` names the step in the counts: "the morph of bars 2 and 3"). `first` is the bar the Score's grid is read from.
+ */
+async function newBarsFromEngine(deps: PhraseScoreDeps, title: string, data: RhythmData | MixBars, asked: PhraseParams, first: RhythmData, want: number, what: string, refusal: (engineMessage: string) => string | null): Promise<StructureResult<RhythmData>> {
+  let refused: string | null = null;
+  const out = await computeScore(async (_data, t) => {
+    try { return await deps.compute(data, asked, t); } catch (e) {
+      const line = refusal((e as Error)?.message ?? String(e));
+      if (line !== null) { refused = line; return null; }
+      throw e;
+    }
+  }, first, title);
+  if (refused !== null) return { ok: false, message: refused };
+  if (out.kind !== 'score') return { ok: false, message: out.message };
+  const made = barsOfPayload(out.payload);
+  if (made === null || made.length !== want) return { ok: false, message: `the engine gave ${made === null ? 'no bars' : `${made.length} bars`} for ${what} (it was asked for ${want}).` };
+  return { ok: true, items: made };
+}
+
 /**
  * 2026-11-19-0996b - the NEW bars of a Morph-between: the engine's `morph_rhythm` between bar `a` and bar `b` of the phrase AS DATA (the call a Morph head makes: `data.a`, `data.b`; no note is read, no engine file is touched), asked for `bars + 2` bars because its count includes
  * both ends (bar 1 of the answer is `a`, the last is `b`); the first and the last are dropped, so the phrase's own two bars stay exactly as they are and EXACTLY `bars` new bars come back. The engine's own refusal (two bars on different grids) is the person's data: said in words.
  */
 async function morphNewBars(deps: PhraseScoreDeps, a: RhythmData, b: RhythmData, op: MorphBetweenOp, title: string): Promise<StructureResult<RhythmData>> {
   const asked: MorphPhrase = { kind: 'morph', a: 'bar_a', b: 'bar_b', bars: op.bars + 2, order: op.order, seed: op.seed };
-  let refused: string | null = null;
-  const out = await computeScore(async (_data, t) => {
-    try { return await deps.compute({ a, b }, asked, t); } catch (e) {
-      const line = morphRhythmRefusal((e as Error)?.message ?? String(e));
-      if (line !== null) { refused = line; return null; }
-      throw e;
-    }
-  }, a, title);
-  if (refused !== null) return { ok: false, message: `bars ${op.a} and ${op.b} cannot be morphed: ${refused}` };
-  if (out.kind !== 'score') return { ok: false, message: out.message };
-  const made = barsOfPayload(out.payload);
-  if (made === null || made.length !== op.bars + 2) return { ok: false, message: `the engine gave ${made === null ? 'no bars' : `${made.length} bars`} for the morph of bars ${op.a} and ${op.b} (it was asked for ${op.bars + 2}).` };
-  return { ok: true, items: made.slice(1, op.bars + 1) };
+  const made = await newBarsFromEngine(deps, title, { a, b }, asked, a, op.bars + 2, `the morph of bars ${op.a} and ${op.b}`, (m) => { const line = morphRhythmRefusal(m); return line === null ? null : `bars ${op.a} and ${op.b} cannot be morphed: ${line}`; });
+  return made.ok ? { ok: true, items: made.items.slice(1, op.bars + 1) } : made;
+}
+
+/**
+ * 2026-11-19-0999b - the ONE new bar of a Mix step: the Mix head's own call (`produceMix`: kind mix, the two bars of the phrase as data {a, b}, the share, the threshold and the ghost notes of a vote or the order and seed of a path; the names are labels the glue ignores). The engine
+ * answers with `mixed_bar`: one bar, made of the bars as they are now, which the phrase's own two bars never give way to. A mix_rhythm (or, for a path, morph_rhythm) refusal is the person's data (two bars on different grids): said in words.
+ */
+async function mixNewBars(deps: PhraseScoreDeps, a: RhythmData, b: RhythmData, op: MixBarsOp, title: string): Promise<StructureResult<RhythmData>> {
+  const asked: MixPhrase = { kind: 'mix', a: 'bar_a', b: 'bar_b', weight: op.weight, threshold: op.threshold, ghost: op.ghost, ...(op.mode === 'path' ? { mode: 'path' as const, order: op.order, seed: op.seed } : {}) };
+  return newBarsFromEngine(deps, title, { a, b }, asked, a, 1, `the mix of bars ${op.a} and ${op.b}`, (m) => { const line = mixRhythmRefusal(m) ?? morphRhythmRefusal(m); return line === null ? null : `bars ${op.a} and ${op.b} cannot be mixed: ${line}`; });
+}
+
+/**
+ * 2026-11-19-0999b - the N new bars of an Extend step: the Extend head's own call (`produceValidated`: kind extend, the one bar as data, the style and the tempo change; `bar_a` is a label). A bar that is not on the 16-step grid is said as the head says it ("bar 2 has 12 steps; extend needs a
+ * 16-step bar."), any other extend_rhythm refusal (a channel it does not know) in the engine's own line; the bar may be any bar of the phrase (a copy, a morph's new bar, a mix).
+ */
+async function extendNewBars(deps: PhraseScoreDeps, bar: RhythmData, op: ExtendBarOp, title: string): Promise<StructureResult<RhythmData>> {
+  const asked: ExtendPhrase = { kind: 'extend', source: 'bar_a', bars: op.bars, style: op.style, tempo_change_pct: op.tempo_change_pct };
+  return newBarsFromEngine(deps, title, bar, asked, bar, op.bars, `the extend of bar ${op.bar}`, (m) => { const line = extendRhythmRefusal(m); return extendGridSentence(m, `bar ${op.bar}`) ?? (line === null ? null : `bar ${op.bar} cannot be extended: ${line}`); });
 }
 
 /** The data of every fork note of a phrase, by bar number, or the reason one cannot be used (naming the bar and the note). Each distinct note is read once. */
@@ -1146,6 +1238,12 @@ export function morphRhythmRefusal(message: string): string | null {
   return m ? m[1] : null;
 }
 
+/** The engine's own `extend_rhythm: …` line out of an error (a channel it does not know, a grid that is not 16 steps). `null` = not an extend_rhythm refusal. */
+export function extendRhythmRefusal(message: string): string | null {
+  const m = /(?:^|\n)(?:ValueError: )?(extend_rhythm: [^\n]*?)\s*$/.exec(message.trim());
+  return m ? m[1] : null;
+}
+
 /** The engine's own `thin_out_bars: ...` / `double_up_bars: ...` line out of an error (the ValueError of a row a bar does not have, a range past the bars, a bar on another grid). `null` = not a region-transform refusal. */
 export function regionRefusal(message: string): string | null {
   const m = /(?:^|\n)(?:ValueError: )?((?:thin_out_bars|double_up_bars): [^\n]*?)\s*$/.exec(message.trim());
@@ -1194,7 +1292,7 @@ async function produceTransform(deps: PhraseScoreDeps, params: TransformPhrase, 
   const structure = params.ops.filter(isStructureOp);
   let working: RhythmData[] = bars;
   if (structure.length > 0) {
-    const done = structure.every(isRunsOp) ? applyStructureOps(bars, structure) : await applyStepsAsync(bars, structure, (a, b, op) => morphNewBars(deps, a, b, op, title));          // 2026-11-19-0996b
+    const done = structure.every(isRunsOp) ? applyStructureOps(bars, structure) : await runEngineSteps(deps, bars, structure, title);          // 2026-11-19-0996b
     if (done.ok === false) return { kind: 'refusal', message: `Phrase: the source ${what} ${name} has ${bars.length} bar${bars.length === 1 ? '' : 's'}; ${done.message}` };
     working = done.items;
   }

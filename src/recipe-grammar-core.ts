@@ -36,6 +36,7 @@ export const RECIPE_STEPS: ReadonlyArray<{ opener: string; re: RegExp; example: 
   { opener: 'Build', re: /^build\b/i, example: 'Build it up over 8 bars.' },
   { opener: 'Morph', re: /^morph\b/i, example: 'Morph from the first to the second over 5 bars, in musical order.' },
   { opener: 'Mix', re: /^mix\b/i, example: 'Mix them by vote: 70 % [[bar_005]] and 30 % [[bar_006]], threshold 0.50, ghost notes off.' },
+  { opener: 'Extend', re: /^extend\b/i, example: 'Extend bar 2 to 4 bars, repeating with fills.' },       // 2026-11-19-0999b: the Extend STEP of a phrase (a Recipe's own Extend head is said "Repeat it for ..." / "Build it up over ...")
   { opener: 'Keep', re: /^keep\b/i, example: 'Keep the state at weight 0.7 (1 is all of [[bar_005]], 0 is all of [[bar_006]]).' },
   { opener: 'Threshold', re: /^threshold\b/i, example: 'Threshold 40 percent.' },
   { opener: 'With', re: /^with\b/i, example: 'With ghost notes.' },
@@ -314,10 +315,11 @@ export function parseRecipe(text: string, vault: GrammarVault): RecipeResult {
       return stepError(text, ss[0].start, `Expected a Recipe that starts with "Take [[a note]]." or "Play [[a note]] ...", but found "${word}".`);
     }
     const second = ss[1]?.text ?? '';
+    const aStep = /^(?:morph|mix|extend)\s+bars?\s+\d/i.test(second);          // 2026-11-19-0999b (and a fix of 0996b): "Morph bars 2 and 3 ...", "Mix bars 2 and 3 ..." are STEPS of a take, not the second sentence of a Morph or a Mix
     if (/^take\b/i.test(ss[0].text)) {
       if (/^(?:repeat\s+it\b|build\s+it\b)/i.test(second)) return finish(text, parseExtendRecipe(ss, vault), ss);
-      if (/^morph\b/i.test(second)) return finish(text, parseMorphRecipe(ss, vault), ss);
-      if (/^mix\b/i.test(second)) return finish(text, parseMixRecipe(ss, vault), ss);
+      if (!aStep && /^morph\b/i.test(second)) return finish(text, parseMorphRecipe(ss, vault), ss);
+      if (!aStep && /^mix\b/i.test(second)) return finish(text, parseMixRecipe(ss, vault), ss);
       if (ss.length === 1 && /\band\b/i.test(ss[0].text.replace(/\[\[[^\]]*\]\]/g, ''))) throw new Fail(ss[0].start + ss[0].text.length, 'Expected "Morph from the first to the second ..." or "Mix them ..." after the two bars, but found the end of the Recipe.');
       return finish(text, parseTransformRecipe(ss, vault), ss);
     }
