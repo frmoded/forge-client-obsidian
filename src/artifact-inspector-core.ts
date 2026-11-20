@@ -347,8 +347,8 @@ export function orderByStepThenChannel(map: ProvenanceMap, channelOrder: readonl
 
 /** One line of the lineage stack. */
 export interface LineageEntry {
-  /** 'hit' and 'note' are the bar inspector's; 'bar' and 'tempo' are a phrase's (M6). The kind is a CSS class (`forge-inspector-<kind>`). */
-  kind: 'hit' | 'note' | 'bar' | 'tempo' | 'legend' | 'action';
+  /** 'hit' and 'note' are the bar inspector's; 'bar' and 'tempo' are a phrase's (M6); 'step' (2026-11-20-1000) is a line about the STEPS after a phrase's head, in muted words. The kind is a CSS class (`forge-inspector-<kind>`). */
+  kind: 'hit' | 'note' | 'bar' | 'tempo' | 'legend' | 'action' | 'step';
   text: string;
   /** M8: a legend line — coloured marks with their meaning (the mix's three kinds of hit). Rendered as inline-styled spans; `text` is the plain-text form. */
   legend?: ReadonlyArray<{ mark: string; colour: string; text: string }>;

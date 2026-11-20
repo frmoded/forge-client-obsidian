@@ -96,4 +96,9 @@ export interface ListModel {
     duplicateNote: typeof import('./duplicate-note-core.ts').duplicateNote;
     undoCopy: typeof import('./duplicate-undo-core.ts').undoCopy;
   };
+  /** 2026-11-20-1000: phrase-steps-lineage-core.ts: the Score's Inspector mapped THROUGH the step lines of a phrase (which note made each bar, which step made it, in plain words). Lean: no Score, so nothing is mapped (null: the builders that were always there answer) and nothing is said. */
+  steps: {
+    annotate: typeof import('./phrase-steps-lineage-core.ts').annotateWithSteps;
+    lineageOf: typeof import('./phrase-steps-lineage-core.ts').stepLineageOf;
+  };
 }

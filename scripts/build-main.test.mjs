@@ -103,6 +103,7 @@ test("the size test does not depend on the generated assets: stubbing them chang
 const LIST_MODEL_CORES = [
   "bar-list-controller", "bar-list-core", "bar-grammar-core", "bar-box-host-core", "bar-list-note-core",
   "duplicate-sentence-core", "duplicate-note-core", "duplicate-undo-core",
+  "phrase-steps-lineage-core",          // 2026-11-20-1000 (deliberate): the Inspector through the step lines (a Score-only core)
 ];
 const sentinelOf = (core) => `forge-list-model-core:${core}`;
 

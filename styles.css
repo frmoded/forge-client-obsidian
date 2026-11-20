@@ -2347,6 +2347,8 @@
 .forge-inspector-body { color: var(--text-muted); }
 .forge-inspector-lineage { margin: 0; padding-left: 1.2em; color: var(--text-normal); }
 .forge-inspector-lineage li { margin: 2px 0; }
+/* 2026-11-20-1000: a line about the STEPS after a phrase's head ("made by step 2: ...", "copied by step 3: ..."): muted words, no colour of its own */
+.forge-inspector-lineage li.forge-inspector-step { color: var(--text-muted); }
 .forge-inspector-open { margin-left: 8px; font-size: var(--font-ui-smaller); }
 .forge-inspector-notes { margin-top: 6px; }
 .forge-inspector-notes-title { color: var(--text-muted); }

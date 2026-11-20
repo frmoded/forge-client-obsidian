@@ -6,6 +6,7 @@ import { renderMusicXMLAndMIDI } from '@client/verovio.ts';
 import { messageDelivery } from '@client/score-first-messages-core.ts';
 import { scoreClickPlays } from '@client/score-click-policy.ts';
 import { SCORE_ZOOM_LEVELS, createZoomMemory } from '@client/zoom-memory-core.ts';
+import { registerBarSelectionHost } from '@client/bar-selection-bus.ts';
 
 const proto: any = HTMLElement.prototype;         // the Obsidian DOM helpers the music edition's renderer uses
 const apply = (el: HTMLElement, o: any) => {
@@ -24,13 +25,14 @@ proto.removeClass = function (c: string) { this.classList.remove(c); };
 proto.toggleClass = function (c: string, on: boolean) { this.classList.toggle(c, !!on); };
 proto.setText = function (t: string) { this.textContent = t; };
 
-(window as any).__mountPhrase = async (parent: HTMLElement, opts: { phrase: string; bar: string; plan?: 'score' | 'lean-note'; path?: string; bars?: Record<string, string>; name?: string; noZoomMemory?: boolean; notebook?: boolean; structure?: boolean }) => {
+(window as any).__mountPhrase = async (parent: HTMLElement, opts: { phrase: string; bar: string; phrases?: Record<string, string>; barHost?: boolean; plan?: 'score' | 'lean-note'; path?: string; bars?: Record<string, string>; name?: string; noZoomMemory?: boolean; notebook?: boolean; structure?: boolean }) => {
   // 2026-10-26-1100: the zoom a tab keeps across its redraws, as the phrase view gives it; `noZoomMemory` is the red run (every redraw back to 100%, as before)
   const zoom = opts.noZoomMemory ? undefined : createZoomMemory(SCORE_ZOOM_LEVELS, 1.0);
   const PATH = opts.path ?? 'phrases/phrase_001.md';
   const NAME = opts.name ?? 'phrase_001';
   const files = new Map<string, string>([[PATH, opts.phrase], ['bars/bar_005.md', opts.bar]]);
   for (const [n, t] of Object.entries(opts.bars ?? {})) files.set(`bars/${n}.md`, t);       // M7: more bars (a mix reads two)
+  for (const [n, t] of Object.entries(opts.phrases ?? {})) files.set(`phrases/${n}.md`, t);       // 2026-11-20-1000: more phrases (a Take reads one)
   (window as any).__files = files;
   let handle: any;
   handle = mountPhrase(parent, {
@@ -80,6 +82,12 @@ proto.setText = function (t: string) { this.textContent = t; };
     clearTimer: (h) => window.clearTimeout(h as number),
   });
   (window as any).__phrase = handle;
+  // 2026-11-20-1000: `barHost` = the plugin's bar-selection host (score-first.ts registers it): a click on a bar while the composer has text inserts the bar's word (` bar 3`) through the description controller of the rig
+  const registerHost = (): void => {
+    if (!(opts as any).barHost) return;
+    const c = (): any => (window as any).__descCtl;
+    registerBarSelectionHost({ appendLine: (p: string, s: string) => c().appendLine(p, s), makePhrase: async () => ({ ok: true as const, path: 'phrases/phrase_099.md' }), duplicateArmed: (p: string) => c().duplicateArmed(p), duplicateClick: (p: string, id: string | null, bar?: number | null) => c().duplicateClick(p, id, bar) });
+  };
   // 2026-11-12-1203: with `describe`, the description controller of the plugin (score-first.ts) beside the tab: it draws the docked prompt box and the strip at the top, and answers the box's Apply with the plugin's own writers
   if ((opts as any).describe) {
     const { createDescriptionController } = await import('@client/description-apply.ts');
@@ -103,6 +111,7 @@ proto.setText = function (t: string) { this.textContent = t; };
         panes: () => [{ path: PATH, contentEl: parent, tab: true }],
       }, (opts as any).hideStatus ? { ...hooks, showBoxStatus: () => false } : hooks));
       (window as any).__descCtl.inspect(PATH);
+      registerHost();
       await handle.load();
       return;
     }
@@ -121,6 +130,7 @@ proto.setText = function (t: string) { this.textContent = t; };
         await new Promise((r) => setTimeout(r, (opts as any).planMs ?? 400)); return { status: 200, json: { ok: true, parsed_ok: true, plan: (opts as any).plan, error: null } }; }, configured: () => true } : {}),
     });
     (window as any).__descCtl.inspect(PATH);
+    registerHost();
   }
   await handle.load();
 };

@@ -72,6 +72,9 @@ export interface ScoreInspectorPorts {
   selectBars?: { onRange(first: number, last: number): void; onRangeEnd?(): void; onShiftClick(bar: number): void; onToggleClick?(bar: number): void };
   /** 2026-11-19-0992 (opt-in, see artifact-inspector-core `copyClick`): the next plain click on a bar is a COPY click while the composer says "Duplicate". Only the phrase tab passes it. Absent = every click is what it was (P3). */
   copyClick?: { armed(): boolean; onBar(entry: InspectorEntry): void };
+  /** 2026-11-20-1000: bars of `role` whose provenance carries `steps` are tied THROUGH the step lines of a phrase (phrase-steps-lineage-core.ts): the surface's own `lineage` is not asked for them, they are selected by their box, labelled `bar N` and walked by the arrow keys in order.
+   *  Absent, or a map with no such bar = nothing changes (P3). */
+  stepBars?: { role: string; lineage(prov: Provenance): LineageEntry[] };
   /** 2026-10-30-1020: a Score was shown and mapped, and the inspector is attached to it (called once per Score, before any pin is carried over): a surface that paints a cue of its own learns its host and map, without waiting for a
    *  hover or a pin to make `decorate` run. Absent = nothing. */
   attached?(host: HTMLElement, map: ProvenanceMap): void;
@@ -112,7 +115,7 @@ export function createScoreInspector(slot: HTMLElement, ports: ScoreInspectorPor
   function renderStack(entry: InspectorEntry, preview: boolean) {
     body.textContent = '';
     const list = doc.createElement('ol'); list.className = preview ? 'forge-inspector-lineage forge-inspector-preview' : 'forge-inspector-lineage';
-    for (const l of (ports.lineage ?? lineageOf)(entry.prov)) {
+    for (const l of (ports.stepBars && entry.prov.role === ports.stepBars.role && entry.prov.params.steps !== undefined ? ports.stepBars.lineage : ports.lineage ?? lineageOf)(entry.prov)) {
       const li = doc.createElement('li'); li.className = `forge-inspector-${l.kind}`;
       if (l.kind === 'action') {
         // M9: a button on the PINNED bar only (a hover preview is only a preview), and only where the surface handles it
@@ -195,19 +198,22 @@ export function createScoreInspector(slot: HTMLElement, ports: ScoreInspectorPor
       showHint(hint);
       say(quiet.textContent ?? '');
       const map = result.map;
+      const sb = ports.stepBars;
+      const isStep = (id: string): boolean => sb !== undefined && map[id].role === sb.role && map[id].params.steps !== undefined;
+      const stepIds = Object.keys(map).filter(isStep).sort((x, y) => Number(map[x].params.bar) - Number(map[y].params.bar));
       const layer = attachArtifactInspector({
         root: host,
         map,
-        order: ports.order ? ports.order(map) : orderByStepThenChannel(map, CANONICAL_CHANNELS),
+        order: stepIds.length > 0 ? stepIds : ports.order ? ports.order(map) : orderByStepThenChannel(map, CANONICAL_CHANNELS),
         enlargeTargets: ports.enlargeTargets === undefined ? { x: 0.35, y: 0.15 } : ports.enlargeTargets ?? undefined,
         enlargeIds: ports.enlargeIds ? ports.enlargeIds(map) : undefined,
         decorate: ports.decorate ? (pinnedId) => ports.decorate!(host, map, pinnedId) : undefined,
         band: ports.band === true,
         keepPinOnControls: ports.keepPinOnControls === true,
         releaseOnEscapeFrom: ports.releaseOnEscapeFrom,
-        pointIds: ports.pointRoles ? Object.keys(map).filter((id) => ports.pointRoles!.includes(map[id].role)) : undefined,
+        pointIds: ports.pointRoles ? Object.keys(map).filter((id) => ports.pointRoles!.includes(map[id].role) || isStep(id)) : undefined,
         trace: ports.trace,
-        pinLabel: ports.pinLabel ? (id) => ports.pinLabel!(id, map[id]) : undefined,
+        pinLabel: ports.pinLabel ? (id) => (isStep(id) ? `bar ${String(map[id].params.bar)}` : ports.pinLabel!(id, map[id])) : undefined,
         ...(ports.copyClick ? { copyClick: ports.copyClick } : {}),
         selectBars: ports.selectBars ? { barOf: (prov) => (typeof prov.params.bar === 'number' ? prov.params.bar : null), onRange: ports.selectBars.onRange, onRangeEnd: ports.selectBars.onRangeEnd, onShiftClick: ports.selectBars.onShiftClick, onToggleClick: ports.selectBars.onToggleClick } : undefined,
         onHover: (e) => {

@@ -1108,7 +1108,8 @@ async function produceWithSteps(deps: PhraseScoreDeps, params: ExtendPhrase | Mi
     if (typeof forks === 'string') return { kind: 'refusal', message: `Phrase: ${forks}` };
     asked = { ...asked, override_bars: forks } as unknown as PhraseParams;
   }
-  return computeScore(async (_data, t) => deps.compute({ bars: done.items }, asked, t), bars[0], title);
+  const drawn = await computeScore(async (_data, t) => deps.compute({ bars: done.items }, asked, t), bars[0], title);
+  return drawn.kind === 'score' ? { kind: 'score', payload: { ...drawn.payload, forge_steps: { head: bars.length } } } : drawn;        // 2026-11-20-1000: the head's bar count (Inspector)
 }
 
 /** 2026-11-19-0999b: the steps of a phrase with at least one that asks the engine for NEW bars (a Morph-between, a Mix, an Extend), run in order by `applyStepsAsync`. */
@@ -1319,7 +1320,7 @@ async function produceTransform(deps: PhraseScoreDeps, params: TransformPhrase, 
     }
   }, bars[0], title);
   if (refused !== null) return { kind: 'refusal', message: `Phrase: ${refused}` };
-  return outcome;
+  return structure.length > 0 && outcome.kind === 'score' ? { kind: 'score', payload: { ...outcome.payload, forge_steps: { head: bars.length } } } : outcome;        // 2026-11-20-1000: the source's bar count (Inspector)
 }
 
 /** The Score of a morph: both bars read FRESH (one read per distinct bar), then the engine's `morph_rhythm` + `rhythm_bars_to_stream`. A missing or unusable bar is a refusal naming which one (a or b); the engine's own

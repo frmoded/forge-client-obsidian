@@ -25,7 +25,8 @@ import { phraseTabTitle } from './phrase-tab-title-core.ts';
 import { pinnedNoteFor, type PinnedNote } from './linked-panes-core.ts';
 import { barsContributedBy, chipsFor, customChips, litBarIds, litEvidence, type Chip } from './structure-strip-core.ts';
 import { mountStructureStrip, type StripHandle } from './structure-strip-dom.ts';
-import type { ProvenanceMap, ProvenanceResult } from './provenance-core.ts';
+import type { Provenance, ProvenanceMap, ProvenanceResult } from './provenance-core.ts';
+import type { LineageEntry } from './artifact-inspector-core.ts';
 import { PHRASE_BAR_ROLE, PHRASE_BAR_SCOPE, annotatePhraseXml, phraseLineageOf, phraseNoteId, phraseProvenance, transformProvenance } from './phrase-lineage-core.ts';
 import {
   NO_SELECTION, SELECTION_MENU, disabledReason, extendSelection, limitTo, menuRun, planAction, sameSelection, selectRange as barsRange, selectionOf, selectionText, toggleSelection, type BarSelection, type SelectionAction,
@@ -611,6 +612,7 @@ type NoteText = string | { unreadable: string };
 /** What makes the bars of a phrase's Score mean what they mean: a transform's source and its steps that change which bars there are (a Thin out or a Double up keeps every number); any other kind is just its kind (a different number of bars is the redraw's own `limitTo`). */
 function numberingKey(p: PhraseParams | null): string {
   if (p === null) return '';
+  if (p.kind !== 'transform' && p.ops !== undefined && p.ops.length > 0) return JSON.stringify([p.kind, p.ops]);          // 2026-11-20-1000: steps renumber the bars of any head
   return p.kind === 'transform' ? JSON.stringify([p.source, p.ops.filter(isStructureOp)]) : p.kind;
 }
 
@@ -618,8 +620,20 @@ function phraseSourceNote(source: string): string {
   return `bars/${source}`;
 }
 
+/** 2026-11-20-1000: the Score of a phrase with step lines, tied through them (list-model seam); null = not one: the builders below answer. */
+function annotateThroughSteps(path: string, note: NoteText, payload: Record<string, unknown>): ProvenanceResult | null {
+  if (payload.forge_steps === undefined) return null;
+  const parsed = typeof note === 'string' ? readPhraseNote(note) : null;
+  return parsed && parsed.ok ? listModel.steps.annotate(phraseNoteId(path), parsed.value, payload) : null;
+}
+
+/** 2026-11-20-1000: the bars of any phrase surface that are tied through steps (the Inspector asks the list model, so lean carries none of it). */
+const stepBarsPort = { role: PHRASE_BAR_ROLE, lineage: (prov: Provenance): LineageEntry[] => listModel.steps.lineageOf(prov) };
+
 /** The map of a phrase's Score: parse the phrase the Score was rendered for, put the bar ids on the engine's MusicXML, and tie each id to the phrase, its source and its tempo. Never throws. */
 function annotateForPhrase(path: string, note: NoteText, payload: Record<string, unknown>): ProvenanceResult {
+  const through = annotateThroughSteps(path, note, payload);
+  if (through !== null) return through;
   const none = (problem: string): ProvenanceResult => ({ payload, map: {}, problems: [problem], kitProblems: [] });
   const parsed = typeof note === 'string' ? readPhraseNote(note) : null;
   if (!parsed || parsed.ok === false) return none('the phrase could not be read');
@@ -658,6 +672,8 @@ function annotateForPhrase(path: string, note: NoteText, payload: Record<string,
 
 /** The map of a MIX's Score (M8): the bar and every hit, each tied to the two bars it was made of. Never throws. */
 function annotateForMix(path: string, note: NoteText, payload: Record<string, unknown>): ProvenanceResult {
+  const through = annotateThroughSteps(path, note, payload);
+  if (through !== null) return through;
   const parsed = typeof note === 'string' ? readPhraseNote(note) : null;
   if (!parsed || parsed.ok === false || parsed.value.kind !== 'mix') return { payload, map: {}, problems: ['the mix could not be read'], kitProblems: [] };
   const result = annotateMixPayload(phraseNoteId(path), parsed.value, payload);
@@ -667,6 +683,8 @@ function annotateForMix(path: string, note: NoteText, payload: Record<string, un
 
 /** The map of a MORPH's Score (M7c Phase B): every bar and every hit of every generated bar, tied to the path between the two bars. Never throws. */
 function annotateForMorph(path: string, note: NoteText, payload: Record<string, unknown>): ProvenanceResult {
+  const through = annotateThroughSteps(path, note, payload);
+  if (through !== null) return through;
   const parsed = typeof note === 'string' ? readPhraseNote(note) : null;
   if (!parsed || parsed.ok === false || parsed.value.kind !== 'morph') return { payload, map: {}, problems: ['the morph could not be read'], kitProblems: [] };
   const result = annotateMorphPayload(phraseNoteId(path), parsed.value, payload);
@@ -696,7 +714,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
   let tintHost: HTMLElement | null = null;
   let tintRole = PHRASE_BAR_ROLE;
   let tintMap: ProvenanceMap | null = null;
-  const tintedIds = (map: ProvenanceMap): string[] => Object.keys(map).filter((id) => map[id].role === tintRole && typeof map[id].params.bar === 'number' && selectedBars.has(map[id].params.bar as number));
+  const tintedIds = (map: ProvenanceMap): string[] => Object.keys(map).filter((id) => (map[id].role === tintRole || map[id].role === PHRASE_BAR_ROLE) && typeof map[id].params.bar === 'number' && selectedBars.has(map[id].params.bar as number));
   const tintAttached = (host: HTMLElement, map: ProvenanceMap): void => { tintHost = host; tintMap = map; paintSelectionTint(host, tintedIds(map)); paintSelectionMenu(); };
   const withTint = (inner?: (host: HTMLElement, map: ProvenanceMap, pinnedId: string | null) => void) => (host: HTMLElement, map: ProvenanceMap, pinnedId: string | null): void => {
     tintHost = host; tintMap = map;
@@ -886,6 +904,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
       decorate: withTint(),                          // 2026-10-30-1020: the bars the notebook has selected are tinted on the Score ...
       attached: tintAttached,                        // ... from the moment a Score is shown, not from the first hover
       copyClick: copyClickPort(),
+      stepBars: stepBarsPort,
       selectBars: selectBarsPort(),                  // 2026-10-30-1020: a drag across bars selects them in the notebook, a Shift-click extends (phrase surfaces with a notebook only: P3)
     } : insp && k === 'mix' ? {
       // M8: the mix's one bar and each of its hits, tied to the two bars they came from. Clicking a notehead pins THAT hit, clicking the staff the bar; a redraw (the Weight slider) keeps the pin; the
@@ -908,6 +927,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
       decorate: withTint(paintMixHits),
       attached: tintAttached,
       copyClick: copyClickPort(),
+      stepBars: stepBarsPort,
       selectBars: selectBarsPort(),
       kitNote: 'Kit view: not mapped for this mix (use the multi-staff view to inspect).',
     } : insp && k === 'morph' ? {
@@ -932,6 +952,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
       decorate: withTint(paintMorphHits),
       attached: tintAttached,
       copyClick: copyClickPort(),
+      stepBars: stepBarsPort,
       selectBars: selectBarsPort(),
       kitNote: 'Kit view: not mapped for this morph (use the multi-staff view to inspect).',
     } : undefined;

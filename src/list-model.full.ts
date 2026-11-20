@@ -15,15 +15,18 @@ import { LIST_MODEL_SENTINEL_BAR_LIST_NOTE_CORE } from './bar-list-note-core.ts'
 import { LIST_MODEL_SENTINEL_DUPLICATE_SENTENCE_CORE } from './duplicate-sentence-core.ts';
 import { LIST_MODEL_SENTINEL_DUPLICATE_NOTE_CORE } from './duplicate-note-core.ts';
 import { LIST_MODEL_SENTINEL_DUPLICATE_UNDO_CORE } from './duplicate-undo-core.ts';
+import { LIST_MODEL_SENTINEL_PHRASE_STEPS_LINEAGE_CORE, annotateWithSteps, stepLineageOf } from './phrase-steps-lineage-core.ts';
 
 export const listModel: ListModel = {
   present: true,
   cores: [
     LIST_MODEL_SENTINEL_BAR_LIST_CONTROLLER, LIST_MODEL_SENTINEL_BAR_LIST_CORE, LIST_MODEL_SENTINEL_BAR_GRAMMAR_CORE, LIST_MODEL_SENTINEL_BAR_BOX_HOST_CORE, LIST_MODEL_SENTINEL_BAR_LIST_NOTE_CORE,
     LIST_MODEL_SENTINEL_DUPLICATE_SENTENCE_CORE, LIST_MODEL_SENTINEL_DUPLICATE_NOTE_CORE, LIST_MODEL_SENTINEL_DUPLICATE_UNDO_CORE,
+    LIST_MODEL_SENTINEL_PHRASE_STEPS_LINEAGE_CORE,
   ],
   createBarList,
   createBarBoxHost,
   withBarLines,
   duplicate: { readActionText, barWordVerb, barNumberOf, barInsertion, linkInsertion, idParts, resolveDuplicateTarget, duplicatePreviewLine, copyNoteText, createdLine, duplicateNote, undoCopy },
+  steps: { annotate: annotateWithSteps, lineageOf: stepLineageOf },
 };

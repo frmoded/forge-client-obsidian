@@ -35,4 +35,5 @@ export const listModel: ListModel = {
     duplicateNote: async () => ({ ok: false, message: NOT_IN_LEAN }),
     undoCopy: async (_ports, mark) => ({ state: 'failed', message: `${mark.name} was not moved to the trash: ${NOT_IN_LEAN}` }),
   },
+  steps: { annotate: () => null, lineageOf: () => [] },          // 2026-11-20-1000: lean has no Score: nothing is tied through steps
 };

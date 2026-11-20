@@ -16,7 +16,7 @@ import { editionPlugin } from '../scripts/build-main.mjs';
 
 const SRC = path.join(process.cwd(), 'src');
 /** The cores behind the seam. A new core of the list model goes here AND gets its sentinel (see the cores' own line). */
-const CORES = ['bar-list-controller', 'bar-list-core', 'bar-grammar-core', 'bar-box-host-core', 'bar-list-note-core', 'duplicate-sentence-core', 'duplicate-note-core', 'duplicate-undo-core'];
+const CORES = ['bar-list-controller', 'bar-list-core', 'bar-grammar-core', 'bar-box-host-core', 'bar-list-note-core', 'duplicate-sentence-core', 'duplicate-note-core', 'duplicate-undo-core', 'phrase-steps-lineage-core'];          // 2026-11-20-1000 (deliberate): + phrase-steps-lineage-core (the Inspector through the step lines: a Score-only core, behind the seam so lean does not carry it)
 const read = (f: string): string => fs.readFileSync(path.join(SRC, f), 'utf8');
 
 test('mechanism: the committed selector is the FULL list model (tests and tsc see the real cores); only the lean BUILD is redirected', () => {
