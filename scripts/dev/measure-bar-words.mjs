@@ -30,7 +30,7 @@
 //   outOfOrderEnterPreviewsCanonical              Enter: the preview says "Delete bar 3 and bar 5." (a live preview, nothing written, the sentence service not asked)
 //   outOfOrderSecondEnterAppliesOneSortedLine     Enter again: the list's last line is "Delete bar 3 and bar 5.", exactly ONE process call, the composer empty
 //   outOfOrderCmdZTakesItBackInOneStep            a real Cmd+Z in the empty composer: the list is one line shorter again
-//   overlapAndTouchingAreRefusedInWords           "Delete bars 3 to 5 and bar 4" Enter: the dialog says "bar 4 is in both bars 3 to 5 and bar 4"; "Keep bar 4 and bar 3" Enter: "say bars 3 to 4."; no preview, nothing written, the service not asked
+//   overlapAndTouchingAreRefusedInWords           (MOVED by 2026-11-20-1001, see below: retired as `invertedRangeIsStillRefusedInWords` and `overlapAndTouchingTypedPreviewTheMergedRange`; it used to say: "Delete bars 3 to 5 and bar 4" Enter: the dialog says "bar 4 is in both bars 3 to 5 and bar 4"; "Keep bar 4 and bar 3" Enter: "say bars 3 to 4.")
 // Screenshots (new): barwords-headless-<w>-<theme>.png (after "Extend [[bar_005]]" from a click, empty phrase), barwords-outoforder-<w>-<theme>.png (the canonical preview after bars 5 and 3).
 // 2026-11-19-0999b (EXTENDED, not a new script; WRITTEN, NOT RUN by the builder: the supervisor runs it) - Mix and Extend as steps of a phrase, with place words. The stand-in note of every OLD verdict has a head (an Extend line), so NO old verdict moves. New verdicts, each suffixed _<width>_<theme>:
 //   mixClicksGiveBarNAndPreviewTheCanonicalSentence   "Mix" typed with real keys, a real click on bar 2 and on bar 3: the field says "Mix bar 2 and bar 3"; Enter previews "Mix bars 2 and 3, 50 percent bar 2, as a vote, and put it between bars 2 and 3." (a live preview; nothing written; the service not asked)
@@ -42,6 +42,13 @@
 //   mixAndExtendWithNoHeadAreRefusedInWords           the note holds an EMPTY phrase: "Mix bars 2 and 3." and "Extend bar 2 to 4 bars." Enter: the dialog says "A phrase starts with Extend, Mix, Morph or Take"; nothing written; the service not asked
 //   extendOfSeveralBarsIsRefusedInWords               "Extend bars 2 and 3 to 4 bars." Enter: the dialog says: Say "Extend bar 2 to 4 bars." ; no preview, nothing written, the service not asked
 // Screenshots (new): barwords-mix-<w>-<theme>.png (the Mix preview), barwords-extend-insert-<w>-<theme>.png (the Extend-with-a-place preview).
+// 2026-11-20-1001 (EXTENDED, not a new script; WRITTEN, NOT RUN by the builder: the supervisor runs it) - bars that TOUCH or OVERLAP are one range (Copy, Delete, Keep, Move), and `Extend bar 2, 20 percent slower.` says the form to say. ONE OLD VERDICT MOVED: `overlapAndTouchingAreRefusedInWords` expected
+// touching and overlapping bars to be REFUSED; they are merged now (the prompt said "overlap still refused", but its own example `Copy bars 3 to 5 and bar 4.` -> `Copy bars 3 to 5.` merges an overlap, so both merge: forge-core to confirm). It is replaced by the two verdicts below that say what is still true. New verdicts, each suffixed _<width>_<theme>:
+//   touchingBarsClickedOutOfOrderBecomeOneRange     "Delete" typed with real keys, a real click on bar 4 and then on bar 3: the field says "Delete bar 4 and bar 3" (nothing pinned); Enter previews "Delete bars 3 to 4." (a live preview; nothing written; the service not asked); Enter again: the list's last line IS "Delete bars 3 to 4.", exactly ONE process call, the composer empty; a real Cmd+Z in the empty composer: the list is one line shorter again
+//   overlapAndTouchingTypedPreviewTheMergedRange    "Delete bars 3 to 5 and bar 4" and "Keep bar 4 and bar 3" typed, Enter: the previews say "Delete bars 3 to 5." and "Keep bars 3 to 4." (live previews, nothing written, the service not asked)
+//   invertedRangeIsStillRefusedInWords              "Delete bars 5 to 3" Enter: the dialog says "Expected the last bar to be 5 or more, but found 3."; no preview, nothing written (the service IS asked, as ever for a refusal without a code)
+//   extendWithoutToNBarsIsRefusedWithTheFormToSay   "Extend bar 2, 20 percent slower" Enter: the dialog says: Expected "to N bars" after the bar, for example "Extend bar 2 to 4 bars, 20 percent slower." (no "one bar at a time"); no preview, nothing written, the service not asked
+// Screenshot (new): barwords-touching-<w>-<theme>.png (the canonical range preview after bars 4 and 3).
 // HARNESS LESSONS (kept): every mount is a FRESH host element; no page global named like a read-only window property (never "closed", "name", "status"...); no backticks inside the page's template literal (this file's page text is one).
 // Screenshots: barwords-duplicate-<w>-<theme>.png (after "Duplicate bar 3 and bar 5"), barwords-refused-<w>-<theme>.png (the two-places refusal), barwords-applied-<w>-<theme>.png (after the apply).
 import fs from 'node:fs';
@@ -293,13 +300,38 @@ for (const w of [800, 1100]) for (const theme of ['light', 'dark']) {
   verdict[`outOfOrderSecondEnterAppliesOneSortedLine_${tag}`] = ooAfter.length === ooBefore + 1 && ooAfter[ooAfter.length - 1] === 'Delete bar 3 and bar 5.' && (await ev('processCalls')) === 1 && (await ev('serviceCalls')) === 0 && (await ev('fieldValue()')) === '';
   await focusField(); await CMD_Z(); await sleep(300);
   verdict[`outOfOrderCmdZTakesItBackInOneStep_${tag}`] = (await ev('list()')).length === ooBefore;
+  // ---- 2026-11-20-1001: touching and overlapping bars are one range (the old `overlapAndTouchingAreRefusedInWords` verdict moved here), and the Extend refusal -------------------------------------------------------------------------
   await mount(w);
-  const refusals = []; const listBefore = (await ev('list()')).length;      // 2026-11-19-0999 supervisor fix: the note is not a fresh one-line note here, so compare with its length BEFORE the refused sentences
-  for (const [typed, words] of [['Delete bars 3 to 5 and bar 4', 'bar 4 is in both bars 3 to 5 and bar 4'], ['Keep bar 4 and bar 3', 'say bars 3 to 4.']]) {
+  const tcBefore = (await ev('list()')).length;
+  await clearField(); await typeText('Delete'); await clickBar(4); await clickBar(3);
+  const tcField = await ev('fieldValue()');
+  const tcPinned = await ev('pinned()');
+  await ENTER(); await sleep(350);
+  const tcPreview = await ev('suggestion()'), tcLive = await ev('livePreview()');
+  await p.shot(path.join(OUT, `barwords-touching-${w}-${theme}.png`), { x: 0, y: 0, width: Math.min(w, 1100), height: 640 });
+  const tcPreviewed = tcField === 'Delete bar 4 and bar 3' && tcPinned === null && tcPreview === 'Delete bars 3 to 4.' && tcLive === true && (await ev('processCalls')) === 0 && (await ev('serviceCalls')) === 0 && (await ev('list()')).length === tcBefore;
+  await ENTER(); await sleep(400);
+  const tcAfter = await ev('list()');
+  const tcApplied = tcAfter.length === tcBefore + 1 && tcAfter[tcAfter.length - 1] === 'Delete bars 3 to 4.' && (await ev('processCalls')) === 1 && (await ev('serviceCalls')) === 0 && (await ev('fieldValue()')) === '';
+  await focusField(); await CMD_Z(); await sleep(300);
+  verdict[`touchingBarsClickedOutOfOrderBecomeOneRange_${tag}`] = tcPreviewed && tcApplied && (await ev('list()')).length === tcBefore;
+  await mount(w);
+  const merged = []; const mergedBefore = (await ev('list()')).length;      // compare with the length BEFORE the sentences
+  for (const [typed, want] of [['Delete bars 3 to 5 and bar 4', 'Delete bars 3 to 5.'], ['Keep bar 4 and bar 3', 'Keep bars 3 to 4.']]) {
     await clearField(); await typeText(typed); await ENTER(); await sleep(350);
-    refusals.push((await ev('dialog()')).some((d) => d.text.indexOf(words) >= 0) && (await ev('livePreview()')) === false);
+    merged.push((await ev('suggestion()')) === want && (await ev('livePreview()')) === true);
+    await ESC(); await sleep(150);
   }
-  verdict[`overlapAndTouchingAreRefusedInWords_${tag}`] = refusals.length === 2 && refusals.every((x) => x === true) && (await ev('processCalls')) === 0 && (await ev('serviceCalls')) === 0 && (await ev('list()')).length === listBefore;
+  verdict[`overlapAndTouchingTypedPreviewTheMergedRange_${tag}`] = merged.length === 2 && merged.every((x) => x === true) && (await ev('processCalls')) === 0 && (await ev('serviceCalls')) === 0 && (await ev('list()')).length === mergedBefore;
+  await mount(w);
+  const invBefore = (await ev('list()')).length;
+  await clearField(); await typeText('Delete bars 5 to 3'); await ENTER(); await sleep(350);
+  verdict[`invertedRangeIsStillRefusedInWords_${tag}`] = (await ev('dialog()')).some((d) => d.text.indexOf('Expected the last bar to be 5 or more, but found 3.') >= 0) && (await ev('livePreview()')) === false && (await ev('processCalls')) === 0 && (await ev('list()')).length === invBefore;
+  await mount(w);
+  const exBefore = (await ev('list()')).length;
+  await clearField(); await typeText('Extend bar 2, 20 percent slower'); await ENTER(); await sleep(350);
+  const exDialog = await ev('dialog()');
+  verdict[`extendWithoutToNBarsIsRefusedWithTheFormToSay_${tag}`] = exDialog.some((d) => d.text.indexOf('Expected "to N bars" after the bar, for example "Extend bar 2 to 4 bars, 20 percent slower."') >= 0) && !exDialog.some((d) => d.text.indexOf('one bar at a time') >= 0) && (await ev('livePreview()')) === false && (await ev('processCalls')) === 0 && (await ev('serviceCalls')) === 0 && (await ev('list()')).length === exBefore;
 
   // ---- 2026-11-19-0999b: Mix and Extend as steps, with place words --------------------------------------------------------------------------------------------------------------------------------------------------------------
   await mount(w);

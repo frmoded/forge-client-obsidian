@@ -1,6 +1,6 @@
 // 2026-11-19-0999 (BAR WORDS OUT OF ORDER) - the GRAMMAR half, written RED first (against b0fbb9d: the bars of a Keep / Delete / Copy / Move had to be said ascending and apart, so a person who clicked bar 5 and then bar 3 under Delete got
 // "Expected the bars in order ..."). Now the PARSER takes the numbers in ANY order, a repeated range once, and writes the canonical sentence SORTED ascending in the words the grammar always used (`Delete bar 3 and bar 5.`, never "bars 3 and 5").
-// A real overlap (`bars 3 to 5 and bar 4`) is still refused in words; ranges that touch (`bar 3 and bar 4`) are still refused (they say `bars 3 to 4`); the json cache stays canonical (the validator is as strict as before: the file holds the sorted form).
+// 2026-11-20-1001 (deliberate): a real overlap (`bars 3 to 5 and bar 4`) and ranges that touch (`bar 3 and bar 4`) are NOT refused any more: they are merged into one range (bar-words-touching-grammar.test.ts); the json cache stays canonical (the validator is as strict as before: the file holds the sorted, merged form).
 //   * every verb (Keep, Delete, Remove, Copy, Duplicate, Move left and right), all six orders of three bars, singles and ranges mixed, repeats;
 //   * the canonical round trip (the canonical sentence reads back to the same params; reading it again is a fixed point), the Recipe, the Python and the json cache all carry the sorted form;
 //   * the refusals in words, with the column of the range read last; a never-throws fuzz over shuffles.
@@ -101,30 +101,27 @@ test('a repeated number is said once: `bar 3 and bar 3`, `bar 5, bar 3 and bar 5
 });
 
 // ---- the refusals in words ----------------------------------------------------------------------------------------------------------------------------------------------------------------------
-test('a REAL overlap is still refused in words, every verb, every order, with the bar they share and the column of the range read last', () => {
+test('2026-11-20-1001 (deliberate): a REAL overlap is no longer refused (it was `Expected each bar to be named once, but bar 4 is in both ...`): every verb, every order, it is read as the one range that covers both (the words of the old refusal are gone)', () => {
   for (const v of VERBS) {
-    for (const [text, shared, both] of [
-      [`${v.say} bars 3 to 5 and bar 4${v.tail}.`, 4, 'bars 3 to 5 and bar 4'], [`${v.say} bar 4 and bars 3 to 5${v.tail}.`, 4, 'bars 3 to 5 and bar 4'],
-      [`${v.say} bars 3 to 5 and bars 5 to 7${v.tail}.`, 5, 'bars 3 to 5 and bars 5 to 7'], [`${v.say} bars 5 to 7 and bars 3 to 5${v.tail}.`, 5, 'bars 3 to 5 and bars 5 to 7'],
-      [`${v.say} bar 3 and bars 3 to 5${v.tail}.`, 3, 'bar 3 and bars 3 to 5'], [`${v.say} bars 3 to 5 and bar 3${v.tail}.`, 3, 'bars 3 to 5 and bar 3'],
-      [`${v.say} bars 2 to 6 and bars 3 to 4${v.tail}.`, 3, 'bars 2 to 6 and bars 3 to 4'],
-    ] as Array<[string, number, string]>) {
-      const e = bad(`${TAKE} ${text}`);
-      assert.match(e.message, new RegExp(`^Expected each bar to be named once, but bar ${shared} is in both ${both}\\.$`), `${text}: ${e.message}`);
-      assert.equal(e.code, 'refused', `${text}: the sentence service cannot fix it, so it is not asked`);
+    for (const [text, runs] of [
+      [`${v.say} bars 3 to 5 and bar 4${v.tail}.`, [[3, 5]]], [`${v.say} bar 4 and bars 3 to 5${v.tail}.`, [[3, 5]]],
+      [`${v.say} bars 3 to 5 and bars 5 to 7${v.tail}.`, [[3, 7]]], [`${v.say} bars 5 to 7 and bars 3 to 5${v.tail}.`, [[3, 7]]],
+      [`${v.say} bar 3 and bars 3 to 5${v.tail}.`, [[3, 5]]], [`${v.say} bars 3 to 5 and bar 3${v.tail}.`, [[3, 5]]],
+      [`${v.say} bars 2 to 6 and bars 3 to 4${v.tail}.`, [[2, 6]]],
+    ] as Array<[string, unknown]>) {
+      assert.deepEqual(opsOf(ok(`${TAKE} ${text}`)), [{ op: v.op, runs, ...(v.by === undefined ? {} : { by: v.by }) }], text);
     }
   }
-  const e = bad(`${TAKE} Delete bar 9 and bars 7 to 9`);
-  assert.deepEqual([e.line, e.column], [1, 39], 'at the range that was read last: `bars 7 to 9`');
-  assert.equal(parse(`${TAKE} Delete bars 3 to 5 and bar 4.`, V).ok, false);
+  assert.ok(parse(`${TAKE} Delete bars 3 to 5 and bar 4.`, V).ok);
+  const e = bad(`${TAKE} Delete bar 9 and bars 7 to 5`);
+  assert.deepEqual([e.line, e.column], [1, 49], 'what is refused is the inverted range, at its last bar');
 });
-test('ranges that TOUCH are still refused (they are one range: say "bars 3 to 4"), said either way round, with the sentence to say instead', () => {
-  assert.match(bad(`${TAKE} Delete bar 3 and bar 4.`).message, /^Expected at least one bar between ranges, but bar 4 comes right after bar 3: say bars 3 to 4\.$/);
-  assert.match(bad(`${TAKE} Delete bar 4 and bar 3.`).message, /^Expected at least one bar between ranges, but bar 4 comes right after bar 3: say bars 3 to 4\.$/);
-  assert.match(bad(`${TAKE} Keep bars 1 to 2 and bar 3.`).message, /comes right after bars 1 to 2: say bars 1 to 3\./);
-  assert.match(bad(`${TAKE} Keep bar 3 and bars 1 to 2.`).message, /comes right after bars 1 to 2: say bars 1 to 3\./);
-  assert.match(bad(`${TAKE} Move bar 8 and bar 7 back.`).message, /bar 8 comes right after bar 7: say bars 7 to 8\./);
-  assert.equal(bad(`${TAKE} Delete bar 4 and bar 3.`).code, 'refused');
+test('2026-11-20-1001 (deliberate): ranges that TOUCH are no longer refused (it was `Expected at least one bar between ranges ... say bars 3 to 4.`): said either way round they are the one range, written as `bars 3 to 4`', () => {
+  assert.equal(describe(ok(`${TAKE} Delete bar 3 and bar 4.`)), `${TAKE} Delete bars 3 to 4.`);
+  assert.equal(describe(ok(`${TAKE} Delete bar 4 and bar 3.`)), `${TAKE} Delete bars 3 to 4.`);
+  assert.equal(describe(ok(`${TAKE} Keep bars 1 to 2 and bar 3.`)), `${TAKE} Keep bars 1 to 3.`);
+  assert.equal(describe(ok(`${TAKE} Keep bar 3 and bars 1 to 2.`)), `${TAKE} Keep bars 1 to 3.`);
+  assert.equal(describe(ok(`${TAKE} Move bar 8 and bar 7 back.`)), `${TAKE} Move bars 7 to 8 one bar left.`);
 });
 test('a descending range is still refused as before; more than 16 ranges are refused in any order', () => {
   assert.match(bad(`${TAKE} Delete bars 5 to 3.`).message, /^Expected the last bar to be 5 or more, but found 3\.$/);
@@ -188,7 +185,7 @@ test('the Python says the sorted form: the same text as the ascending sentence\'
 });
 
 // ---- never throws ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-test('never throws: every shuffle, repeat and overlap of bars 1 to 6 as singles and ranges is either read to ascending, apart runs or refused in words', () => {
+test('never throws: every shuffle, repeat and overlap of bars 1 to 6 as singles and ranges is read to ascending, apart runs (2026-11-20-1001: merged; it was read or refused)', () => {
   const pieces = ['bar 1', 'bar 2', 'bar 3', 'bar 5', 'bar 6', 'bars 1 to 2', 'bars 2 to 3', 'bars 3 to 5', 'bars 5 to 6', 'bars 1 to 6'];
   let seed = 7; const rnd = (n: number): number => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed % n; };
   for (let i = 0; i < 400; i++) {
@@ -203,12 +200,12 @@ test('never throws: every shuffle, repeat and overlap of bars 1 to 6 as singles 
   }
 });
 
-// 2026-11-19-0999 mutation survivors: phrase-grammar-core.ts:230 (`b[0] === a[1] + 1`, the touching test): the single-bar touching cases above cannot tell b[0] from b[1] or a[1] from a[0]; two MULTI-bar ranges can.
-test('ranges of several bars that TOUCH are refused with the words of the whole ranges, either way round (and ranges one bar apart are read)', () => {
-  assert.match(bad(`${TAKE} Delete bars 3 to 4 and bars 5 to 6.`).message, /^Expected at least one bar between ranges, but bars 5 to 6 comes right after bars 3 to 4: say bars 3 to 6\.$/);
-  assert.match(bad(`${TAKE} Delete bars 5 to 6 and bars 3 to 4.`).message, /^Expected at least one bar between ranges, but bars 5 to 6 comes right after bars 3 to 4: say bars 3 to 6\.$/);
-  assert.match(bad(`${TAKE} Keep bars 2 to 5 and bars 6 to 8.`).message, /but bars 6 to 8 comes right after bars 2 to 5: say bars 2 to 8\./);
-  assert.equal(bad(`${TAKE} Keep bars 6 to 8 and bars 2 to 5.`).code, 'refused');
+// 2026-11-19-0999 mutation survivors (phrase-grammar-core.ts, the touching test of the old refusal): the single-bar touching cases cannot tell b[0] from b[1] or a[1] from a[0]; two MULTI-bar ranges can. 2026-11-20-1001 (deliberate): the ranges are merged now, so the same pins say the merged range.
+test('2026-11-20-1001 (deliberate): ranges of several bars that TOUCH are merged to the range that covers both, either way round (and ranges one bar apart are read as two)', () => {
+  assert.deepEqual(opsOf(ok(`${TAKE} Delete bars 3 to 4 and bars 5 to 6.`)), [{ op: 'delete', runs: [[3, 6]] }]);
+  assert.deepEqual(opsOf(ok(`${TAKE} Delete bars 5 to 6 and bars 3 to 4.`)), [{ op: 'delete', runs: [[3, 6]] }]);
+  assert.deepEqual(opsOf(ok(`${TAKE} Keep bars 2 to 5 and bars 6 to 8.`)), [{ op: 'keep', runs: [[2, 8]] }]);
+  assert.deepEqual(opsOf(ok(`${TAKE} Keep bars 6 to 8 and bars 2 to 5.`)), [{ op: 'keep', runs: [[2, 8]] }]);
   const p = ok(`${TAKE} Delete bars 5 to 6 and bars 2 to 3.`) as { ops?: Array<{ runs?: unknown }> };
   assert.deepEqual(opsOf(p).map((o) => (o as { runs?: unknown }).runs), [[[2, 3], [5, 6]]], 'one bar apart: read, sorted');
 });

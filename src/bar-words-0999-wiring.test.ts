@@ -5,7 +5,7 @@
 // The REAL controller + composer + dialog + `mountPhrase` (happy-dom), the same rig as bar-words-click-wiring.test.ts; the empty list is the note swapped for a new empty phrase after the Score is drawn (the Score still shows its 8 bars).
 // Every test marks the moved rule `2026-11-19-0999 (deliberate)`. A DOM element is never an assert operand.
 // SECOND HALF (same file, same rig): bars clicked OUT OF ORDER. Under Delete a person clicks bar 5 and then bar 3: the field says what was clicked (`Delete bar 5 and bar 3`, the click appends ` and bar M` in click order), the first Enter previews the CANONICAL
-// sentence (`Delete bar 3 and bar 5.`, sorted by the parser), the second Enter writes it as one line with one undo, and the Score draws the bars the sorted sentence leaves; a real overlap or touching bars are refused in words (the service is not asked).
+// sentence (`Delete bar 3 and bar 5.`, sorted by the parser), the second Enter writes it as one line with one undo, and the Score draws the bars the sorted sentence leaves; a real overlap or touching bars were refused in words here (2026-11-20-1001 (deliberate): they are merged into one range now, see the test below).
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Window } from 'happy-dom';
@@ -264,14 +264,13 @@ test('2026-11-19-0999 (deliberate): out of order, typed (no clicks): `Remove bar
   const r = await rig(PLAIN);
   try { r.type('Remove bar 6 and bar 2'); await r.press({ key: 'Enter' }); await r.press({ key: 'Enter' }); assert.equal(descriptionLines(r.files.get(r.notePath)!).pop(), 'Delete bar 2 and bar 6.'); assert.equal(r.serviceCalls(), 0); } finally { r.done(); }
 });
-test('2026-11-19-0999 (deliberate): a REAL overlap and touching bars are refused in words: no preview, nothing written, the sentence service is not asked; bars 3 and 4 are one range (say it)', async () => {
+test('2026-11-20-1001 (deliberate): a real overlap and touching bars are NO LONGER refused (it was "bar 4 is in both ..." and "say bars 3 to 4."): they preview and write the one merged range (bar-words-touching-wiring.test.ts has the clicks); the service is not asked', async () => {
   const r = await rig(PLAIN);
   try {
-    for (const [typed, words] of [['Delete bars 3 to 5 and bar 4', /bar 4 is in both bars 3 to 5 and bar 4/], ['Delete bar 4 and bars 3 to 5', /bar 4 is in both bars 3 to 5 and bar 4/], ['Keep bar 4 and bar 3', /bar 4 comes right after bar 3: say bars 3 to 4\./], ['Copy bar 3 and bar 4.', /say bars 3 to 4\./]] as const) {
+    for (const [typed, line] of [['Delete bars 3 to 5 and bar 4', 'Delete bars 3 to 5.'], ['Delete bar 4 and bars 3 to 5', 'Delete bars 3 to 5.'], ['Keep bar 4 and bar 3', 'Keep bars 3 to 4.'], ['Copy bar 3 and bar 4.', 'Copy bars 3 to 4.']] as const) {
       r.type(typed); await r.press({ key: 'Enter' });
-      assert.ok(r.entries().some((e) => words.test(e.text)), `${typed}: ${JSON.stringify(r.entries().map((e) => e.text))}`);
-      assert.deepEqual(r.buttons(), [], typed); assert.equal(r.calls(), 0, typed); assert.equal(r.serviceCalls(), 0, `${typed}: the service is not asked`);
-      assert.equal(descriptionLines(r.files.get(r.notePath)!).length, 1, 'the list is as it was');
+      assert.equal(r.suggestion(), line, typed); assert.deepEqual(r.buttons(), ['apply-preview', 'cancel-preview'], typed); await r.press({ key: 'Enter' });
+      assert.equal(descriptionLines(r.files.get(r.notePath)!).pop(), line, typed); assert.equal(r.serviceCalls(), 0, `${typed}: the service is not asked`);
     }
   } finally { r.done(); }
 });
