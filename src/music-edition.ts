@@ -116,6 +116,11 @@ export interface ListModel {
   trace: { create: typeof import('./undo-trace-core.ts').createUndoTrace };
   /** 2026-11-20-1005 (F9): a renamed note's generated description follows the new name (rename-follow-core.ts). Lean: nothing (it has none of these notes). */
   renamed: { follow: typeof import('./rename-follow-core.ts').followRenamedDescription };
+  /** 2026-11-21-1011: a note's chat history follows the note: a rename moves the entry, a delete drops it (dialog-follow-core.ts). Lean: nothing changes (it keeps no such history). */
+  dialogs: {
+    renamed: typeof import('./dialog-follow-core.ts').dialogRenamed; deleted: typeof import('./dialog-follow-core.ts').dialogDeleted; ctime: typeof import('./dialog-follow-core.ts').noteCtimeOf;
+    fresh: typeof import('./dialog-follow-core.ts').dialogFresh; stamp: typeof import('./dialog-follow-core.ts').dialogStamp; prune: typeof import('./dialog-follow-core.ts').dialogPrune;
+  };
   /** 2026-11-20-1004: the failed-prompt review queue (failed-prompt-*.ts): `note` hands one sentence that ended unprocessed to the queue's port (lean: nothing), `create` builds the queue for the plugin (lean: null, so no tab, no command, no menu entry). */
   review: {
     create(...args: Parameters<typeof import('./failed-prompt-setup-core.ts').createReview>): ReturnType<typeof import('./failed-prompt-setup-core.ts').createReview> | null;

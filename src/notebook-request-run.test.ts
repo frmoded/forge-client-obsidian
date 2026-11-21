@@ -1,3 +1,4 @@
+// 2026-11-21-1011 (deliberate): the words that send the person to the settings tab now say "Settings → Forge Actions (Beta)" (the tab's real name, manifest.json); they said "Settings → Forge". The strings quoted below moved with the code.
 // 2026-10-27-0720 (M14 slice 2): Run with a TYPED REQUEST, the notebook core against a stub service (never the network): the sentence goes to /plan with the SELECTION, the answer becomes the same ops the op picker makes, and the phrase and the cell are
 // written by the one write path Run has always used; the cell's Description is the sentence; Re-run never asks again; Delete cell undoes it; every refusal writes nothing. The service, the vault, the tab and the Notice are ports.
 import assert from 'node:assert/strict';
@@ -126,8 +127,8 @@ test('nothing selected asks for bars and never asks the service; an empty senten
 
 test('the service in trouble: unreachable, no token, busy, 401, an old service (404) - each one sentence, nothing written', async () => {
   const cases: Array<[string, Answer | (() => Promise<Answer>), RegExp]> = [
-    ['unreachable', () => Promise.reject(new Error('net::ERR_INTERNET_DISCONNECTED')), /^Could not reach the transpile service \(net::ERR_INTERNET_DISCONNECTED\)\. Check your connection and Settings → Forge → Transpile service URL\.$/],
-    ['no token', { status: 0, json: { detail: 'Set your transpile token in Settings → Forge → Transpile token before using /generate.' } }, /^Set your transpile token in Settings → Forge → Transpile token before planning a phrase from a sentence\.$/],
+    ['unreachable', () => Promise.reject(new Error('net::ERR_INTERNET_DISCONNECTED')), /^Could not reach the transpile service \(net::ERR_INTERNET_DISCONNECTED\)\. Check your connection and Settings → Forge Actions \(Beta\) → Transpile service URL\.$/],
+    ['no token', { status: 0, json: { detail: 'Set your transpile token in Settings → Forge Actions (Beta) → Transpile token before using /generate.' } }, /^Set your transpile token in Settings → Forge Actions \(Beta\) → Transpile token before planning a phrase from a sentence\.$/],
     ['busy', { status: 503, json: null }, /^The planner is busy right now\./],
     ['401', { status: 401, json: null }, /did not accept your token/],
     ['404', { status: 404, json: { detail: 'Not Found' } }, /^This transpile service does not offer planning yet \(it needs version 0\.2\.41 or newer\)\./],

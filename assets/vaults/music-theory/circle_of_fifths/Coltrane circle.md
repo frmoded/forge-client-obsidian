@@ -1,4 +1,8 @@
-John Coltrane drew his own version of the circle of fifths, by hand. It's widely reproduced, and people call it the Coltrane circle. It isn't reproduced here. Search for: Coltrane circle of fifths drawing. It's worth the thirty seconds.
+John Coltrane drew his own version of the circle of fifths, by hand. It's widely reproduced, and people call it the Coltrane circle. Here it is.
+
+![[circle_of_fifths/resources/images/coltrane_circle.jpg|Coltrane's hand-drawn version of the circle of fifths: two rings of note names, some boxed or circled, lines through the middle, small numbers in the margin]]
+
+This is the drawing as it circulates, with the American Jazz Music Society's mark in the corner.
 
 What you'll see: the twelve note names set around a ring. A second ring inside it. Some notes boxed or circled. Lines running through the middle. Small numbers, 1 to 5, in the margin. Nobody should pretend to give the one true reading of what he meant, and I won't.
 

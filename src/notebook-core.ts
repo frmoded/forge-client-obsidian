@@ -255,7 +255,7 @@ export function createNotebook<F>(ports: NotebookPorts<F>): Notebook {
       try {
         answer = interpretTransformResponse(await ports.ask(request.payload), { source: ports.sourcePhrase, runs, row: selection.row });
       } catch (e) {
-        answer = { ok: false, message: `Could not reach the transpile service (${msg(e)}). Check your connection and Settings → Forge → Transpile service URL.`, suspectOld: false };
+        answer = { ok: false, message: `Could not reach the transpile service (${msg(e)}). Check your connection and Settings → Forge Actions (Beta) → Transpile service URL.`, suspectOld: false };
       }
       let outcome: TransformOutcome | { ok: false; message: string } = answer;
       if (answer.ok === false && answer.suspectOld) {

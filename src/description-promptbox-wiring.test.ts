@@ -1,3 +1,4 @@
+// 2026-11-21-1011 (deliberate): the words that send the person to the settings tab now say "Settings → Forge Actions (Beta)" (the tab's real name, manifest.json); they said "Settings → Forge". The strings quoted below moved with the code.
 // 2026-11-13-1211 - the docked prompt box's Apply on a phrase tab, through the SAME ports factory score-first.ts uses (description-wiring.ts), with settings that hold a URL and a token (or hold nothing). A sentence the grammar
 // rejects is typed, Apply is pressed with a REAL click, and what must happen is said three ways: the console lines ([forge-promptbox], in order), the one status line under the box, and the request at the transport. The only stub
 // is the transport (askPlan's network call). Real driver report (1211): in real Obsidian Apply ended at "edited, not applied" with NOTHING in the console and no visible outcome.
@@ -108,7 +109,7 @@ test('settings EMPTY: Apply says the service is not set up (under the box) and w
   type(b, SENTENCE);
   b.enter(); await settle();
   assert.equal(r.sent.length, 0);
-  assert.match(b.state(), /The sentence service is not set up: add its URL and token in Settings -> Forge\.$/);
+  assert.match(b.state(), /The sentence service is not set up: add its URL and token in Settings → Forge Actions \(Beta\)\.$/);
   assert.ok(r.warn.includes('[forge-promptbox] service gate: askPlan=present configured=false'), r.warn.join('\n'));
   assert.ok(promptbox(r.info).includes('[forge-promptbox] grammar verdict: rejected'));
 });

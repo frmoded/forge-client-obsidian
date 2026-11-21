@@ -31,6 +31,8 @@ export interface DescriptionHooks {
   ownKey?: () => string | undefined;
   serviceVersion?: () => Promise<string | null>;
   dialogStore?: DescriptionPorts['dialogStore'];
+  /** 2026-11-21-1011: see DescriptionPorts.noteCtime. */
+  noteCtime?: DescriptionPorts['noteCtime'];
   /** 2026-11-15-1217: is the status line under the box shown (the legacy view)? */
   showBoxStatus?: () => boolean;
   /** 2026-11-17-2001: the composer's switch (MUSIC_COMPOSER_AUTO_APPLY, default off) and its "+" menu. */
@@ -59,6 +61,7 @@ export function descriptionPortsFor(env: DescriptionEnv, hooks: DescriptionHooks
     ownKey: () => hooks.ownKey?.(),
     serviceVersion: () => (hooks.serviceVersion ? hooks.serviceVersion() : Promise.resolve(null)),      // 2026-11-12-1206: an arrangement or composition sentence answered without a version asks /health once
     ...(hooks.dialogStore ? { dialogStore: hooks.dialogStore } : {}),
+    ...(hooks.noteCtime ? { noteCtime: hooks.noteCtime } : {}),
     ...(hooks.showBoxStatus ? { showBoxStatus: hooks.showBoxStatus } : {}),
     ...(hooks.composerAutoApply ? { composerAutoApply: hooks.composerAutoApply } : {}),
     ...(hooks.composerMenu ? { composerMenu: hooks.composerMenu } : {}),

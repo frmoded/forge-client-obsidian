@@ -1,3 +1,4 @@
+// 2026-11-21-1011 (deliberate): the words that send the person to the settings tab now say "Settings → Forge Actions (Beta)" (the tab's real name, manifest.json); they said "Settings → Forge". The strings quoted below moved with the code.
 // 2026-10-27-0720 (M14 slice 2): the notebook's typed request, the pure core, offline (the service is a stub answer, never the network). A sentence plus the SELECTION becomes the POST /plan payload; the service's answer becomes the ops Run
 // would have made from the op picker; the bars and the row are the selection's, whatever the answer says; every refusal is one plain sentence.
 import assert from 'node:assert/strict';
@@ -96,7 +97,7 @@ test('an answer that is another kind of phrase (what an old service gives) is no
 
 test('the trouble before there is a plan reads exactly as it does in the sentence dialog, and an old service (404) says it needs 0.2.41', () => {
   const sameAsDialog: Array<[number, unknown]> = [
-    [0, { detail: 'Set your transpile token in Settings → Forge → Transpile token before using /generate.' }], [0, { detail: 'ECONNREFUSED' }], [0, null], [401, null], [422, null], [429, null], [503, null],
+    [0, { detail: 'Set your transpile token in Settings → Forge Actions (Beta) → Transpile token before using /generate.' }], [0, { detail: 'ECONNREFUSED' }], [0, null], [401, null], [422, null], [429, null], [503, null],
     [502, { detail: { error: 'Anthropic API: boom' } }], [502, null], [500, null], [200, 'not an object'], [200, null],
   ];
   for (const [status, json] of sameAsDialog) {

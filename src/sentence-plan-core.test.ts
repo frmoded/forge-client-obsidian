@@ -1,3 +1,4 @@
+// 2026-11-21-1011 (deliberate): the words that send the person to the settings tab now say "Settings → Forge Actions (Beta)" (the tab's real name, manifest.json); they said "Settings → Forge". The strings quoted below moved with the code.
 // 2026-10-27-1015 (M7b (b), "a sentence becomes a phrase"): the pure core, offline, with the service stubbed. A sentence goes out as {sentence, bars, phrases, key?}; what comes back is ONE plan the plugin re-validates with its own
 // validatePhrase and turns into a note through the SAME builders the controls use (phraseNoteContent / mixNoteContent / morphNoteContent: the tests compare the bytes). Every refusal is one plain sentence, and no refusal ever writes a note.
 import assert from 'node:assert/strict';
@@ -80,10 +81,10 @@ test('every way the service can answer, in one plain sentence; only a validated 
   const said = (status: number, json: unknown) => { const r = ask(status, json); assert.equal(r.ok, false); return (r as { message: string }).message; };
   const ok = ask(200, { ok: true, parsed_ok: true, plan: { kind: 'extend', bar: 'bar_005', bars: 8 }, error: null });
   assert.deepEqual(ok, { ok: true, params: { kind: 'extend', source: 'bar_005', bars: 8, style: 'repeat_with_fills', tempo_change_pct: 0 } });
-  assert.equal(said(0, { detail: 'Set your transpile token in Settings → Forge → Transpile token before using /generate.' }), 'Set your transpile token in Settings → Forge → Transpile token before planning a phrase from a sentence.');
+  assert.equal(said(0, { detail: 'Set your transpile token in Settings → Forge Actions (Beta) → Transpile token before using /generate.' }), 'Set your transpile token in Settings → Forge Actions (Beta) → Transpile token before planning a phrase from a sentence.');
   assert.equal(said(0, { detail: 'something else' }), 'The transpile service could not be reached (something else).');
   assert.equal(said(0, {}), 'The transpile service could not be reached.');
-  assert.equal(said(401, { detail: 'bad' }), 'The transpile service did not accept your token. Check Settings → Forge → Transpile token.');
+  assert.equal(said(401, { detail: 'bad' }), 'The transpile service did not accept your token. Check Settings → Forge Actions (Beta) → Transpile token.');
   assert.equal(said(404, { detail: 'Not Found' }), 'This transpile service does not offer planning yet (it needs version 0.2.39 or newer). The person who runs it has to update it.');
   assert.equal(said(422, { detail: [] }), 'The service refused the request. A sentence can be at most 500 characters.');
   assert.equal(said(503, { detail: { error: 'Anthropic API: overloaded', retryable: true } }), 'The planner is busy right now. Try again in a moment.');
@@ -178,8 +179,8 @@ test('CREATE writes the SAME note the controls would write for that kind (byte f
 
 test('NO refusal ever writes a note: no token, service down, busy, 404, a refusal, a bad plan, an unknown bar; the person gets a sentence and Create has nothing to create', async () => {
   const cases: Array<[Parameters<typeof world>[0], RegExp]> = [
-    [{ status: 0, json: { detail: 'Set your transpile token in Settings → Forge → Transpile token before using /generate.' } }, /Set your transpile token/],
-    [{ throws: new Error('getaddrinfo ENOTFOUND') }, /^Could not reach the transpile service \(getaddrinfo ENOTFOUND\)\. Check your connection and Settings → Forge → Transpile service URL\.$/],
+    [{ status: 0, json: { detail: 'Set your transpile token in Settings → Forge Actions (Beta) → Transpile token before using /generate.' } }, /Set your transpile token/],
+    [{ throws: new Error('getaddrinfo ENOTFOUND') }, /^Could not reach the transpile service \(getaddrinfo ENOTFOUND\)\. Check your connection and Settings → Forge Actions \(Beta\) → Transpile service URL\.$/],
     [{ status: 503, json: { detail: { retryable: true } } }, /busy/],
     [{ status: 404, json: { detail: 'Not Found' } }, /does not offer planning yet/],
     [{ json: { ok: false, parsed_ok: true, plan: null, error: 'No.' } }, /^No\.$/],

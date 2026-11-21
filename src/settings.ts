@@ -65,6 +65,8 @@ export interface ForgeSettings {
   /** 2026-11-16-0902: a bar number (1, 2, 3 ...) above the top staff at the start of every bar of the Score: ON by default, read when a Score is engraved. */
   showBarNumbers: boolean;
   dialogHistory: Record<string, unknown>;
+  /** 2026-11-21-1011: the creation time of the note each history above was written for (path -> ms): a history whose time is not the file's is another note's (a note re-created at the path). Absent until the first history is written. */
+  dialogCtime?: Record<string, number>;
   dialogHeight: number;
   /** 2026-11-18 (0935): the left column's share of a two-column music tab (the draggable divider), per vault (this is the vault's own plugin data). No control in this page. Read through sanitizeRatio. */
   dialogRatio: number;

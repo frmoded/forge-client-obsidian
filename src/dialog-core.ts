@@ -2,6 +2,7 @@
 // obsidian): the controller feeds it events, the DOM draws it, the plugin's data.json keeps the last entries per note. The Description on disk stays the single source of truth; the dialog holds NO state that matters.
 
 import { sanitizeRatio } from './chat-layout-core.ts';
+import { listModel } from './list-model-selected.ts';
 
 export const DIALOG_CAP = 50;                         // entries kept per note
 export const DIALOG_NOTES_CAP = 40;                   // notes with a kept history in data.json (the least recently used go first)
@@ -110,8 +111,10 @@ export const clampHeight = (n: unknown): number => (typeof n === 'number' && Num
 
 /** The persistence the plugin provides (data.json, keyed by note path: never in the note, never in the vault's files). */
 export interface DialogStore {
-  entries(path: string): DialogEntry[];
-  setEntries(path: string, list: DialogEntry[]): void;
+  /** 2026-11-21-1011: `ctime` is the creation time of the note NOW (when the caller knows it): a list kept for a note with another creation time is ignored (a note re-created at the path). Absent = no check. */
+  entries(path: string, ctime?: number): DialogEntry[];
+  /** ... and `ctime` is stored with the list, so the next read can tell. */
+  setEntries(path: string, list: DialogEntry[], ctime?: number): void;
   height(): number;
   setHeight(px: number): void;
   /** 2026-11-18 (0935): the left column's share of a two-column music tab (the draggable divider), per vault. Always a sane number (0.1 to 0.9, default 0.40). */
@@ -129,11 +132,11 @@ export interface DialogSettingsSlice { dialogHistory?: unknown; dialogHeight?: u
 export function settingsStore(settings: DialogSettingsSlice, save: () => void): DialogStore {
   const store = (): Record<string, DialogEntry[]> => (settings.dialogHistory = typeof settings.dialogHistory === 'object' && settings.dialogHistory !== null ? settings.dialogHistory : {}) as Record<string, DialogEntry[]>;
   return {
-    entries: (p) => sanitizeLoaded(store()[p]),
-    setEntries(p, list) {
-      const s = store(); s[p] = list;
+    entries: (p, ctime) => (listModel.dialogs.fresh(settings, p, ctime) ? sanitizeLoaded(store()[p]) : []),          // 2026-11-21-1011 (c): a stored time that is not the file's: another note's list is not shown
+    setEntries(p, list, ctime) {
+      const s = store(); s[p] = list; listModel.dialogs.stamp(settings, p, ctime);
       const keep = sanitizeStore(s); for (const k of Object.keys(s)) delete s[k]; Object.assign(s, keep);        // the least recently used notes go when there are more than DIALOG_NOTES_CAP
-      save();
+      listModel.dialogs.prune(settings); save();          // ... and their times with them
     },
     height: () => clampHeight(settings.dialogHeight),
     setHeight(px) { settings.dialogHeight = clampHeight(px); save(); },

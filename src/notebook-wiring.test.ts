@@ -1,3 +1,4 @@
+// 2026-11-21-1011 (deliberate): the words that send the person to the settings tab now say "Settings → Forge Actions (Beta)" (the tab's real name, manifest.json); they said "Settings → Forge". The strings quoted below moved with the code.
 // 2026-10-27-1030 (M14 slice 1): the notebook on the REAL wiring: the real `ForgePlugin.prototype.onload` from the real bundle (both editions), the real phrase view factory, the real vault ports of score-first.ts over a stand-in
 // vault that records what the plugin does. Proves: only a score-first vault has the phrase view (and so a notebook); the view is given the notebook; Run writes the phrase and the cell through app.vault.create and opens the phrase;
 // Delete cell closes the tabs that show the derived phrase BEFORE trashing it, checks it is gone, and never touches the source. Time is the shared host clock; the workspace walk is the shared host-faithful one.
@@ -206,7 +207,7 @@ for (const edition of ['lean', 'music'] as const) {
   test(`[${edition}] a refusal writes nothing: no token (nothing is sent), the service down, an old service (404), "make it jazzier" - each is one sentence and no phrase, no cell, no tab`, async () => {
     const jazzy = { status: 200, json: { ok: false, parsed_ok: true, plan: null, error: 'I can thin the hits out or double them up; I cannot make a bar jazzier.' } };
     const cases: Array<[string, (w: Awaited<ReturnType<typeof world>>) => void, RegExp, number]> = [
-      ['no token', (w) => { w.plugin.target.settings.transpileServiceToken = ''; }, /^Set your transpile token in Settings → Forge → Transpile token before planning a phrase from a sentence\.$/, 0],
+      ['no token', (w) => { w.plugin.target.settings.transpileServiceToken = ''; }, /^Set your transpile token in Settings → Forge Actions \(Beta\) → Transpile token before planning a phrase from a sentence\.$/, 0],
       ['service down', (w) => { w.net.throws = new Error('net::ERR_INTERNET_DISCONNECTED'); }, /^Could not reach the transpile service \(net::ERR_INTERNET_DISCONNECTED\)\./, 1],
       ['old service (404)', (w) => { w.net.plan = { status: 404, json: { detail: 'Not Found' } }; }, /does not offer planning yet \(it needs version 0\.2\.41 or newer\)/, 1],
       ['make it jazzier', (w) => { w.net.plan = jazzy; }, /^I can thin the hits out or double them up; I cannot make a bar jazzier\.$/, 2],      // 2 = /plan, then /health (an answer an old service could give too) says 0.2.41: the reason stands

@@ -77,10 +77,10 @@ export function planTransportRefusal(res: { status: number; json: unknown }, nee
   const { status, json } = res;
   if (status === 0) {
     const d = detailText(json);
-    if (d !== null && d.startsWith('Set your transpile token')) return 'Set your transpile token in Settings → Forge → Transpile token before planning a phrase from a sentence.';
+    if (d !== null && d.startsWith('Set your transpile token')) return 'Set your transpile token in Settings → Forge Actions (Beta) → Transpile token before planning a phrase from a sentence.';
     return d !== null ? `The transpile service could not be reached (${d}).` : 'The transpile service could not be reached.';
   }
-  if (status === 401) return 'The transpile service did not accept your token. Check Settings → Forge → Transpile token.';
+  if (status === 401) return 'The transpile service did not accept your token. Check Settings → Forge Actions (Beta) → Transpile token.';
   if (status === 404) return `This transpile service does not offer planning yet (it needs version ${needs} or newer). The person who runs it has to update it.`;
   if (status === 422) return `The service refused the request. A sentence can be at most ${SENTENCE_MAX} characters.`;
   if (status === 429 || status === 503) return BUSY;
@@ -154,7 +154,7 @@ export function createSentencePlanner<F>(ports: SentencePlannerPorts<F>): Senten
         try {
           outcome = interpretPlanResponse(await ports.ask(request.payload), request.payload.bars);
         } catch (e) {
-          outcome = { ok: false, message: `Could not reach the transpile service (${(e as Error)?.message ?? e}). Check your connection and Settings → Forge → Transpile service URL.` };
+          outcome = { ok: false, message: `Could not reach the transpile service (${(e as Error)?.message ?? e}). Check your connection and Settings → Forge Actions (Beta) → Transpile service URL.` };
         }
       }
       if (mine !== seq) return { ok: false, message: 'A newer sentence was planned; this answer was dropped.' };

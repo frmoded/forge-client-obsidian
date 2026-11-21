@@ -24,7 +24,7 @@ const BOX = { preview: async () => ({ ok: false as const, message: 'x' }), apply
 const settle = async (n = 40) => { for (let i = 0; i < n; i++) await Promise.resolve(); };
 type Factory = typeof createDescriptionController;
 
-function rig(opts: { factory?: Factory; store?: ReturnType<typeof settingsStore>; configured?: boolean; hold?: Promise<void>; start?: string } = {}) {
+function rig(opts: { factory?: Factory; store?: ReturnType<typeof settingsStore>; configured?: boolean; hold?: Promise<void>; start?: string; ctime?: () => number | undefined } = {}) {
   const files = new Map<string, string>([[PATH, opts.start ?? noteContentFor('phrase_001', EXTEND)]]);
   const lines: string[] = [], writes: string[] = [], timers: Array<() => void> = []; let clock = 1_700_000_000_000;
   const panes: Array<{ path: string; contentEl: HTMLElement; tab?: boolean }> = [];
@@ -39,6 +39,7 @@ function rig(opts: { factory?: Factory; store?: ReturnType<typeof settingsStore>
     configured: () => opts.configured !== false,
     now: () => (clock += 60_000),
     ...(opts.store ? { dialogStore: opts.store } : {}),
+    ...(opts.ctime ? { noteCtime: opts.ctime } : {}),
   };
   const ctl = (opts.factory ?? createDescriptionController)(ports);
   const el = win.document.createElement('div'); win.document.body.appendChild(el);
@@ -236,7 +237,7 @@ async function damagedFactory(from: string, to: string): Promise<Factory> {
   finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }
 test('CONTROL: without the event feed (say) the dialog stays empty; without the control-change notice a control is silent; with the real controller the same scenarios pass', async () => {
-  const noFeed = await damagedFactory("    dialogs.set(path, l); store.setEntries(path, l); drawDialog(path);\n  };\n  const endSuggestion", "    void l;\n  };\n  const endSuggestion");
+  const noFeed = await damagedFactory("    dialogs.set(path, l); store.setEntries(path, l, ctimeOf(path)); drawDialog(path);\n  };\n  const endSuggestion", "    void l;\n  };\n  const endSuggestion");
   const a = rig({ factory: noFeed }); await a.open(); a.type('Extend [[bar_007]] to 6 bars, repeating with fills.'); await a.send();
   assert.deepEqual(kinds(a.el), [], 'without the feed nothing is said');
   const noControl = await damagedFactory("    say(path, { type: 'control', summary, description: extractDescription(text) });", '');
@@ -259,4 +260,19 @@ test('WIRING: the plugin hands the controller the settings-backed store (main.ts
   assert.match(settings, /dialogHistory: \{\},\s*dialogHeight: 112,\s*dialogRatio: 0\.4,\s*previewBeforeApplying: false,/);          // 2026-11-20-1002 (deliberate): was composerAutoApply: false (the two Enters); the setting is now `Preview before applying`, default off = apply at once
   assert.doesNotMatch(settings, /dialogDock|Composer position/, 'the position switch and its setting are gone (2026-11-18)');
   assert.match(main, /withoutDialogDock\(/, 'an old value is dropped silently when the settings load');
+});
+
+// ---- 2026-11-21-1011: the history follows the NOTE (the creation time is kept with each list) ------------------------------------------------------------------------------------------------------
+test('1011 (c): a note re-created at the same path starts with an EMPTY dialog (another creation time), the same note keeps its history across a new controller and tab; with no time known the history shows as before', async () => {
+  const settings: any = {}; let ct: number | undefined = 1000;
+  const r = rig({ store: settingsStore(settings, () => {}), ctime: () => ct }); await r.open();
+  r.type('Extend [[bar_007]] to 6 bars, repeating with fills.'); await r.send(); const first = kinds(r.el); assert.ok(first.length >= 2);
+  assert.deepEqual(JSON.parse(JSON.stringify(settings)).dialogCtime, { [PATH]: 1000 });
+  const same = rig({ store: settingsStore(JSON.parse(JSON.stringify(settings)), () => {}), ctime: () => 1000 }); await same.open(); assert.deepEqual(kinds(same.el), first, 'the same file: the same conversation');
+  const again = rig({ store: settingsStore(JSON.parse(JSON.stringify(settings)), () => {}), ctime: () => 2000 }); await again.open(); assert.deepEqual(kinds(again.el), [], 'a note created later at this path does not show yesterday\'s conversation');
+  const blind = rig({ store: settingsStore(JSON.parse(JSON.stringify(settings)), () => {}) }); await blind.open(); assert.deepEqual(kinds(blind.el), first, 'no creation time known: nothing to compare, the history shows');
+  ct = 3000; r.type('Extend [[bar_007]] to 7 bars, repeating with fills.'); await r.send();           // the SAME controller, the note re-created under it (no event reached it): its cache is not trusted either
+  const solo = rig({ store: settingsStore({}, () => {}) }); await solo.open(); solo.type('Extend [[bar_007]] to 7 bars, repeating with fills.'); await solo.send();
+  assert.deepEqual(kinds(r.el), kinds(solo.el), 'what the tab shows is what a brand-new note would show after that one sentence'); assert.equal(settings.dialogHistory[PATH].length, kinds(solo.el).length, 'the stored list is the new note\'s alone: the old conversation is gone from it');
+  assert.deepEqual(JSON.parse(JSON.stringify(settings)).dialogCtime, { [PATH]: 3000 });
 });

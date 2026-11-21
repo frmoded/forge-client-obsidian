@@ -104,7 +104,7 @@ out.verdicts = {
   answered_previewAndStatus: JSON.stringify(out.A_answered.buttons) === JSON.stringify(['apply-preview', 'cancel-preview']) && out.A_answered.status === 'The service answered: see the preview at the top.' && out.A_answered.asked.length === 1,
   answered_tracedBack: out.A_answered.lines.some((l: string) => /asked the service about phrase_001 -> extend/.test(l)),
   editing_clearsTheStatus: out.A_cleared === 'edited, not applied',
-  notSetUp_statusSaysSo: out.B.status === 'The sentence service is not set up: add its URL and token in Settings -> Forge.' && out.B.asked === 0,
+  notSetUp_statusSaysSo: out.B.status === 'The sentence service is not set up: add its URL and token in Settings → Forge Actions (Beta).' && out.B.asked === 0,
   notSetUp_warned: out.B.warns.includes('[forge-promptbox] service gate: askPlan=present configured=false'),
   applied_statusSaysApplied: out.C.status === 'Applied.' && out.C.lines.some((l: string) => /\[forge-description\] applied phrase_001/.test(l)),
   noTokenOrUrlInAnyLine: ![...out.A_answered.lines, ...out.B.lines, ...out.B.warns, ...out.C.lines].some((l: string) => /stand-in/.test(l)),

@@ -1,3 +1,4 @@
+// 2026-11-21-1011 (deliberate): the words that send the person to the settings tab now say "Settings → Forge Actions (Beta)" (the tab's real name, manifest.json); they said "Settings → Forge". The strings quoted below moved with the code.
 // 2026-10-27-1015 — "New phrase from a sentence" on the REAL wiring: the real `ForgePlugin.prototype.onload` from the real bundle (both editions), the real command, the real dialog, the real server.ts call (only `requestUrl`, the network, is a
 // stand-in) and a vault that records what the plugin writes. The decisions are proven in sentence-plan-core.test.ts and the dialog in sentence-plan-dom.test.ts; this proves they are connected, only in a score-first vault, that the token and
 // the BYOK key travel only in the request, and that a refusal never writes a note. Time is the shared host clock (test-support/host-workspace.ts), never a sleep; the workspace walk is the shared host-faithful one.
@@ -159,8 +160,8 @@ for (const edition of ['lean', 'music'] as const) {
 
   test(`[${edition}] a refusal never writes a note: no token (nothing is sent), the service down, an old service (404), a bar that is not there, the planner's own "no" - each is one sentence in the dialog and Create stays off`, async () => {
     const cases: Array<[string, (w: Awaited<ReturnType<typeof world>>) => void, RegExp, number]> = [
-      ['no token', (w) => { w.plugin.target.settings.transpileServiceToken = ''; }, /^Set your transpile token in Settings → Forge → Transpile token before planning a phrase from a sentence\.$/, 0],
-      ['service down', (w) => { w.net.throws = new Error('net::ERR_INTERNET_DISCONNECTED'); }, /^Could not reach the transpile service \(net::ERR_INTERNET_DISCONNECTED\)\. Check your connection and Settings → Forge → Transpile service URL\.$/, 1],
+      ['no token', (w) => { w.plugin.target.settings.transpileServiceToken = ''; }, /^Set your transpile token in Settings → Forge Actions \(Beta\) → Transpile token before planning a phrase from a sentence\.$/, 0],
+      ['service down', (w) => { w.net.throws = new Error('net::ERR_INTERNET_DISCONNECTED'); }, /^Could not reach the transpile service \(net::ERR_INTERNET_DISCONNECTED\)\. Check your connection and Settings → Forge Actions \(Beta\) → Transpile service URL\.$/, 1],
       ['old service', (w) => { w.net.status = 404; w.net.json = { detail: 'Not Found' }; }, /does not offer planning yet/, 1],
       ['unknown bar', (w) => { w.net.json = { ok: true, plan: { kind: 'extend', bar: 'bar_404' } }; }, /^"bar_404" is not a bar in this vault\.$/, 1],
       ['the planner says no', (w) => { w.net.json = { ok: false, parsed_ok: true, plan: null, error: 'I cannot tell which bar you mean.' }; }, /^I cannot tell which bar you mean\.$/, 1],

@@ -230,7 +230,7 @@ export async function generateSnippetAlpha(
     return {
       status: 0,
       json: {
-        detail: 'Set your transpile token in Settings → Forge → Transpile token before using /generate.',
+        detail: 'Set your transpile token in Settings → Forge Actions (Beta) → Transpile token before using /generate.',
       },
     };
   }
@@ -255,7 +255,7 @@ export async function planPhraseAlpha(
   payload: { sentence: string; bars: string[]; phrases: string[]; user_anthropic_key?: string; selection?: { phrase: string; first: number; last: number; row?: string } },
 ): Promise<{ status: number; json: unknown }> {
   if (!token) {
-    return { status: 0, json: { detail: 'Set your transpile token in Settings → Forge → Transpile token before using /generate.' } };
+    return { status: 0, json: { detail: 'Set your transpile token in Settings → Forge Actions (Beta) → Transpile token before using /generate.' } };
   }
   const res = await requestUrl({
     url: `${serviceUrl}/plan`,
@@ -356,7 +356,7 @@ export async function resolveSlotsAlpha(
     return {
       status: 0,
       json: {
-        detail: 'Set your transpile token in Settings → Forge → Transpile token before resolving slots.',
+        detail: 'Set your transpile token in Settings → Forge Actions (Beta) → Transpile token before resolving slots.',
       },
     };
   }

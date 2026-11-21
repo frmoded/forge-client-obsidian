@@ -124,7 +124,7 @@ export function mountReviewTab(host: HTMLElement, ports: ReviewTabPorts): Review
   function render(): void {
     host.textContent = ''; host.classList.add('forge-review-tab');
     host.appendChild(el('h3', 'forge-review-title', 'Unprocessed sentences'));
-    if (!ports.enabled()) { host.appendChild(el('p', 'forge-review-muted', 'Keeping unprocessed sentences is off. Turn it on in Settings → Forge (Keep unprocessed sentences for review).')); return; }
+    if (!ports.enabled()) { host.appendChild(el('p', 'forge-review-muted', 'Keeping unprocessed sentences is off. Turn it on in Settings → Forge Actions (Beta) → Keep unprocessed sentences for review.')); return; }
     const pending = orderedPending(); const item = pending[0] ?? null;
     host.appendChild(el('p', 'forge-review-count forge-review-muted', `${pending.length} waiting`));
     const tools = el('div', 'forge-review-row');

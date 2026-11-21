@@ -93,7 +93,8 @@ test("lean build stays lean in size: code-only, far below the music build, indep
   // 2026-11-20-1004z (1): the measure now stubs the three generated files too (codeSizeOf), so a working tree, a clean export and the matrix's worktree give the SAME number: the real code-only lean size at this commit is 1_510_599 bytes (1004 said
   // 1_509_578 on a working tree: the difference is the stand-ins for the generated files, about 2_000, and the 1004z/1005 hooks). The cap is NOT raised here (the prompt said so). The margin asked for was at least 5_000 bytes: 1_510_599 + 5_000 = 1_515_599 is
   // ABOVE the cap 1_515_000, so the margin is 4_401 bytes and the controller split (more of main.ts and description-apply.ts behind the list-model seam) is the driver's decision.
-  assert.ok(lean < 1_515_000, `lean code grew to ${lean} module bytes (code only, generated files stubbed; 1_510_599 at 2026-11-20-1004z; the cap is 1_515_000, moved on purpose at 2026-11-20-1004)`);
+  // 2026-11-21-1011: the cap is unchanged. The chat history that follows the note (stubs behind the list-model seam, a hook, three thin plugin methods, the store's call sites) and the 18 settings-tab strings that now say "Forge Actions (Beta)" cost lean +1_871 bytes: 1_512_470, so the margin is 2_530 bytes (it was 4_401).
+  assert.ok(lean < 1_515_000, `lean code grew to ${lean} module bytes (code only, generated files stubbed; 1_510_599 at 2026-11-20-1004z, 1_512_470 at 2026-11-21-1011; the cap is 1_515_000, moved on purpose at 2026-11-20-1004)`);
   assert.ok(lean * 5 < music, `lean (${lean}) is no longer far below music (${music})`);
 });
 
@@ -115,7 +116,7 @@ const LIST_MODEL_CORES = [
   "duplicate-sentence-core", "duplicate-note-core", "duplicate-undo-core",
   "phrase-steps-lineage-core",          // 2026-11-20-1000 (deliberate): the Inspector through the step lines (a Score-only core)
   "undo-trace-core",  // 2026-11-20-1004z (deliberate): the undo-trigger trace (music-composer code)
-  "rename-follow-core", "rename-description-core",  // 2026-11-20-1005 (deliberate): the description follows a rename (music-composer notes only)
+  "rename-follow-core", "dialog-follow-core", "rename-description-core",  // 2026-11-20-1005 (deliberate): the description follows a rename (music-composer notes only)
   "failed-prompt-core", "failed-prompt-store", "failed-prompt-tab-dom", "failed-prompt-setup-core",  // 2026-11-20-1004 (deliberate): the failed-prompt review queue (the record, its store, the review tab's DOM, the setup): composer-only code
   "service-lines-core",  // 2026-11-20-1003 (deliberate): the sentence service as the fluent front end (the grammar table, the lines reader): composer-only code
   "did-you-mean-core", "typed-step-core",  // 2026-11-20-1002 (deliberate): the repairs of a sentence the grammar cannot read, and the typed Undo / Redo reader (composer-only code)

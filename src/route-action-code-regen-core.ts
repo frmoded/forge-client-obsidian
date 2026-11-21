@@ -69,7 +69,7 @@ export async function routeActionCodeRegen(
       reason: 'no-token',
       message:
         'Forge: this snippet needs free-text Python generation but '
-        + 'no transpile token is set. Set one in Settings → Forge → '
+        + 'no transpile token is set. Set one in Settings → Forge Actions (Beta) → '
         + 'Transpile token, or write the English in E-- form '
         + '(`Do [[snippet_name]](args).`) for deterministic compile.',
     };

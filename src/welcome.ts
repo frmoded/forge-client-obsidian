@@ -118,7 +118,7 @@ from the Recipe and run by the engine).
    \`\`\`
 
 3. Click the **Forge this note** button (the hammer) at the top of the
-   editor. Paste your transpile token if prompted (Settings → Forge →
+   editor. Paste your transpile token if prompted (Settings → Forge Actions (Beta) →
    Transpile service → Transpile service token).
 4. Forge calls the hosted transpile service, generates a Recipe from
    your Description, compiles it to Python, and writes it back into

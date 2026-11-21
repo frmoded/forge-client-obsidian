@@ -41,6 +41,7 @@ export const listModel: ListModel = {
   repair: { offer: async () => null },
   trace: { create: () => ({ record() {}, entries: () => [] }) },          // 2026-11-20-1004z: lean keeps no trace
   renamed: { follow: async () => {} },          // 2026-11-20-1005: lean has none of these notes
+  dialogs: { renamed() {}, deleted() {}, ctime: () => undefined, fresh: () => true, stamp() {}, prune() {} },          // 2026-11-21-1011: lean keeps no per-note history to move, drop or date
   review: { create: () => null, track: () => null },          // 2026-11-20-1004: lean keeps nothing and has no review tab
   service: { fields: () => null, read: async () => ({ kind: 'legacy' }), version: '', ask: async (io) => io.legacy(await io.askPlan(io.payload)), askBar: async () => null },          // 2026-11-20-1003: lean adds nothing to a request and reads every answer as it always did
 };

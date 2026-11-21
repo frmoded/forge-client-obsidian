@@ -1,3 +1,4 @@
+// 2026-11-21-1011 (deliberate): the words that send the person to the settings tab now say "Settings → Forge Actions (Beta)" (the tab's real name, manifest.json); they said "Settings → Forge". The strings quoted below moved with the code.
 // 2026-11-20-1004 - mutation survivors of failed-prompt-tab-dom.ts, pinned: the words of every panel and message (a golden of what a person reads), the structure (classes, labels, roles), what each action resets, focus, the stale-check guard, the apply plan,
 // the plural forms, the skip order, and the keys that must do nothing.
 import assert from 'node:assert/strict';
@@ -55,7 +56,7 @@ test('the words of each panel, the box labels and rows, and the save button star
 
 test('empty and off states say their words and keep the title', async () => {
   const e = rig([]); await e.tab.refresh(); assert.equal(e.text(), 'Unprocessed sentences0 waitingUndo the last resolution (U)Export the resolved sentencesNothing is waiting.');
-  const off = rig([A]); off.setOn(false); await off.tab.refresh(); assert.equal(off.text(), 'Unprocessed sentencesKeeping unprocessed sentences is off. Turn it on in Settings → Forge (Keep unprocessed sentences for review).');
+  const off = rig([A]); off.setOn(false); await off.tab.refresh(); assert.equal(off.text(), 'Unprocessed sentencesKeeping unprocessed sentences is off. Turn it on in Settings → Forge Actions (Beta) → Keep unprocessed sentences for review.');
   assert.equal(off.qa('button').length, 0); await off.key('w'); assert.ok(off.q('.forge-review-panel') === null);
 });
 

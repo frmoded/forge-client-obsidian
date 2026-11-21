@@ -99,6 +99,8 @@ export interface ScoreFirstHooks {
   planConfigured?(): boolean;
   /** 2026-11-13-1214: where the dialog's history, height and dock are kept (the plugin's data.json). Absent = the session's own memory. */
   dialogStore?: import('./dialog-core.ts').DialogStore;
+  /** 2026-11-21-1011: the creation time of the note at this path (undefined = unknown): the dialog's history is kept per note, so a note re-created at the path starts empty. */
+  noteCtime?(path: string): number | undefined;
   /** 2026-11-15-1217: is the status line under the prompt box shown? Absent = the default view (the legacy switch decides). */
   showBoxStatus?(): boolean;
 }

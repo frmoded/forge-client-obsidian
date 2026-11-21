@@ -73,6 +73,8 @@ export interface DescriptionPorts {
   showBoxStatus?(): boolean;
   /** 2026-11-13-1214: where the dialog's history is kept per note (the plugin's data.json); absent = the session's own memory. */
   dialogStore?: DialogStore;
+  /** 2026-11-21-1011: the creation time of the note at this path, or undefined when it cannot be told: the history is kept with it, and a list kept for another creation time (a note re-created at the path) is not shown. */
+  noteCtime?(path: string): number | undefined;
   /** The clock of the dialog's time stamps (tests). */
   now?(): number;
   /** Ask the person to confirm a step that loses something ("Revert to generated"); absent = it goes ahead. */
@@ -159,9 +161,11 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   // ---- 2026-11-13-1214: the dialog. The history of what happened to a note's Description (per note, newest last, capped), the last note text we saw (to tell a control's change from a hand edit), the pinned "Current:" line.
   const store: DialogStore = ports.dialogStore ?? memoryStore();
   const dialogs = new Map<string, DialogEntry[]>();
+  const dialogCtime = new Map<string, number | undefined>();          // 2026-11-21-1011: the creation time each cached list was loaded for
   const lastText = new Map<string, string>();
   const nowMs = (): number => (ports.now ? ports.now() : Date.now());
-  const historyOf = (path: string): DialogEntry[] => { let l = dialogs.get(path); if (!l) { l = store.entries(path); dialogs.set(path, l); } return l; };
+  const ctimeOf = (path: string): number | undefined => ports.noteCtime?.(path);
+  const historyOf = (path: string): DialogEntry[] => { const c = ctimeOf(path); let l = dialogs.get(path); if (l && dialogCtime.get(path) !== c) l = undefined; if (!l) { l = store.entries(path, c); dialogs.set(path, l); dialogCtime.set(path, c); } return l; };          // a cached list is not trusted when the note under the path is another one
   const currentOf = (path: string): string => { const t = lastText.get(path); return t === undefined ? '' : extractDescription(t).replace(/\s+/g, ' ').trim(); };
   const drawDialog = (path: string): void => { const h = historyOf(path), c = currentOf(path); for (const b of boxes.values()) if (b.path === path) b.chat.render(h, c); };
   /** ONE event stream: what the controller says happened to the Description. Only a box-origin outcome is drawn here (the strip keeps the text view's and the hand edits'). */
@@ -169,11 +173,11 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     let l = historyOf(path);
     if (ev.type === 'suggestion' || ev.type === 'you') l = expireOpen(l);                                  // a new sentence or a newer suggestion ends the older one
     l = append(l, fromOutcome(ev), nowMs());
-    dialogs.set(path, l); store.setEntries(path, l); drawDialog(path);
+    dialogs.set(path, l); store.setEntries(path, l, ctimeOf(path)); drawDialog(path);
   };
   const endSuggestion = (path: string, state: 'applied' | 'cancelled' | 'expired'): void => {
     const l = historyOf(path), open = openSuggestion(l); if (!open) return;
-    const next = resolveSuggestion(l, open.id, state); dialogs.set(path, next); store.setEntries(path, next); drawDialog(path);
+    const next = resolveSuggestion(l, open.id, state); dialogs.set(path, next); store.setEntries(path, next, ctimeOf(path)); drawDialog(path);
   };
   // 2026-11-13-1214: every write of the controller goes through here: the text it wrote is the last text seen, so the vault's own `modify` for it is never taken for a control's change.
   const proc = async (path: string, fn: (cur: string) => string): Promise<void> => {
@@ -830,7 +834,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
       outcome = a; question = 'question' in a && a.question !== undefined ? a.question : null;
       if (question === null) asked.delete(path);
     }
-    catch (e) { code = 0; outcome = { ok: false, message: `Could not reach the transpile service (${(e as Error)?.message ?? e}). Check your connection and Settings → Forge → Transpile service URL.` }; }
+    catch (e) { code = 0; outcome = { ok: false, message: `Could not reach the transpile service (${(e as Error)?.message ?? e}). Check your connection and Settings → Forge Actions (Beta) → Transpile service URL.` }; }
     if (u.fromBox) setBoxBusy(path, null);
     if (cancelledAsk.has(path)) {                                                                        // 2026-11-17-2001: Esc while the service thought: the answer is dropped, said once
       ports.trace(askedServiceLine(basename(path), 'dropped: cancelled'));
@@ -934,7 +938,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   async function askTail(path: string, sentence: string, rejectedText: string): Promise<PreviewResult> {
     const gateLine = `service gate: askPlan=${ports.askPlan === undefined ? 'absent' : 'present'} configured=${ports.configured === undefined ? 'unset' : String(ports.configured())}`;
     if (ports.askPlan === undefined) { pbWarn(gateLine); const m = 'The sentence service is not available in this build.'; say(path, { type: 'notice', message: m }); fp?.fail(path, sentence, 'none', m); return { ok: false, message: `${rejectedText} ${m}` }; }
-    if (ports.configured?.() === false) { pbWarn(gateLine); const m = 'The sentence service is not set up: add its URL and token in Settings -> Forge.'; say(path, { type: 'notice', message: m }); fp?.fail(path, sentence, 'not-set-up', m); return { ok: false, message: `${rejectedText} ${m}` }; }
+    if (ports.configured?.() === false) { pbWarn(gateLine); const m = 'The sentence service is not set up: add its URL and token in Settings → Forge Actions (Beta).'; say(path, { type: 'notice', message: m }); fp?.fail(path, sentence, 'not-set-up', m); return { ok: false, message: `${rejectedText} ${m}` }; }
     pb(gateLine);
     askMessage.delete(path);
     await ask(path);

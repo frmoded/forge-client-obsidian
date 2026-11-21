@@ -747,6 +747,7 @@ export default class ForgePlugin extends Plugin {
       // Drain 2026-10-15-2100 §2 — the strip's remembered values belong to the note; a deleted note takes them with it, so a note
       // re-created at the same path starts clean instead of inheriting the old note's choices.
       if (f instanceof TFile && f.extension === 'md') {
+        this.dropDialogHistory(f);          // 2026-11-21-1011: the note's chat history goes with it
         const id = snippetIdFromPath(f.path, this.libraryDirNames());
         const next = forgetPanelNote(this.settings.panelStripValues ?? {}, this.settings.panelStripSignatures ?? {}, id);
         this.settings.panelStripValues = next.memory;
@@ -758,6 +759,7 @@ export default class ForgePlugin extends Plugin {
       // ...and a renamed note keeps its values under the new id.
       if (f instanceof TFile && f.extension === 'md') {
         void this.followRenamedDescription(f, oldPath);          // 2026-11-20-1005 (F9): the generated description follows the new name
+        this.moveDialogHistory(f, oldPath);          // 2026-11-21-1011: and so does the note's chat history
         const next = renamePanelNote(
           this.settings.panelStripValues ?? {}, this.settings.panelStripSignatures ?? {},
           snippetIdFromPath(oldPath, this.libraryDirNames()), snippetIdFromPath(f.path, this.libraryDirNames()));
@@ -796,7 +798,7 @@ export default class ForgePlugin extends Plugin {
     // score_first_experiment M1 (drain 2026-10-21-1100): "New bar" — registered for every vault, offered only where forge.toml declares profile = "score_first".
     // 1155-91: the profile answer arrives after load; the markdown header is re-decided when it does (the edges button is not drawn in a score-first vault).
     this.register(messageDelivery.onScoreFirst(() => { this.syncAllHeaderActions(); }));
-    registerScoreFirst(this, { ...(reviewQueue !== null ? { failedPrompts: reviewQueue.port } : {}), openRhythmNote: (file) => this.rhythmEdit?.openRhythmNote(file) ?? Promise.resolve(), markRhythmText: (leaf, path) => { this.rhythmEdit?.markAsText(leaf, path); }, holdRhythmText: (leaf, on) => { this.rhythmEdit?.holdAsText(leaf, on); }, askPlan: (payload) => planPhraseAlpha(this.settings.transpileServiceUrl, this.settings.transpileServiceToken, payload), ownKey: () => resolveUserAnthropicKey(this.settings), serviceVersion: () => fetchServiceVersion(this.settings.transpileServiceUrl), planConfigured: () => !!this.settings.transpileServiceUrl?.trim() && !!this.settings.transpileServiceToken?.trim(), dialogStore: settingsStore(this.settings, () => { this.saveDialogSoon(); }) });
+    registerScoreFirst(this, { ...(reviewQueue !== null ? { failedPrompts: reviewQueue.port } : {}), openRhythmNote: (file) => this.rhythmEdit?.openRhythmNote(file) ?? Promise.resolve(), markRhythmText: (leaf, path) => { this.rhythmEdit?.markAsText(leaf, path); }, holdRhythmText: (leaf, on) => { this.rhythmEdit?.holdAsText(leaf, on); }, askPlan: (payload) => planPhraseAlpha(this.settings.transpileServiceUrl, this.settings.transpileServiceToken, payload), ownKey: () => resolveUserAnthropicKey(this.settings), serviceVersion: () => fetchServiceVersion(this.settings.transpileServiceUrl), planConfigured: () => !!this.settings.transpileServiceUrl?.trim() && !!this.settings.transpileServiceToken?.trim(), dialogStore: settingsStore(this.settings, () => { this.saveDialogSoon(); }), noteCtime: (p) => this.noteCtime(p) });
     // v0.2.84 (replaces v0.2.83 polling) — register the facet-mutex
     // ViewPlugin once at onload. CM6 instantiates the plugin per
     // EditorView; per-view state lives on the plugin instance, the
@@ -3999,7 +4001,7 @@ export default class ForgePlugin extends Plugin {
     // Fail-fast on empty token: actionable Notice without spending a
     // network round-trip discovering a 401.
     if (!settings.transpileServiceToken) {
-      const msg = 'Set your transpile token in Settings → Forge → Transpile token before using /generate.';
+      const msg = 'Set your transpile token in Settings → Forge Actions (Beta) → Transpile token before using /generate.';
       this.notice(errorPrefix ? `${errorPrefix}: ${msg}` : `${NOTICE_PREFIX}${msg}`);
       return false;
     }
@@ -4117,7 +4119,7 @@ export default class ForgePlugin extends Plugin {
         // gets here — only true network failures.
         console.error('Forge Generate Error (transport):', e);
         const detail = e instanceof Error ? e.message : String(e);
-        const msg = `Could not reach transpile service at ${settings.transpileServiceUrl}. Check your internet connection + Settings → Forge → Transpile service URL. (${detail})`;
+        const msg = `Could not reach transpile service at ${settings.transpileServiceUrl}. Check your internet connection + Settings → Forge Actions (Beta) → Transpile service URL. (${detail})`;
         this.notice(errorPrefix ? `${errorPrefix}: ${msg}` : `${NOTICE_PREFIX}${msg}`);
         return false;
       }
@@ -4205,7 +4207,7 @@ export default class ForgePlugin extends Plugin {
     const snippetId = snippetIdFromPath(view.file.path, this.libraryDirNames());
     const settings = this.settings;
     if (!settings.transpileServiceToken) {
-      const msg = 'Set your transpile token in Settings → Forge → Transpile token before using /generate.';
+      const msg = 'Set your transpile token in Settings → Forge Actions (Beta) → Transpile token before using /generate.';
       this.notice(errorPrefix ? `${errorPrefix}: ${msg}` : `${NOTICE_PREFIX}${msg}`);
       return null;
     }
@@ -4312,7 +4314,7 @@ export default class ForgePlugin extends Plugin {
       } catch (e) {
         console.error('Forge Generate Error (transport, recipe dialect):', e);
         const detail = e instanceof Error ? e.message : String(e);
-        const msg = `Could not reach transpile service at ${settings.transpileServiceUrl}. Check your internet connection + Settings → Forge → Transpile service URL. (${detail})`;
+        const msg = `Could not reach transpile service at ${settings.transpileServiceUrl}. Check your internet connection + Settings → Forge Actions (Beta) → Transpile service URL. (${detail})`;
         this.notice(errorPrefix ? `${errorPrefix}: ${msg}` : `${NOTICE_PREFIX}${msg}`);
         return null;
       }
@@ -4493,7 +4495,7 @@ export default class ForgePlugin extends Plugin {
   ): string {
     const prefix = errorPrefix ?? prefixed('Generation failed');
     if (status === 401) {
-      return `${prefix}: Transpile token rejected — check Settings → Forge → Transpile token, or contact the service operator (${serviceUrl}) if you believe it should be valid.`;
+      return `${prefix}: Transpile token rejected — check Settings → Forge Actions (Beta) → Transpile token, or contact the service operator (${serviceUrl}) if you believe it should be valid.`;
     }
     if (detail && typeof detail === 'object' && 'retryable' in detail) {
       const { error, retryable, kind } = detail as {
@@ -5436,6 +5438,13 @@ export default class ForgePlugin extends Plugin {
   private followRenamedDescription(f: TFile, oldPath: string): Promise<void> {
     return listModel.renamed.follow(f, oldPath, { read: (x) => this.app.vault.read(x), process: async (x, fn) => { const next = await this.app.vault.process(x, fn); await this.syncMemfsAfterBodyWrite(x, next, 'followRenamedDescription'); }, onError: (x, e) => { this.fileTaskFailed('followRenamedDescription', x, e, () => console.error(`followRenamedDescription: failed for '${x.path}'`, e)); } });
   }
+
+  /** 2026-11-21-1011: a renamed note's chat history moves to the new path with it (dialog-follow-core.ts, behind the list-model seam: lean keeps none); the file's own creation time is stored with it. */
+  private moveDialogHistory(f: TFile, oldPath: string): void { listModel.dialogs.renamed(this, f, oldPath); }
+  /** 2026-11-21-1011: a deleted note's chat history is dropped (a note re-created at the path starts empty). */
+  private dropDialogHistory(f: TFile): void { listModel.dialogs.deleted(this, f); }
+  /** 2026-11-21-1011: the creation time of the note at this path (undefined: no such note, or no time to read): the dialog asks it to tell a note re-created at an old path from the old one. */
+  private noteCtime(path: string): number | undefined { return listModel.dialogs.ctime(this.app, path); }
 
   private async captureFacetHashCacheForFile(file: TFile | null) {
     if (!file) return;

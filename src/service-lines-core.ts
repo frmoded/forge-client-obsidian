@@ -147,7 +147,7 @@ export async function askLinesBar(io: AskBarIo): Promise<LinesRead | null> {
   io.asking();
   let res: Res;
   try { res = await io.askPlan({ ...built.payload, ...linesRequestFields({ family: 'bar', list: io.list, barCount: null, ...(io.previous !== undefined ? { previous: io.previous } : {}) }) }); }
-  catch (e) { return { kind: 'refused', status: 0, message: `Could not reach the transpile service (${(e as Error)?.message ?? e}). Check your connection and Settings → Forge → Transpile service URL.` }; }
+  catch (e) { return { kind: 'refused', status: 0, message: `Could not reach the transpile service (${(e as Error)?.message ?? e}). Check your connection and Settings → Forge Actions (Beta) → Transpile service URL.` }; }
   const lr = await readLinesAnswer(res, io.check);
   if (lr.kind === 'legacy') { io.remember(null); return { kind: 'refused', status: res.status, message: planTransportRefusal(res, LINES_SERVICE_VERSION) ?? `This transpile service does not know bar sentences yet (it needs version ${LINES_SERVICE_VERSION} or newer). The person who runs it has to update it.` }; }
   io.remember(lr.kind === 'question' ? { sentence: io.sentence, question: lr.question } : null);
