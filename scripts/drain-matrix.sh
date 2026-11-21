@@ -14,6 +14,7 @@
 #          FORGE_POWER_GUARD=off / FORGE_CAFFEINATE=off  # the two switches of the power guard below
 #          --full-lean                                 # the LEAN leg runs the WHOLE suite again (the behaviour before 2026-11-04-1174); by default it runs only the edition-sensitive files (below)
 #          FORGE_MATRIX_FILE_CONC=4                    # 2026-11-20-1001z: the test files ONE LEG runs at once (default: computed from FORGE_MEM_BUDGET_MB / FORGE_MATRIX_FILE_MB by scripts/dev/mem-plan.mjs matrix-files; this wins when set)
+#          FORGE_MATRIX_FILE_MB=1350                   # 2026-11-20-1001zz: the size ONE test file is assumed to take, in MB (default 600, measured 2026-11-02 at about 520 MB a file): the files a leg runs at once are FORGE_MEM_BUDGET_MB / this / legs, never more than 4 by default; a larger number here lowers the concurrency without naming it (FORGE_MATRIX_FILE_CONC=<n> sets it outright and wins)
 #          FORGE_MATRIX_RSS_MB / FORGE_HEAVY_GUARD=off # 2026-11-20-1001z: the memory guard around the whole run (see "ONE HEAVY THING AT A TIME" below and the header of scripts/heavy-guard.sh)
 #
 # What it does: worktrees (detached, committed state only) of forge-client-obsidian, music-theory, forge-tutorial, forge-moda, music-core, forge and music-playground

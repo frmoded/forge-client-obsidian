@@ -15,6 +15,10 @@
     "title": "The circle of fifths",
     "line": "Click a key to see its signature, its scale on the keys and its neighbours; Play sounds the scale"
   },
+  "circle_of_fifths/resources/images/circle_of_fifths_wheel.svg": {
+    "title": "The circle of fifths",
+    "line": "Twelve keys, a fifth apart, closing into a ring"
+  },
   "music_instruments/resources/html/guitar_fretboard.html": {
     "title": "Guitar fretboard",
     "line": "Click positions from the open strings to fret 12 to hold them, then play them together, up or down"

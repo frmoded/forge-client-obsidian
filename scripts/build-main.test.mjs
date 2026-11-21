@@ -76,8 +76,9 @@ function buildCodeOnly(edition) {
 }
 
 test("lean build stays lean in size: code-only, far below the music build, independent of the last `npm run build`", async () => {
-  const lean = await buildCodeOnly("lean");
-  const music = await buildCodeOnly("music");
+  // 2026-11-20-1001zz (deliberate): the measure is the MODULE bytes (esbuild's own count of each input's code: see codeSizeOf below), not the output file's size, which moves with the directory esbuild runs from (the same source: 1_515_365 bytes from the repo root, 1_517_225 from scripts/dev, 1_518_155 three levels down; the matrix saw 1_517_461 against 1_515_420 in the working tree). Lean module bytes: 1_504_878 on c4f3061 (music 15_209_748).
+  const lean = (await codeSizeOf("lean", SIZE_ROOT)).modules;
+  const music = (await codeSizeOf("music", SIZE_ROOT)).modules;
   // 2026-11-19-0997 (deliberate): the cap is BACK at 1_500_000 (the 0992a figure of 1_700_000 is retired). The list model's cores moved behind src/list-model-selected.ts (the lean build gets list-model.lean.ts: stubs, no core): lean code-only measured 1_552_286 bytes on bb17c2e and 1_494_060 after (-58_226), 5_940 under the cap. Nothing the cap protects changed: the music chain stays out of lean, and lean stays more than five times smaller than music. The next lean-reached music code has to go behind the seam too, or move this cap on purpose.
   // 2026-11-19-0992a (deliberate): the cap moves from 1_500_000 to 1_700_000. The matrix on the committed 0993 head (ffc6510) found lean at 1_535_383 bytes (9ae606d, before 0993: 1_478_803; 0993's bar list model added about 56 KB of pure TypeScript reached from the shared composer path), which the cap's own comment ("baseline ~0.64 MB") had long outgrown. What this test protects is unchanged and still asserted below: the music chain (Verovio, the players, the music widgets) stays out of lean, lean is more than five times smaller than music (music is over 5 MB). The list-model cores are music-composer code and belong behind the edition seam; that move is a follow-up (L47 in the 0992a FEEDBACK), not part of this commit.
   // 2026-11-19-0999b (deliberate): the cap moves from 1_500_000 to 1_516_000 (+16_000). Mix and Extend as steps of a phrase (the grammar, the two validators, the engine calls, the words, the Python and the json) grew lean code-only from 1_495_068 to 1_511_326 bytes (+16_258: phrase-core +6.7 KB,
@@ -85,7 +86,8 @@ test("lean build stays lean in size: code-only, far below the music build, indep
   // alone (applyStepsAsync, the three NewBars functions) is about 4.1 KB and could go behind a second selector, which would still leave lean about 6 KB over the old cap; what the cap protects is unchanged and asserted below (the music chain stays out of lean, lean is more than five times smaller than music).
   // 2026-11-20-1002: the cap does NOT move: one Enter applies, "did you mean" and the typed Undo / Redo took lean code-only from 1_513_119 to 1_515_420 bytes (+2_301: the thin shared path, the dialog words, the repair button, the setting); every pure function is behind the seam (did-you-mean-core, typed-step-core).
   // 2026-11-20-1002 (deliberate): the cap moves from 1_516_000 to 1_520_000. The same source measured 1_515_420 bytes in the working tree and 1_517_461 in the matrix's music-leg worktree (the matrix's copy of node_modules is a symlink, so esbuild's per-module path comments are longer there: the code-only size depends on WHERE it is built, by about 2 KB). Earlier drains passed only because their headroom (about 2.9 KB) hid that; 1002 left 580 bytes, so the matrix went red on a size that is not code. The cap is the old headroom restored (about 2.5 KB over the matrix's own measure); the real fix (a size that ignores the build location) is recommended to forge-core, not done here.
-  assert.ok(lean < 1_520_000, `lean main.js code grew to ${lean} bytes (1_511_326 at 2026-11-19-0999b, Mix and Extend as steps of a phrase)`);
+  // The cap is the measured module bytes plus a stated margin of 5_122 bytes (0.34 %): 1_504_878 + 5_122 = 1_510_000. The old file-size caps (1_520_000 and before) are retired; they hid a 2 KB working-directory effect inside their headroom.
+  assert.ok(lean < 1_510_000, `lean code grew to ${lean} module bytes (1_504_878 at 2026-11-20-1001zz; the cap is that plus 5_122)`);
   assert.ok(lean * 5 < music, `lean (${lean}) is no longer far below music (${music})`);
 });
 
@@ -141,4 +143,30 @@ test("0997 music build: DOES contain every list-model core (guards the lean asse
   }
   assert.equal(inputs.includes("src/list-model.full.ts"), true);
   assert.equal(inputs.includes("src/list-model.lean.ts"), false, "the music edition got the lean list model");
+});
+
+// 2026-11-20-1001zz: the lean size must be a size of CODE, not of where esbuild was run. esbuild writes a path comment before every module (`// src/x.ts`, `// ../../node_modules/y/z.js`), and those comments are as long as the path from the directory the build ran in to the module: the SAME source gives a
+// different file size from another working directory (the matrix builds in a worktree whose siblings and node_modules are symlinks: 1_517_461 bytes there, 1_515_420 in the working tree). The measure that does not move is what esbuild itself counts for each input module (`bytesInOutput`, the module's own
+// code, no comments, no wrapper): the sum over every input of the one output.
+async function codeSizeOf(edition, absWorkingDir) {
+  const require = createRequire(import.meta.url);
+  const { build } = require("esbuild");
+  const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+  const r = await build({
+    entryPoints: [path.join(root, "src", "main.ts")], bundle: true, platform: "node", format: "cjs", write: false, metafile: true, logLevel: "silent", absWorkingDir,
+    external: ["obsidian", "@codemirror/view", "@codemirror/state", "@codemirror/language"],
+    plugins: [editionPlugin(edition), stubInlinedAssetsPlugin()],
+    outfile: path.join(os.tmpdir(), `forge-size-${edition}.js`),
+  });
+  const out = Object.values(r.metafile.outputs)[0];
+  return { file: Buffer.byteLength(r.outputFiles[0].text), modules: Object.values(out.inputs).reduce((n, i) => n + i.bytesInOutput, 0) };
+}
+const SIZE_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+
+test("the lean code-only size is the same whichever directory esbuild runs from (the FILE size is not: the path comments move)", async () => {
+  const here = await codeSizeOf("lean", SIZE_ROOT);
+  const deeper = await codeSizeOf("lean", path.join(SIZE_ROOT, "scripts", "dev"));
+  assert.notEqual(here.file, deeper.file, "control: the output FILE changes with the working directory (this is why the file size cannot be the measure)");
+  assert.equal(here.modules, deeper.modules, `the module bytes must not depend on the working directory: ${here.modules} from the root, ${deeper.modules} from scripts/dev`);
+  assert.ok(here.modules > 1_000_000 && here.modules < here.file, `a plausible module total: ${here.modules} of a ${here.file} byte file`);
 });

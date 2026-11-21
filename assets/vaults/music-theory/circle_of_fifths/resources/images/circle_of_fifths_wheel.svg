@@ -1,0 +1,121 @@
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="600" height="657" viewBox="0 0 600 657" role="img" aria-label="The circle of fifths: the twelve major keys on the outer ring and their relative minors on the inner ring, a fifth apart, with F sharp and G flat sharing the bottom position">
+<g transform="scale(2)" font-family="system-ui, -apple-system, Segoe UI, sans-serif" text-anchor="middle">
+<!-- major keys, outer ring: C at the top, a fifth clockwise to G, D, A, E, B; counter-clockwise F, B flat, E flat, A flat, D flat -->
+<g aria-label="C major, no sharps or flats">
+<path d="M112.7 10.9 A144 144 0 0 1 187.3 10.9 L175.9 53.4 A100 100 0 0 0 124.1 53.4 Z" fill="none" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/>
+<text x="150.0" y="25.0" font-size="16" font-weight="600" fill="currentColor">C</text>
+<text x="150.0" y="42.0" font-size="10" font-weight="500" fill="currentColor" fill-opacity="0.65">0</text>
+</g>
+<g aria-label="G major, 1 sharp">
+<path d="M187.3 10.9 A144 144 0 0 1 251.8 48.2 L220.7 79.3 A100 100 0 0 0 175.9 53.4 Z" fill="none" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/>
+<text x="215.0" y="42.4" font-size="16" font-weight="600" fill="currentColor">G</text>
+<text x="206.0" y="57.0" font-size="10" font-weight="500" fill="currentColor" fill-opacity="0.65">1♯</text>
+</g>
+<g aria-label="D major, 2 sharps">
+<path d="M251.8 48.2 A144 144 0 0 1 289.1 112.7 L246.6 124.1 A100 100 0 0 0 220.7 79.3 Z" fill="none" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/>
+<text x="262.6" y="90.0" font-size="16" font-weight="600" fill="currentColor">D</text>
+<text x="247.0" y="98.0" font-size="10" font-weight="500" fill="currentColor" fill-opacity="0.65">2♯</text>
+</g>
+<g aria-label="A major, 3 sharps">
+<path d="M289.1 112.7 A144 144 0 0 1 289.1 187.3 L246.6 175.9 A100 100 0 0 0 246.6 124.1 Z" fill="none" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/>
+<text x="280.0" y="155.0" font-size="16" font-weight="600" fill="currentColor">A</text>
+<text x="262.0" y="154.0" font-size="10" font-weight="500" fill="currentColor" fill-opacity="0.65">3♯</text>
+</g>
+<g aria-label="E major, 4 sharps">
+<path d="M289.1 187.3 A144 144 0 0 1 251.8 251.8 L220.7 220.7 A100 100 0 0 0 246.6 175.9 Z" fill="none" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/>
+<text x="262.6" y="220.0" font-size="16" font-weight="600" fill="currentColor">E</text>
+<text x="247.0" y="210.0" font-size="10" font-weight="500" fill="currentColor" fill-opacity="0.65">4♯</text>
+</g>
+<g aria-label="B major, 5 sharps">
+<path d="M251.8 251.8 A144 144 0 0 1 187.3 289.1 L175.9 246.6 A100 100 0 0 0 220.7 220.7 Z" fill="none" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/>
+<text x="215.0" y="267.6" font-size="16" font-weight="600" fill="currentColor">B</text>
+<text x="206.0" y="251.0" font-size="10" font-weight="500" fill="currentColor" fill-opacity="0.65">5♯</text>
+</g>
+<g aria-label="F sharp major or G flat major, 6 sharps or 6 flats">
+<path d="M187.3 289.1 A144 144 0 0 1 112.7 289.1 L124.1 246.6 A100 100 0 0 0 175.9 246.6 Z" fill="#F8C54B" fill-opacity="0.38" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/>
+<text x="150.0" y="285.0" font-size="11" font-weight="600" fill="currentColor"><tspan x="150.0" dy="-3">F♯</tspan><tspan x="150.0" dy="11">G♭</tspan></text>
+<text x="150.0" y="266.0" font-size="10" font-weight="500" fill="currentColor" fill-opacity="0.65">6♯ 6♭</text>
+</g>
+<g aria-label="D flat major, 5 flats">
+<path d="M112.7 289.1 A144 144 0 0 1 48.2 251.8 L79.3 220.7 A100 100 0 0 0 124.1 246.6 Z" fill="none" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/>
+<text x="85.0" y="267.6" font-size="16" font-weight="600" fill="currentColor">D♭</text>
+<text x="94.0" y="251.0" font-size="10" font-weight="500" fill="currentColor" fill-opacity="0.65">5♭</text>
+</g>
+<g aria-label="A flat major, 4 flats">
+<path d="M48.2 251.8 A144 144 0 0 1 10.9 187.3 L53.4 175.9 A100 100 0 0 0 79.3 220.7 Z" fill="none" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/>
+<text x="37.4" y="220.0" font-size="16" font-weight="600" fill="currentColor">A♭</text>
+<text x="53.0" y="210.0" font-size="10" font-weight="500" fill="currentColor" fill-opacity="0.65">4♭</text>
+</g>
+<g aria-label="E flat major, 3 flats">
+<path d="M10.9 187.3 A144 144 0 0 1 10.9 112.7 L53.4 124.1 A100 100 0 0 0 53.4 175.9 Z" fill="none" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/>
+<text x="20.0" y="155.0" font-size="16" font-weight="600" fill="currentColor">E♭</text>
+<text x="38.0" y="154.0" font-size="10" font-weight="500" fill="currentColor" fill-opacity="0.65">3♭</text>
+</g>
+<g aria-label="B flat major, 2 flats">
+<path d="M10.9 112.7 A144 144 0 0 1 48.2 48.2 L79.3 79.3 A100 100 0 0 0 53.4 124.1 Z" fill="none" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/>
+<text x="37.4" y="90.0" font-size="16" font-weight="600" fill="currentColor">B♭</text>
+<text x="53.0" y="98.0" font-size="10" font-weight="500" fill="currentColor" fill-opacity="0.65">2♭</text>
+</g>
+<g aria-label="F major, 1 flat">
+<path d="M48.2 48.2 A144 144 0 0 1 112.7 10.9 L124.1 53.4 A100 100 0 0 0 79.3 79.3 Z" fill="none" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/>
+<text x="85.0" y="42.4" font-size="16" font-weight="600" fill="currentColor">F</text>
+<text x="94.0" y="57.0" font-size="10" font-weight="500" fill="currentColor" fill-opacity="0.65">1♭</text>
+</g>
+<!-- relative minors, inner ring: each minor sits inside its major -->
+<g aria-label="A minor">
+<path d="M124.1 53.4 A100 100 0 0 1 175.9 53.4 L165.5 92.0 A60 60 0 0 0 134.5 92.0 Z" fill="currentColor" fill-opacity="0.07" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/>
+<text x="150.0" y="75.0" font-size="12" font-weight="500" fill="currentColor">Am</text>
+</g>
+<g aria-label="E minor, the relative minor of G major">
+<path d="M175.9 53.4 A100 100 0 0 1 220.7 79.3 L192.4 107.6 A60 60 0 0 0 165.5 92.0 Z" fill="currentColor" fill-opacity="0.07" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/>
+<text x="190.0" y="85.7" font-size="12" font-weight="500" fill="currentColor">Em</text>
+</g>
+<g aria-label="B minor, the relative minor of D major">
+<path d="M220.7 79.3 A100 100 0 0 1 246.6 124.1 L208.0 134.5 A60 60 0 0 0 192.4 107.6 Z" fill="currentColor" fill-opacity="0.07" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/>
+<text x="219.3" y="115.0" font-size="12" font-weight="500" fill="currentColor">Bm</text>
+</g>
+<g aria-label="F sharp minor, the relative minor of A major">
+<path d="M246.6 124.1 A100 100 0 0 1 246.6 175.9 L208.0 165.5 A60 60 0 0 0 208.0 134.5 Z" fill="currentColor" fill-opacity="0.07" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/>
+<text x="230.0" y="155.0" font-size="12" font-weight="500" fill="currentColor">F♯m</text>
+</g>
+<g aria-label="C sharp minor, the relative minor of E major">
+<path d="M246.6 175.9 A100 100 0 0 1 220.7 220.7 L192.4 192.4 A60 60 0 0 0 208.0 165.5 Z" fill="currentColor" fill-opacity="0.07" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/>
+<text x="219.3" y="195.0" font-size="12" font-weight="500" fill="currentColor">C♯m</text>
+</g>
+<g aria-label="G sharp minor, the relative minor of B major">
+<path d="M220.7 220.7 A100 100 0 0 1 175.9 246.6 L165.5 208.0 A60 60 0 0 0 192.4 192.4 Z" fill="currentColor" fill-opacity="0.07" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/>
+<text x="190.0" y="224.3" font-size="12" font-weight="500" fill="currentColor">G♯m</text>
+</g>
+<g aria-label="D sharp minor or E flat minor, the relative minor of F sharp major">
+<path d="M175.9 246.6 A100 100 0 0 1 124.1 246.6 L134.5 208.0 A60 60 0 0 0 165.5 208.0 Z" fill="#F8C54B" fill-opacity="0.38" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/>
+<text x="150.0" y="235.0" font-size="11" font-weight="500" fill="currentColor"><tspan x="150.0" dy="-3">D♯m</tspan><tspan x="150.0" dy="11">E♭m</tspan></text>
+</g>
+<g aria-label="B flat minor, the relative minor of D flat major">
+<path d="M124.1 246.6 A100 100 0 0 1 79.3 220.7 L107.6 192.4 A60 60 0 0 0 134.5 208.0 Z" fill="currentColor" fill-opacity="0.07" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/>
+<text x="110.0" y="224.3" font-size="12" font-weight="500" fill="currentColor">B♭m</text>
+</g>
+<g aria-label="F minor, the relative minor of A flat major">
+<path d="M79.3 220.7 A100 100 0 0 1 53.4 175.9 L92.0 165.5 A60 60 0 0 0 107.6 192.4 Z" fill="currentColor" fill-opacity="0.07" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/>
+<text x="80.7" y="195.0" font-size="12" font-weight="500" fill="currentColor">Fm</text>
+</g>
+<g aria-label="C minor, the relative minor of E flat major">
+<path d="M53.4 175.9 A100 100 0 0 1 53.4 124.1 L92.0 134.5 A60 60 0 0 0 92.0 165.5 Z" fill="currentColor" fill-opacity="0.07" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/>
+<text x="70.0" y="155.0" font-size="12" font-weight="500" fill="currentColor">Cm</text>
+</g>
+<g aria-label="G minor, the relative minor of B flat major">
+<path d="M53.4 124.1 A100 100 0 0 1 79.3 79.3 L107.6 107.6 A60 60 0 0 0 92.0 134.5 Z" fill="currentColor" fill-opacity="0.07" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/>
+<text x="80.7" y="115.0" font-size="12" font-weight="500" fill="currentColor">Gm</text>
+</g>
+<g aria-label="D minor, the relative minor of F major">
+<path d="M79.3 79.3 A100 100 0 0 1 124.1 53.4 L134.5 92.0 A60 60 0 0 0 107.6 107.6 Z" fill="currentColor" fill-opacity="0.07" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/>
+<text x="110.0" y="85.7" font-size="12" font-weight="500" fill="currentColor">Dm</text>
+</g>
+</g>
+<!-- caption BEGIN -->
+<!-- caption-box 0 0 600 600|600|600 -->
+<g font-family="system-ui, -apple-system, Segoe UI, sans-serif">
+<text x="0" y="626" font-size="15" fill="#2B2B2B" text-anchor="start" font-weight="600">The circle of fifths</text>
+<text x="0" y="645" font-size="12" fill="#555555" text-anchor="start">Twelve keys, a fifth apart, closing into a ring</text>
+</g>
+<!-- caption END -->
+</svg>
