@@ -1,8 +1,6 @@
 ![[circle_of_fifths/resources/images/circle_of_fifths_wheel.svg]]
 
-Go up a fifth, then another, then another. Twelve fifths later you've touched every key and landed back where you started. Bend that line into a ring and you've got the circle of fifths. I call it the compass and the cornerstone of music theory. Mystical? Magical? A little of both. It's also plain arithmetic. In equal temperament, twelve fifths of seven half steps make 84 half steps, seven octaves, so the line closes on itself.
-
-That's the mystery. This chapter unravels it: where the circle comes from (stacking fifths), how to build it, how to use it. By the end you can find the key signature of any key in seconds, name its relative minor, and say which keys sit close together. No table to memorise.
+The circle of fifths is the compass and the cornerstone of music theory. Mystical? Magical? A little of both. This chapter shows where it comes from, how it's built and how it's used. By the end you can find the key signature of any key in seconds, name its relative minor and say which keys sit close together. No table to memorise. You get the basics here; chords and harmony will lean on it again.
 
 1. [[building the circle of fifths]] — climb by fifths from C and watch the ring close.
 2. [[key signatures]] — one new sharp or flat per step, and a trick to read any signature.

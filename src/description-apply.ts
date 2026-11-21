@@ -228,6 +228,15 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
 
   // ---- 2026-11-12-1203: the docked prompt box. An EDITOR VIEW of the Description facet on a score tab (the note on disk stays the only source of truth); the controls' writes reach it through the vault's `modify`.
   const boxes = new Map<HTMLElement, { path: string; handle: PromptBoxHandle; chat: ChatPanelHandle }>();
+  const mounting = new Map<HTMLElement, string>();          // 2026-11-21-1012 (N2): pane element -> the note whose composer is being mounted there (a mount reads the note first): only the NEWEST request for a pane may finish
+  /** 2026-11-21-1012 (N2): a composer acts on ITS note only while its pane still shows that note; otherwise nothing is undone ("Nothing to undo in this note." in the dialog of the note the pane shows) and the pane gets its own composer. */
+  const guarded = (contentEl: HTMLElement, path: string, run: () => void): void => {
+    const now = ports.panes().find((p) => p.contentEl === contentEl);
+    if (now !== undefined && now.path === path) { run(); return; }
+    pb(`undo refused: this composer belongs to ${basename(path)} but its tab shows ${now ? basename(now.path) : 'no note'}`);
+    if (now !== undefined) say(now.path, { type: 'notice', message: 'Nothing to undo in this note.' });
+    syncBoxes();
+  };
   const descriptionOf = async (path: string): Promise<string | null> => { try { return extractDescription(await ports.read(path)); } catch { return null; } };
   /** 2026-11-19-0970 and 2026-11-19-0980: what the composer's text area shows of the note: NOTHING of a phrase's, an arrangement's or a composition's list (the list is in the note and the dialog, the prompt line is for the next sentence). */
   const boxDisk = (family: Family | null, text: string): string => (isList(family) ? '' : extractDescription(text));
@@ -243,9 +252,11 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
       const have = boxes.get(contentEl);
       if (have && have.path === path && have.chat.attached()) continue;
       if (have) { have.chat.dispose(); boxes.delete(contentEl); }
+      mounting.set(contentEl, path);
       void (async () => {
         let note = ''; try { note = await ports.read(path); } catch { return; }
-        if (disposed || boxes.has(contentEl)) return;
+        if (disposed || mounting.get(contentEl) !== path || !ports.panes().some((p) => p.contentEl === contentEl && p.path === path)) return;          // a newer request, or the tab moved to another note while the note was read: this composer is not wanted
+        mounting.delete(contentEl);                                                                          // (a newer request would have changed `mounting`: there is no older box here to take down)
         const family = barPane ? null : familyOfPath(path)!;
         if (!lastText.has(path)) lastText.set(path, note);                                                // 2026-11-13-1214: the text the first control change is compared with
         const chat = mountChatPanel(contentEl, {
@@ -255,9 +266,9 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
             cancel: () => { cancelledAsk.add(path); },
             discard: () => { discardPreview(path); },
             autoApply: () => ports.composerAutoApply?.() === true,
-            menu: barPane || isList(family) ? withListMenu(path, ports.composerMenu?.()) : ports.composerMenu?.(),
+            menu: barPane || isList(family) ? withListMenu(path, ports.composerMenu?.(), contentEl) : ports.composerMenu?.(),
             history: { get: () => sentHistory.get(path) ?? [], set: (next) => { sentHistory.set(path, [...next]); } },
-            ...(barPane || isList(family) ? { undo: (via) => { void undoLast(path, via); }, redo: (via) => { void redoLast(path, via); } } : {}),         // 2026-11-19-0970: Cmd/Ctrl+Z in an EMPTY composer
+            ...(barPane || isList(family) ? { undo: (via) => { guarded(contentEl, path, () => { void undoLast(path, via); }); }, redo: (via) => { guarded(contentEl, path, () => { void redoLast(path, via); }); } } : {}),         // 2026-11-19-0970: Cmd/Ctrl+Z in an EMPTY composer
           },
           store,
           ...(ports.openNote ? { openNote: ports.openNote } : {}),
@@ -780,11 +791,11 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   /** 2026-11-20-1002 (A TYPED UNDO AND REDO, typed-step-core): what its runner borrows: the note's own undo stack, its dialog and its box. */
   const stepPorts: StepPorts = { you: (p, text) => say(p, { type: 'you', text }), canStep, step: (p, w) => stepList(p, w, 'typed'), note: setBoxNote, pb, say: (p, kind, message) => say(p, kind === 'refused' ? { type: 'refused', message, by: 'plugin' } : { type: 'notice', message }) };
   /** The composer's "+" menu of a list note: the New actions (as every tab has them), then "Undo last sentence" and "Redo", shown disabled (never hidden) when there is nothing to undo or redo. */
-  function withListMenu(path: string, base: ReturnType<NonNullable<DescriptionPorts['composerMenu']>>): NonNullable<PromptBoxPorts['menu']> {
+  function withListMenu(path: string, base: ReturnType<NonNullable<DescriptionPorts['composerMenu']>>, contentEl: HTMLElement): NonNullable<PromptBoxPorts['menu']> {
     return {
       items: base?.items ?? [],
       trailing: [{ id: UNDO_ID, label: UNDO_LABEL }, { id: REDO_ID, label: REDO_LABEL }],                  // after "Insert a link to a note": the New actions first, the link, then these two
-      run: (id) => { if (id === UNDO_ID) void undoLast(path, 'menu'); else if (id === REDO_ID) void redoLast(path, 'menu'); else base?.run(id); },
+      run: (id) => { if (id === UNDO_ID) guarded(contentEl, path, () => { void undoLast(path, 'menu'); }); else if (id === REDO_ID) guarded(contentEl, path, () => { void redoLast(path, 'menu'); }); else base?.run(id); },
       ...(base?.pickNote ? { pickNote: base.pickNote } : {}),
       enabled: (id) => (id === UNDO_ID ? canStep(path, 'undo') : id === REDO_ID ? canStep(path, 'redo') : true),
     };

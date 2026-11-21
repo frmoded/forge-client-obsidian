@@ -7,7 +7,7 @@
 // FORGE_MEM_BUDGET_MB (default: half the RAM, at least 2048) is the budget; FORGE_MATRIX_FILE_MB (default 600: measured 2026-11-02, 16 test files at once = 8.3 GB of tooling RSS, about 520 MB each, and the machine fell to 1.5 GB honestly available; on 2026-10-31 34 at once = 11.5 GB) is what one
 // matrix test file is assumed to need; FORGE_TEST_HEAP_MB (default 1024) is the mutation runner's per-test-process heap cap.
 import os from 'node:os';
-import { machineStrain, matrixFileConcurrency, memBudgetMb, readMachine, readingsLine, readSystemMemory, testHeapMb, testRssCapMb, thrashingSentence } from './mem-core.mjs';
+import { compressorHeavy, compressorSentence, machineStrain, matrixFileConcurrency, memBudgetMb, readMachine, readingsLine, readSystemMemory, testHeapMb, testRssCapMb, thrashingSentence } from './mem-core.mjs';
 
 export const DEFAULT_MATRIX_FILE_MB = 600;
 export const matrixFileMb = (env = process.env) => Number(env.FORGE_MATRIX_FILE_MB) || DEFAULT_MATRIX_FILE_MB;
@@ -27,6 +27,11 @@ if (process.argv[1] && import.meta.url === new URL(process.argv[1], 'file:').hre
     const m = readMachine(process.env);
     console.log(readingsLine(m));
     if (machineStrain(m).thrashing) console.log(thrashingSentence(m));
+    process.exit(0);
+  }
+  if (cmd === 'compressor') {      // 2026-11-21-1012 (item 6): the sentence when the memory compressor already holds over 5 GB, else nothing. Always exit 0.
+    const m = readMachine(process.env);
+    if (compressorHeavy(m)) console.log(compressorSentence(m));
     process.exit(0);
   }
   const li = rest.indexOf('--legs');

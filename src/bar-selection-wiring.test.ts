@@ -122,16 +122,15 @@ test('NEW PHRASE FROM THESE BARS, from an extend: asks for a new transform phras
   } finally { r.done(); }
 });
 
-test('Copy, Delete and Move on an EXTEND are a new transform phrase of it (its own Description could not take the step); each says the sentence it writes', async () => {
-  for (const [action, ops] of [
-    ['delete', [{ op: 'delete', runs: [[3, 4]] }]], ['copy', [{ op: 'copy', runs: [[3, 4]] }]],
-    ['move-left', [{ op: 'move', runs: [[3, 4]], by: -1 }]], ['move-right', [{ op: 'move', runs: [[3, 4]], by: 1 }]],
-  ] as const) {
+// 2026-11-21-1012 (N1, deliberate): it said an Extend's own Description "could not take the step" and made a NEW phrase (the stage 1 rule). Since 0980 stage 2 every head takes the structure steps, so an Extend APPENDS like a Take (CCQA sandbox step 5, the runbook).
+test('Copy, Delete and Move on an EXTEND are APPENDED to its own list (the sentence alone, nothing made); each says the sentence it writes', async () => {
+  for (const [action, sentence] of [['delete', 'Delete bars 3 to 4.'], ['copy', 'Copy bars 3 to 4.'], ['move-left', 'Move bars 3 to 4 one bar left.'], ['move-right', 'Move bars 3 to 4 one bar right.']] as const) {
     const q = await rig();
     try {
       q.click(q.bars()[2], { shiftKey: true }); q.click(q.bars()[3], { shiftKey: true });
       await q.act(action);
-      assert.deepEqual(q.made, [{ kind: 'transform', source: 'phrases/phrase_006', ops }], action);
+      assert.deepEqual(q.made, [], `${action}: no new phrase`);
+      assert.deepEqual(q.previews, [{ path: q.previews[0]?.path ?? '', text: sentence }], action);
     } finally { q.done(); }
   }
 });

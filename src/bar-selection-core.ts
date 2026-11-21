@@ -103,11 +103,12 @@ export function planAction(action: SelectionAction, selection: BarSelection, cur
   if (why !== null) return { kind: 'refused', message: why };
   const step = actionStep(action, selection);
   const ofThis = (ops: TransformOp[]): TransformPhrase => ({ kind: 'transform', source: `phrases/${self}`, ops });
-  const forked = current !== null && current.kind === 'transform' && current.overrides !== undefined && Object.keys(current.overrides).length > 0;
+  const overrides = current !== null && (current.kind === 'transform' || current.kind === 'extend' || current.kind === 'morph') ? current.overrides : undefined;
+  const forked = overrides !== undefined && Object.keys(overrides).length > 0;
   const dense = current !== null && current.kind === 'transform' && current.ops.some((o) => !isStructureOp(o));            // a structure step comes before every Thin out and Double up: the list is never re-sorted
-  if (action !== 'new-phrase' && current !== null && current.kind === 'transform' && !forked && !dense) {
-    const ops: TransformOp[] = [...current.ops, step];
-    const next: TransformPhrase = { ...current, ops };
+  if (action !== 'new-phrase' && current !== null && !forked && !dense) {                                                    // 2026-11-21-1012 (N1): every HEAD takes the structure steps as `ops` (0980 stage 2), not only a Take
+    const ops = [...(current.ops ?? []), step] as TransformOp[];
+    const next = { ...current, ops } as PhraseParams;
     // the new step comes after the steps there already are, so its bar numbers are those of the Score on screen
     const valid = validatePhrase(next);
     if (valid.ok === false) return { kind: 'refused', message: valid.message };
@@ -116,6 +117,6 @@ export function planAction(action: SelectionAction, selection: BarSelection, cur
   const params = ofThis([step]);
   const valid = validatePhrase(params);
   if (valid.ok === false) return { kind: 'refused', message: valid.message };
-  const because = action === 'new-phrase' ? 'new phrase' : current !== null && current.kind === 'transform' ? (forked ? 'this phrase has bars you edited, so its numbers are fixed: the change is made as a new phrase of it' : 'this phrase has a Thin out or a Double up, and a step that changes which bars there are comes before them: the change is made as a new phrase of it') : 'this phrase is not a transform: the change is made as a new phrase of it';
+  const because = action === 'new-phrase' ? 'new phrase' : current !== null && (current.kind === 'transform' || forked) ? (forked ? 'this phrase has bars you edited, so its numbers are fixed: the change is made as a new phrase of it' : 'this phrase has a Thin out or a Double up, and a step that changes which bars there are comes before them: the change is made as a new phrase of it') : 'this phrase is not a transform: the change is made as a new phrase of it';
   return { kind: 'new-phrase', params, sentence: describe(valid.value), step, because };
 }

@@ -217,7 +217,10 @@ export function parseSwapUsage(text) {
 export function readMachine(env = process.env) {
   const swap = process.platform === 'darwin' ? parseSwapUsage(run('sysctl', ['-n', 'vm.swapusage'])) : null;
   const mem = readSystemMemory({ ...env, FORGE_MEM_READ_FILE: '' });
-  const real = { load1: os.loadavg()[0], cores: os.cpus().length, swapUsedMb: swap?.usedMb ?? null, swapTotalMb: swap?.totalMb ?? null, availableMb: mem.availableMb, freePercent: mem.freePercent };
+  // 2026-11-21-1012: the compressor's size, from vm_stat; FORGE_VM_STAT_FILE is the text it would give (the tests); when a stand-in machine is named (FORGE_MACHINE_READ_FILE) and no vm_stat, the real compressor is NOT read: a test never depends on the weather
+  const vmText = env.FORGE_VM_STAT_FILE ? (() => { try { return fs.readFileSync(env.FORGE_VM_STAT_FILE, 'utf8'); } catch { return ''; } })() : (env.FORGE_MACHINE_READ_FILE || process.platform !== 'darwin' ? '' : run('vm_stat'));
+  const compressedMb = vmText ? parseVmStat(vmText).compressorMb : null;
+  const real = { load1: os.loadavg()[0], cores: os.cpus().length, swapUsedMb: swap?.usedMb ?? null, swapTotalMb: swap?.totalMb ?? null, availableMb: mem.availableMb, freePercent: mem.freePercent, compressedMb };
   if (env.FORGE_MACHINE_READ_FILE) { try { return { ...real, ...JSON.parse(fs.readFileSync(env.FORGE_MACHINE_READ_FILE, 'utf8')) }; } catch { /* unreadable: the real readings */ } }
   return real;
 }
@@ -235,6 +238,12 @@ export function machineStrain(m) {
 }
 
 const gb = (mb) => (mb / 1024).toFixed(1);
+
+/** 2026-11-21-1012 (item 6): the memory compressor already holding more than 5 GB when the matrix STARTS means the driver's own apps leave no room for two legs of four files (three runs on 2026-11-21 were stopped by the guard at 11.5 GB): the default is --serial with 2 files per leg. */
+export const COMPRESSED_SERIAL_MB = 5120;
+export const compressorHeavy = (m) => typeof m.compressedMb === 'number' && Number.isFinite(m.compressedMb) && m.compressedMb > COMPRESSED_SERIAL_MB;
+export const compressorSentence = (m) => `the memory compressor already holds ${gb(m.compressedMb)} GB (over 5 GB): the matrix runs --serial with 2 files per leg (FORGE_MATRIX_FILE_CONC=<n> chooses another number)`;
+
 /** The line the matrix prints at its start, always. */
 export function readingsLine(m) {
   const swap = Number.isFinite(m.swapTotalMb) && Number.isFinite(m.swapUsedMb) ? `swap ${gb(m.swapUsedMb)} of ${gb(m.swapTotalMb)} GB used` : 'swap unknown';

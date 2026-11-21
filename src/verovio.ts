@@ -5,6 +5,7 @@
 import { ENGRAVING_SCALE, FIT_PAGE_FACTOR, pageWidthFor } from './host-width-core.ts';
 import { dedupeTempoMarks } from './tempo-marks-core.ts';
 import { mnumIntervalFor, renumberMeasures, stripBarNumbers } from './bar-numbers-core.ts';          // 2026-11-16-0902: a bar number at the start of every bar, by position
+import { installEngravingWarningFilter } from './engraving-warnings-core.ts';          // 2026-11-21-1012 (N3): the same engraving warning for every system is one console line with a count
 import { uiFlags } from './ui-flags-core.ts';          // 2026-11-15-2101: the tempo is written above a bar only when it changes
 
 let toolkitPromise: Promise<any> | null = null;
@@ -12,6 +13,7 @@ let toolkitPromise: Promise<any> | null = null;
 async function getToolkit(): Promise<any> {
   if (!toolkitPromise) {
     toolkitPromise = (async () => {
+      installEngravingWarningFilter(console as unknown as Record<string, any>, { now: Date.now, setTimer: (fn, ms) => setTimeout(fn, ms), clearTimer: (h) => clearTimeout(h as ReturnType<typeof setTimeout>) });          // before the runtime starts: it may print as it loads
       const verovio: any = await import('verovio');
       await new Promise<void>((resolve) => {
         if (verovio.module?.calledRun) {

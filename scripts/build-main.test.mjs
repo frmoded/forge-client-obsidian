@@ -94,7 +94,9 @@ test("lean build stays lean in size: code-only, far below the music build, indep
   // 1_509_578 on a working tree: the difference is the stand-ins for the generated files, about 2_000, and the 1004z/1005 hooks). The cap is NOT raised here (the prompt said so). The margin asked for was at least 5_000 bytes: 1_510_599 + 5_000 = 1_515_599 is
   // ABOVE the cap 1_515_000, so the margin is 4_401 bytes and the controller split (more of main.ts and description-apply.ts behind the list-model seam) is the driver's decision.
   // 2026-11-21-1011: the cap is unchanged. The chat history that follows the note (stubs behind the list-model seam, a hook, three thin plugin methods, the store's call sites) and the 18 settings-tab strings that now say "Forge Actions (Beta)" cost lean +1_871 bytes: 1_512_470, so the margin is 2_530 bytes (it was 4_401).
-  assert.ok(lean < 1_515_000, `lean code grew to ${lean} module bytes (code only, generated files stubbed; 1_510_599 at 2026-11-20-1004z, 1_512_470 at 2026-11-21-1011; the cap is 1_515_000, moved on purpose at 2026-11-20-1004)`);
+  // 2026-11-21 (deliberate): no lean users; the cap stays so lean does not rot. The driver said on 2026-11-21 "No one uses lean currently": the controller split of 0997 is CANCELLED and the lean edition is NOT removed. The cap moves from 1_515_000 to 1_540_000:
+  // the real code-only lean size on 2026-11-21 (prompt 1012) was 1_513_783 module bytes, so the cap is that plus about 25_000 (26_217). It is not to be touched again for ordinary features unless the real size passes it.
+  assert.ok(lean < 1_540_000, `lean code grew to ${lean} module bytes (code only, generated files stubbed; 1_510_599 at 2026-11-20-1004z, 1_512_470 at 2026-11-21-1011, 1_513_783 at 2026-11-21-1012; the cap is 1_540_000, moved on purpose at 2026-11-21: no lean users, the cap stays so lean does not rot)`);
   assert.ok(lean * 5 < music, `lean (${lean}) is no longer far below music (${music})`);
 });
 

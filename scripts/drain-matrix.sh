@@ -149,6 +149,12 @@ reap_leftovers() { [ "${FORGE_REAP:-0}" = "1" ] && [ -f "$REAP" ] && bash "$REAP
 reap_leftovers                                   # what an EARLIER killed run left (orphaned test groups, stale worktrees): quiet, orphans only
 step() { echo; echo "== $* ($(( $(date +%s) - T0 ))s)"; }
 
+# 2026-11-21-1012 (item 6): the FIRST line of a run. When the memory compressor already holds over 5 GB the default is --serial with 2 files per leg (FORGE_MATRIX_FILE_CONC, when the driver set one, wins); the guard stopped three runs at 11.5 GB on 2026-11-21.
+if [ "$QUIET_ONLY" != "1" ] && [ "$CLEANUP_ONLY" != "1" ]; then
+  COMPRESSOR_SAYS="$(node "$SCRIPT_DIR/dev/mem-plan.mjs" compressor 2>/dev/null || true)"
+  if [ -n "$COMPRESSOR_SAYS" ]; then printf '%s\n' "$COMPRESSOR_SAYS"; SERIAL=1; [ -z "${FORGE_MATRIX_FILE_CONC:-}" ] && export FORGE_MATRIX_FILE_CONC=2; fi
+fi
+
 # ---- 0. preconditions: loud, before anything is built --------------------------------------------------------------------------------------------------------------
 # 2026-11-18-1200 (rule changed by the driver 2026-11-18): the power guard (see the header): refuse only on battery below 20 % charge, hold the Mac awake, and say how many worktrees an earlier KILLED matrix left registered.
 set +e; power_out="$(node "$SCRIPT_DIR/dev/power-check.mjs" 2>&1)"; power_rc=$?; set -e

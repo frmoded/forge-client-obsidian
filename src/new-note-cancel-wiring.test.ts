@@ -95,8 +95,9 @@ async function world(opts: { prompt?: boolean } = {}) {
   const tabsOn = (p: string) => leaves.filter((l) => l.view?.file?.path === p).length;
   const snapshot = () => JSON.stringify([...store.entries()].sort());
   const act = (action: SelectionAction) => {
-    const plan = planAction(action, selectionOf([1, 2]), EXTEND, 'phrase_015', 5);
-    assert.equal(plan.kind, 'new-phrase', `${action} on a phrase that is not a transform makes a new phrase`);
+    // 2026-11-21-1012 (deliberate): an Extend now APPENDS Copy, Delete and Move (every head takes the steps); a phrase with EDITED bars (overrides) still makes a new phrase of itself, so the cancel flow is driven with one
+    const plan = planAction(action, selectionOf([1, 2]), { ...EXTEND, overrides: { '3': 'bars/bar_008' } }, 'phrase_015', 5);
+    assert.equal(plan.kind, 'new-phrase', `${action} on a phrase with edited bars makes a new phrase`);
     return (plan as Extract<typeof plan, { kind: 'new-phrase' }>).params;
   };
   return {

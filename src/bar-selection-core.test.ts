@@ -130,12 +130,29 @@ test('2026-11-19-0980: a transform that has a Thin out or a Double up makes a NE
   const dbl = planAction('copy', sel(1), { ...PLAIN, ops: [{ op: 'double_up', first: 1, last: 2, grid: 16 }] }, 'phrase_007', 8);
   assert.equal(dbl.kind, 'new-phrase');
 });
-test('A PHRASE THAT CANNOT TAKE THE STEP INTO ITS OWN DESCRIPTION makes a new transform phrase of itself instead: an extend, a morph, a mix, a transform with edited bars', () => {
-  for (const current of [EXTEND, { kind: 'morph', a: 'bar_005', b: 'bar_007', bars: 5, order: 'musical', seed: 0 }, { kind: 'mix', a: 'bar_005', b: 'bar_007', weight: 0.5, threshold: 0.5, ghost: false }] as PhraseParams[]) {
-    const p = planAction('delete', sel(2), current, 'phrase_007', 5);
-    assert.equal(p.kind, 'new-phrase', current.kind);
-    assert.ok(p.kind === 'new-phrase' && p.sentence === 'Take [[phrase_007]]. Delete bar 2.' && /not a transform/.test(p.because));
+// 2026-11-21-1012 (N1, deliberate): the 2026-11-19-0980 stage 2 made the structure steps (Keep, Delete, Copy, Move) valid after ANY head: an Extend, a Mix and a Morph carry them as `ops`. The menu kept its stage 1 rule (only a Take appended; an Extend made a NEW phrase),
+// so the CCQA sandbox step 5 and the runbook ("a phrase with a head and no Thin out or Double up appends") disagreed with the code. The code was stale: every head appends, a phrase with edited bars (overrides) or a Take with a Thin out / Double up still makes a new phrase.
+const MORPH: PhraseParams = { kind: 'morph', a: 'bar_005', b: 'bar_007', bars: 5, order: 'musical', seed: 0 };
+const MIX: PhraseParams = { kind: 'mix', a: 'bar_005', b: 'bar_007', weight: 0.5, threshold: 0.5, ghost: false };
+test('2026-11-21-1012 (N1): an Extend, a Mix and a Morph APPEND the step to their own list, like a Take: the line is the step, the text is the whole Description the grammar reads back (the head, then the step)', () => {
+  for (const current of [EXTEND, MORPH, MIX]) {
+    const p = planAction('copy', sel(1, 2), current, 'phrase_007', 8);
+    assert.equal(p.kind, 'preview', current.kind);
+    if (p.kind !== 'preview') continue;
+    assert.equal(p.sentence, 'Copy bars 1 to 2.', current.kind);
+    const back = parse(p.text, VAULT); assert.ok(back.ok, `${current.kind}: ${p.text}`);
+    assert.equal((back as { params: PhraseParams }).params.kind, current.kind, 'the head is still the head');
+    assert.deepEqual(((back as { params: { ops?: unknown[] } }).params.ops ?? []).slice(-1), [p.step], `${current.kind}: the step is the last op`);
   }
+  const twice = planAction('delete', sel(2), { ...EXTEND, ops: [{ op: 'copy', runs: [[1, 1]] }] } as PhraseParams, 'phrase_007', 8);
+  assert.ok(twice.kind === 'preview' && twice.sentence === 'Delete bar 2.', JSON.stringify(twice));
+});
+test('2026-11-21-1012 (N1): a phrase with EDITED bars (overrides) still makes a new phrase of itself whatever its head, and "New phrase from these bars" always does', () => {
+  for (const current of [{ ...EXTEND, overrides: { '2': 'bars/bar_007' } }, { ...MORPH, overrides: { '2': 'bars/bar_007' } }] as PhraseParams[]) {
+    const p = planAction('delete', sel(2), current, 'phrase_007', 5);
+    assert.ok(p.kind === 'new-phrase' && p.sentence === 'Take [[phrase_007]]. Delete bar 2.' && /bars you edited/.test(p.because), current.kind);
+  }
+  for (const current of [EXTEND, MORPH, MIX]) assert.equal(planAction('new-phrase', sel(2, 3), current, 'phrase_007', 8).kind, 'new-phrase');
   const forked: TransformPhrase = { ...PLAIN, overrides: { '2': 'bars/bar_007' } };
   const f = planAction('move-left', sel(3), forked, 'phrase_007', 8);
   assert.ok(f.kind === 'new-phrase' && f.sentence === 'Take [[phrase_007]]. Move bar 3 one bar left.' && /bars you edited/.test(f.because));
@@ -214,6 +231,6 @@ test('a phrase renamed to something else than phrase_N IS a source (2026-11-16-1
   assert.match((nonsense as { message: string }).message, /source/i);
   const made = planAction('new-phrase', sel(2, 3), EXTEND, 'phrase_007', 8);
   assert.ok(made.kind === 'new-phrase' && made.because === 'new phrase');
-  const other = planAction('delete', sel(2), EXTEND, 'phrase_007', 8);
-  assert.ok(other.kind === 'new-phrase' && other.because === 'this phrase is not a transform: the change is made as a new phrase of it');
+  const other = planAction('delete', sel(2), null, 'phrase_007', 8);          // 2026-11-21-1012 (deliberate): no phrase read (null) is the case left for this wording; an Extend now appends
+  assert.ok(other.kind === 'new-phrase' && /not a transform/.test(other.because), JSON.stringify(other));
 });
