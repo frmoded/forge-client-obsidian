@@ -50,8 +50,9 @@ export interface PromptBoxPorts {
     trailing?: readonly ComposerMenuItem[];
   };
   /** 2026-11-19-0970 (the list model): Cmd/Ctrl+Z in an EMPTY text area, and Shift+Cmd/Ctrl+Z (redo). Absent = the key is the browser's own (a bar, a note that is not a list; a phrase, an arrangement and a composition have it since 2026-11-19-0980). */
-  undo?(): void | Promise<void>;
-  redo?(): void | Promise<void>;
+  /** `via` says how it was asked for (the undo trace of the controller): the field's own key, or the host's beforeinput historyUndo. */
+  undo?(via?: 'key' | 'beforeinput'): void | Promise<void>;
+  redo?(via?: 'key' | 'beforeinput'): void | Promise<void>;
   /** The sentences sent from this note (per note, kept in memory by the controller), oldest first. */
   history?: { get(): readonly string[]; set(next: readonly string[]): void };
 }
@@ -188,8 +189,8 @@ export function mountPromptBox(parent: HTMLElement, ports: PromptBoxPorts, initi
     dispatch({ type: 'enter' });
   };
 
-  async function runUndo(which: 'undo' | 'redo'): Promise<void> {
-    try { await (which === 'undo' ? ports.undo : ports.redo)?.(); }
+  async function runUndo(which: 'undo' | 'redo', via: 'key' | 'beforeinput'): Promise<void> {
+    try { await (which === 'undo' ? ports.undo : ports.redo)?.(via); }
     catch (e) { console.error(`[forge-composer] ${which} threw`, e); if (!disposed) { note = `${which === 'undo' ? 'Undo' : 'Redo'} failed: ${(e as Error)?.message ?? e}`; paint(); } }
   }
 
@@ -203,13 +204,13 @@ export function mountPromptBox(parent: HTMLElement, ports: PromptBoxPorts, initi
     if ((which === 'undo' ? ports.undo : ports.redo) === undefined) return;
     e.preventDefault();
     if (Date.now() - tookKeyAt < 400) return;
-    void runUndo(which);
+    void runUndo(which, 'beforeinput');
   });
   text.addEventListener('input', () => { note = null; walking = -1; s = typed(s, text.value); dispatch({ type: 'type', text: text.value }); });
   text.addEventListener('keydown', (e) => {
     const k = e as KeyboardEvent;
     if ((k.metaKey || k.ctrlKey) && !k.altKey && (k.key === 'z' || k.key === 'Z') && text.value === '' && !isWorking(c) && remote === null && (k.shiftKey ? ports.redo : ports.undo) !== undefined) {   // 2026-11-19-0970: in an EMPTY composer the key undoes (or, with Shift, redoes) the last SENTENCE of the note; with text in the field it is the browser's own text undo
-      e.preventDefault(); tookKeyAt = Date.now(); void runUndo(k.shiftKey ? 'redo' : 'undo'); return;
+      e.preventDefault(); tookKeyAt = Date.now(); void runUndo(k.shiftKey ? 'redo' : 'undo', 'key'); return;
     }
     if (k.key === 'Enter') {
       if (k.shiftKey || k.isComposing || k.keyCode === 229) return;       // Shift+Enter: the browser's own new line; an IME composition: Enter only confirms it

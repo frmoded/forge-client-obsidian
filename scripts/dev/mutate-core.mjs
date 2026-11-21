@@ -171,13 +171,19 @@ export function buildMap(texts) {
     imports.set(f, imported);
     // a file whose text merely QUOTES file names (a test of this tool, with fixtures) says so with the marker below and then has import edges only
     if (!/mutate-map: imports only/.test(text)) for (const tok of text.match(/[A-Za-z0-9_.-]+\.(?:ts|tsx|mjs|cjs|js)(?![A-Za-z0-9_])/g) ?? []) {
-      const hits = byBase.get(tok); if (hits) for (const h of hits) edges.add(h);
+      const hits = byBase.get(tok); if (hits) for (const h of hits) { if (!isTestFile(f) && isTestFile(h)) continue; edges.add(h); }          // 2026-11-20-1004z: a SOURCE never depends on a test (its comment naming "x-engine.test.ts" made every light test that imports it an engine test)
     }
+    // 2026-11-20-1004z: an edition seam `X-selected.ts` is committed pointing at ONE implementation and the lean build redirects it to the other: it reaches `X.full.ts`, `X.lean.ts` (and `X.music.ts`) whichever is written in it
+    const seam = /^(.*)-selected\.ts$/.exec(f);
+    if (seam) for (const ext of ['full', 'lean', 'music']) { const sib = `${seam[1]}.${ext}.ts`; if (known.has(sib)) { edges.add(sib); imported.add(sib); } }
     edges.delete(f);
     deps.set(f, edges);
   }
-  const closureOf = (start, graph = deps) => {
-    const seen = new Set([start]), stack = [start];
+  // 2026-11-20-1004z: the FIRST hop of a closure may use every edge of the starting file (a test that reads `main.ts` by name depends on it); every later hop follows IMPORTS only. A file name mentioned in a source's comment is not a
+  // dependency of whatever imports that source (phrase-core.ts says "pyodide-host.ts"): with mention edges at every hop, 484 of 640 tests were in every pool and the light wiring tests were classed as engine tests and skipped.
+  const closureOf = (start, graph = imports, first = deps) => {
+    const seen = new Set([start]), stack = [];
+    for (const d of first.get(start) ?? []) if (!seen.has(d)) { seen.add(d); stack.push(d); }
     while (stack.length) for (const d of graph.get(stack.pop()) ?? []) if (!seen.has(d)) { seen.add(d); stack.push(d); }
     seen.delete(start);
     return seen;
@@ -189,8 +195,8 @@ export function buildMap(texts) {
     const all = [f, ...closure];
     tests.set(f, {
       direct: deps.get(f), closure,
-      engine: all.some((x) => BOOTS_ENGINE.test(texts.get(x) ?? '')),
-      chrome: [f, ...closureOf(f, imports)].some((x) => CHROME_FILE.test(x)),
+      engine: [f, ...closureOf(f, imports, imports)].some((x) => BOOTS_ENGINE.test(texts.get(x) ?? '')),          // 2026-11-20-1004z: a test boots the engine through what it IMPORTS (like `chrome`), not through a file name a comment mentions (phrase-core.ts says "pyodide-host.ts")
+      chrome: [f, ...closureOf(f, imports, imports)].some((x) => CHROME_FILE.test(x)),
     });
   }
   return { tests, deps };

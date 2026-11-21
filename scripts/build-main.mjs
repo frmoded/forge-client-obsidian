@@ -87,6 +87,23 @@ export function stubInlinedAssetsPlugin() {
   };
 }
 
+/** 2026-11-20-1004z: for SIZE MEASURES only (never a shipped build): the three files a build GENERATES (src/asset-manifest.generated.ts, src/build-stamp.generated.ts, src/version-constant.generated.ts) are replaced by fixed stand-ins, so the size of CODE is the same
+ *  in a working tree, a clean export and the matrix's worktree (the asset manifest alone differs by about 2 KB between them). The stand-ins export exactly what the code imports. */
+export function stubGeneratedFilesPlugin() {
+  const STUBS = {
+    "asset-manifest": "export const HYDRATABLE_ASSETS = {}; export const HYDRATABLE_TOTAL_BYTES = 0;",
+    "build-stamp": 'export const BUILD_STAMP = { sha: "stub", dirty: false, builtAt: "1970-01-01T00:00:00.000Z" };',
+    "version-constant": 'export const PLUGIN_VERSION_AT_BUILD = "0.0.0";',
+  };
+  return {
+    name: "forge-stub-generated-files",
+    setup(b) {
+      b.onResolve({ filter: /(^|\/)(asset-manifest|build-stamp|version-constant)\.generated(\.ts)?$/ }, (a) => ({ path: a.path.replace(/^.*\//, "").replace(/\.generated(\.ts)?$/, ""), namespace: "forge-stub-generated" }));
+      b.onLoad({ filter: /.*/, namespace: "forge-stub-generated" }, (a) => ({ contents: STUBS[a.path], loader: "js" }));
+    },
+  };
+}
+
 export async function buildMain({ edition, outfile = path.join(ROOT, "main.js"), stubInlinedAssets = false, stamp } = {}) {
   const ed = resolveEdition(edition ?? process.env.FORGE_EDITION);
   const buildInfo = stamp === undefined ? readGeneratedBuildStamp() : stamp;

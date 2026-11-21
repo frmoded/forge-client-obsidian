@@ -9,7 +9,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
-import { buildMain, resolveEdition, editionPlugin, stubInlinedAssetsPlugin } from "./build-main.mjs";
+import { buildMain, resolveEdition, editionPlugin, stubInlinedAssetsPlugin, stubGeneratedFilesPlugin } from "./build-main.mjs";
 
 // Strings that only appear when verovio / html-midi-player and their transitive chain
 // (@magenta/music -> tone -> standardized-audio-context) are bundled. Each is a package or module
@@ -90,7 +90,10 @@ test("lean build stays lean in size: code-only, far below the music build, indep
   // 2026-11-20-1004 (deliberate): the cap moves from 1_510_000 to 1_515_000 (+5_000). The thin hooks of the failed-prompt review queue and of the sentence service (1003) live in the SHARED controller (description-apply.ts: a fp?.call at each place a sentence ends,
   // the request fields, the lines reader's call): lean code grew from 1_504_878 (1001zz) to 1_509_578 on a working tree (+4_700: the thin hooks, the settings toggle's `if (listModel.present)` and the main.ts registration), and the matrix's tree measures 2_041 MORE than a working tree (its generated asset manifest and stamps), so about 1_511_600 there: over the old cap.
   // Everything else of both features is behind the list-model seam (no sentinel in lean: asserted above); the lean stubs add 0.4 KB. The margin is now about 3_400 bytes. The size test should measure with the generated files stubbed so a working tree and the matrix agree (a recommendation sent to forge-core).
-  assert.ok(lean < 1_515_000, `lean code grew to ${lean} module bytes (1_504_878 at 2026-11-20-1001zz; the cap moved to 1_515_000 at 2026-11-20-1004)`);
+  // 2026-11-20-1004z (1): the measure now stubs the three generated files too (codeSizeOf), so a working tree, a clean export and the matrix's worktree give the SAME number: the real code-only lean size at this commit is 1_510_599 bytes (1004 said
+  // 1_509_578 on a working tree: the difference is the stand-ins for the generated files, about 2_000, and the 1004z/1005 hooks). The cap is NOT raised here (the prompt said so). The margin asked for was at least 5_000 bytes: 1_510_599 + 5_000 = 1_515_599 is
+  // ABOVE the cap 1_515_000, so the margin is 4_401 bytes and the controller split (more of main.ts and description-apply.ts behind the list-model seam) is the driver's decision.
+  assert.ok(lean < 1_515_000, `lean code grew to ${lean} module bytes (code only, generated files stubbed; 1_510_599 at 2026-11-20-1004z; the cap is 1_515_000, moved on purpose at 2026-11-20-1004)`);
   assert.ok(lean * 5 < music, `lean (${lean}) is no longer far below music (${music})`);
 });
 
@@ -111,6 +114,7 @@ const LIST_MODEL_CORES = [
   "bar-list-controller", "bar-list-core", "bar-grammar-core", "bar-box-host-core", "bar-list-note-core",
   "duplicate-sentence-core", "duplicate-note-core", "duplicate-undo-core",
   "phrase-steps-lineage-core",          // 2026-11-20-1000 (deliberate): the Inspector through the step lines (a Score-only core)
+  "undo-trace-core",  // 2026-11-20-1004z (deliberate): the undo-trigger trace (music-composer code)
   "rename-follow-core", "rename-description-core",  // 2026-11-20-1005 (deliberate): the description follows a rename (music-composer notes only)
   "failed-prompt-core", "failed-prompt-store", "failed-prompt-tab-dom", "failed-prompt-setup-core",  // 2026-11-20-1004 (deliberate): the failed-prompt review queue (the record, its store, the review tab's DOM, the setup): composer-only code
   "service-lines-core",  // 2026-11-20-1003 (deliberate): the sentence service as the fluent front end (the grammar table, the lines reader): composer-only code
@@ -154,20 +158,40 @@ test("0997 music build: DOES contain every list-model core (guards the lean asse
 // 2026-11-20-1001zz: the lean size must be a size of CODE, not of where esbuild was run. esbuild writes a path comment before every module (`// src/x.ts`, `// ../../node_modules/y/z.js`), and those comments are as long as the path from the directory the build ran in to the module: the SAME source gives a
 // different file size from another working directory (the matrix builds in a worktree whose siblings and node_modules are symlinks: 1_517_461 bytes there, 1_515_420 in the working tree). The measure that does not move is what esbuild itself counts for each input module (`bytesInOutput`, the module's own
 // code, no comments, no wrapper): the sum over every input of the one output.
-async function codeSizeOf(edition, absWorkingDir) {
+async function codeSizeOf(edition, absWorkingDir, extraPlugins = []) {
   const require = createRequire(import.meta.url);
   const { build } = require("esbuild");
   const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
   const r = await build({
     entryPoints: [path.join(root, "src", "main.ts")], bundle: true, platform: "node", format: "cjs", write: false, metafile: true, logLevel: "silent", absWorkingDir,
     external: ["obsidian", "@codemirror/view", "@codemirror/state", "@codemirror/language"],
-    plugins: [editionPlugin(edition), stubInlinedAssetsPlugin()],
+    plugins: [...extraPlugins, editionPlugin(edition), stubInlinedAssetsPlugin(), stubGeneratedFilesPlugin()],          // 2026-11-20-1004z: code only: the generated files are stand-ins too
     outfile: path.join(os.tmpdir(), `forge-size-${edition}.js`),
   });
   const out = Object.values(r.metafile.outputs)[0];
   return { file: Buffer.byteLength(r.outputFiles[0].text), modules: Object.values(out.inputs).reduce((n, i) => n + i.bytesInOutput, 0) };
 }
 const SIZE_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+
+// 2026-11-20-1004z (1): the three GENERATED files (src/asset-manifest.generated.ts, src/build-stamp.generated.ts, src/version-constant.generated.ts) are regenerated by a build and carry things that differ between a working tree, a clean export and the matrix's
+// worktree (the asset manifest lists every hydratable asset the checkout has: 2_486 bytes in a working tree, 2_041 more in the matrix's). So the same SOURCE measured 2_041 bytes apart (1004: 1_511_816 here, about 1_513_900 there, against one cap). The size
+// of CODE must not depend on them: the measure stubs all three. This test changes what the real generated file says (a manifest with 60 more entries, a longer stamp) UNDER the measure and wants the same number.
+const biggerGenerated = () => ({
+  name: "test-bigger-generated-files",
+  setup(b) {
+    b.onLoad({ filter: /src\/asset-manifest\.generated\.ts$/ }, () => ({ loader: "ts", contents: `export interface HydratableAsset { relpath: string; sha256: string; bytes: number }\nexport const HYDRATABLE_ASSETS: Record<string, HydratableAsset> = {${Array.from({ length: 60 }, (_, i) => `"engine/file_${i}.whl": { relpath: "engine/file_${i}.whl", sha256: "${"ab".repeat(32)}", bytes: ${1000 + i} }`).join(",")}};\nexport const HYDRATABLE_TOTAL_BYTES = 999999999;` }));
+    b.onLoad({ filter: /src\/build-stamp\.generated\.ts$/ }, () => ({ loader: "ts", contents: `export const BUILD_STAMP = {"sha":"${"f".repeat(40)}","dirty":true,"builtAt":"2099-12-31T23:59:59.999Z","padding":"${"x".repeat(200)}"} as const;` }));
+    b.onLoad({ filter: /src\/version-constant\.generated\.ts$/ }, () => ({ loader: "ts", contents: `export const PLUGIN_VERSION_AT_BUILD = "123.456.789-with-a-long-suffix";` }));
+  },
+});
+test("1004z: the lean and the music code size do NOT depend on what the generated files say (asset manifest, build stamp, version constant): the same source is the same number in a working tree, a clean export and the matrix's worktree", async () => {
+  for (const edition of ["lean", "music"]) {
+    const plain = await codeSizeOf(edition, SIZE_ROOT);
+    const bigger = await codeSizeOf(edition, SIZE_ROOT, [biggerGenerated()]);
+    assert.equal(bigger.modules, plain.modules, `${edition}: ${plain.modules} bytes as the files are, ${bigger.modules} with bigger generated files`);
+  }
+});
+
 
 test("the lean code-only size is the same whichever directory esbuild runs from (the FILE size is not: the path comments move)", async () => {
   const here = await codeSizeOf("lean", SIZE_ROOT);

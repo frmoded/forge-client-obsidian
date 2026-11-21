@@ -22,6 +22,7 @@ import { CUSTOM_BANNER } from './phrase-notes-core.ts';
 import type { GrammarParams, GrammarVault } from './phrase-grammar-core.ts';
 import { buildPlanRequest, interpretPlanResponse, type PlanPayload } from './sentence-plan-core.ts';
 import type { FailedPromptsPort } from './failed-prompt-setup-core.ts';
+import type { UndoVia } from './undo-trace-core.ts';
 import { FAMILY_SERVICE_VERSION, OLD_FAMILY_SERVICE, buildFamilyPlanRequest, compositionLoopRefusal, familyRecipeSteps, interpretFamilyResponse } from './sentence-plan-families-core.ts';
 import { versionAtLeast } from './notebook-request-core.ts';
 import { readCompositionNote } from './composition-core.ts';
@@ -127,8 +128,8 @@ export interface DescriptionController {
   /** The click on a bar while the phrase composer has text. 2026-11-19-0996b: with a bar word FIRST in the text (Duplicate, Copy, Move, Delete, Remove, Keep, Morph, Mix, Extend) it inserts ` bar 3` (then ` and bar 5`) at the caret (`bar` = the bar's number in the Score now); 2026-11-19-0992a: with any other text the link ` [[name]]` of the note `noteId` (a lineage id like `bars/bar_007`) goes in at the caret. Focus back, no preview, no pin. */
   duplicateClick(path: string, noteId: string | null, bar?: number | null): Promise<{ ok: boolean; message: string }>;
   /** 2026-11-19-0970 (the list model): take back the last sentence of an arrangement's or composition's list (Cmd/Ctrl+Z in an empty composer, the "+" menu), and put it back. One write each; the dialog says what was removed or added again. */
-  undoLast(path: string): Promise<{ ok: boolean; message: string }>;
-  redoLast(path: string): Promise<{ ok: boolean; message: string }>;
+  undoLast(path: string, via?: UndoVia): Promise<{ ok: boolean; message: string }>;
+  redoLast(path: string, via?: UndoVia): Promise<{ ok: boolean; message: string }>;
   /** Is there a sentence to take back / to put back (the menu items are shown disabled when not)? Answered from the last text this controller saw of the note. */
   canUndo(path: string): boolean;
   canRedo(path: string): boolean;
@@ -150,6 +151,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   const sentHistory = new Map<string, string[]>();                // 2026-11-17-2001: the sentences sent from each note (Up recalls them), in memory
   const askMessage = new Map<string, string>();                   // 2026-11-17-2001: why the last service request ended without a preview (a drop, a refusal): the preview's answer to the composer
   const asked = new Map<string, { sentence: string; question: string }>();                       // 2026-11-20-1003: the clarifying question the service last asked of this note: the NEXT sentence that needs the service goes back with it, once
+  const undoTrace = listModel.trace.create({ now: Date.now, expose: globalThis });          // 2026-11-20-1004z (4a): music edition only (lean: a stub that keeps nothing)
   const fp = listModel.review.track(ports, familyOfPath);          // 2026-11-20-1004: the failed-prompt review queue's bookkeeping (null: no queue)
   const cancelledAsk = new Set<string>();                         // 2026-11-17-2001: Esc while the service thinks: its answer is dropped
   const looked = new WeakMap<HTMLElement, string>();              // pane element -> the note path it was last looked at for (a pane is read once per note it shows)
@@ -251,7 +253,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
             autoApply: () => ports.composerAutoApply?.() === true,
             menu: barPane || isList(family) ? withListMenu(path, ports.composerMenu?.()) : ports.composerMenu?.(),
             history: { get: () => sentHistory.get(path) ?? [], set: (next) => { sentHistory.set(path, [...next]); } },
-            ...(barPane || isList(family) ? { undo: () => { void undoLast(path); }, redo: () => { void redoLast(path); } } : {}),         // 2026-11-19-0970: Cmd/Ctrl+Z in an EMPTY composer
+            ...(barPane || isList(family) ? { undo: (via) => { void undoLast(path, via); }, redo: (via) => { void redoLast(path, via); } } : {}),         // 2026-11-19-0970: Cmd/Ctrl+Z in an EMPTY composer
           },
           store,
           ...(ports.openNote ? { openNote: ports.openNote } : {}),
@@ -736,7 +738,8 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   }
 
   /** Undo (Cmd/Ctrl+Z in an empty composer, the "+" menu): the last sentence comes off the list and the note is recomputed, ONE write. */
-  async function stepList(path: string, which: 'undo' | 'redo'): Promise<{ ok: boolean; message: string }> {
+  async function stepList(path: string, which: 'undo' | 'redo', via: UndoVia = 'other'): Promise<{ ok: boolean; message: string }> {
+    undoTrace.record(via, which, path);          // 2026-11-20-1004z (4a): which way in asked (in memory, the note name only)
     if (isBarPath(path)) return bar.stepBar(path, which);
     const family = familyOfPath(path);
     if (!isList(family)) return { ok: false, message: 'Only an arrangement or a composition keeps a list of sentences.' };
@@ -761,8 +764,8 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     say(path, { type: 'notice', message: out.message });
     return { ok: out.state === 'removed', message: out.message };
   }
-  const undoLast = (path: string) => stepList(path, 'undo');
-  const redoLast = (path: string) => stepList(path, 'redo');
+  const undoLast = (path: string, via?: UndoVia) => stepList(path, 'undo', via);
+  const redoLast = (path: string, via?: UndoVia) => stepList(path, 'redo', via);
   const canStep = (path: string, which: 'undo' | 'redo'): boolean => {
     if (isBarPath(path)) return bar.canStepBar(path, which, lastText.get(path));
     const family = familyOfPath(path), text = lastText.get(path);
@@ -771,13 +774,13 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     return which === 'undo' ? stackOf(path).canUndo(list) : stackOf(path).canRedo(list);
   };
   /** 2026-11-20-1002 (A TYPED UNDO AND REDO, typed-step-core): what its runner borrows: the note's own undo stack, its dialog and its box. */
-  const stepPorts: StepPorts = { you: (p, text) => say(p, { type: 'you', text }), canStep, step: stepList, note: setBoxNote, pb, say: (p, kind, message) => say(p, kind === 'refused' ? { type: 'refused', message, by: 'plugin' } : { type: 'notice', message }) };
+  const stepPorts: StepPorts = { you: (p, text) => say(p, { type: 'you', text }), canStep, step: (p, w) => stepList(p, w, 'typed'), note: setBoxNote, pb, say: (p, kind, message) => say(p, kind === 'refused' ? { type: 'refused', message, by: 'plugin' } : { type: 'notice', message }) };
   /** The composer's "+" menu of a list note: the New actions (as every tab has them), then "Undo last sentence" and "Redo", shown disabled (never hidden) when there is nothing to undo or redo. */
   function withListMenu(path: string, base: ReturnType<NonNullable<DescriptionPorts['composerMenu']>>): NonNullable<PromptBoxPorts['menu']> {
     return {
       items: base?.items ?? [],
       trailing: [{ id: UNDO_ID, label: UNDO_LABEL }, { id: REDO_ID, label: REDO_LABEL }],                  // after "Insert a link to a note": the New actions first, the link, then these two
-      run: (id) => { if (id === UNDO_ID) void undoLast(path); else if (id === REDO_ID) void redoLast(path); else base?.run(id); },
+      run: (id) => { if (id === UNDO_ID) void undoLast(path, 'menu'); else if (id === REDO_ID) void redoLast(path, 'menu'); else base?.run(id); },
       ...(base?.pickNote ? { pickNote: base.pickNote } : {}),
       enabled: (id) => (id === UNDO_ID ? canStep(path, 'undo') : id === REDO_ID ? canStep(path, 'redo') : true),
     };
