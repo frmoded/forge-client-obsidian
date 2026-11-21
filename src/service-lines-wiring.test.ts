@@ -7,7 +7,6 @@
 //   * malicious answers (markup, an enormous answer, too many lines) never reach the list. Written RED first.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Window } from 'happy-dom';
 
 import { dialogEntries } from './test-support/dialog-view.ts';
 import { createDescriptionController } from './description-apply.ts';
@@ -18,56 +17,11 @@ import { readBarLines } from './bar-list-note-core.ts';
 import { PHRASE_VAULT, PLAYGROUND_PHRASES, asListNote } from './test-support/phrase-list-fixtures.ts';
 import { PLAYGROUND_BARS } from './test-support/bar-list-fixtures.ts';
 
-const win: any = new Window({ url: 'http://localhost/' });
-const PH = 'phrases/phrase_001.md', ARR = 'arrangements/arr_001.md', BAR = 'bars/bar_001.md';
-const EXTEND = 'Extend [[bar_005]] to 4 bars, repeating with fills.';
-const SECRET_BODY = 'SECRET-BODY-TEXT-DO-NOT-SEND';
-const OWN_KEY = 'sk-ant-OWNKEY-0123456789abcdef0123456789abcdef';
-
-type Req = Record<string, unknown>;
-type Svc = (req: Req) => { status: number; json: unknown } | Promise<{ status: number; json: unknown }>;
-function rig(opts: { path?: string; note?: string; service: Svc; drawn?: number; configured?: boolean }) {
-  const path = opts.path ?? PH;
-  const store = new Map<string, string>();
-  for (const b of PHRASE_VAULT.bars) store.set(`bars/${b}.md`, PLAYGROUND_BARS[b] ?? PLAYGROUND_BARS['bar_001']);
-  for (const [n, t] of Object.entries(PLAYGROUND_PHRASES)) store.set(`phrases/${n}.md`, asListNote(t, n));
-  store.set('arrangements/arr_001.md', emptyArrangementNote('arr_001')); store.set('kits/rock.md', '---\ntype: data\ncontent_type: json\n---\n'); store.set('kits/latin.md', '---\ntype: data\ncontent_type: json\n---\n');
-  store.set(path, opts.note ?? (path.startsWith('arrangements/') ? emptyArrangementNote('x') : path.startsWith('bars/') ? PLAYGROUND_BARS['bar_001'] : emptyPhraseNote('x')).replace(/^---\n/, `---\nnotes_to_self: ${SECRET_BODY}\n`));
-  const requests: Req[] = []; const traces: string[] = [];
-  const panes: Array<{ path: string; contentEl: HTMLElement; tab?: boolean }> = [];
-  const ports = {
-    ...descriptionPortsFor({
-      read: async (p) => { const t = store.get(p); if (t === undefined) throw new Error('File not found'); return t; },
-      process: async (p, fn) => { await Promise.resolve(); const cur = store.get(p)!; const next = fn(cur); if (next !== cur) store.set(p, next); },
-      basenamesIn: (folder) => [...store.keys()].filter((k) => k.startsWith(`${folder}/`)).map((k) => k.slice(folder.length + 1).replace(/\.md$/, '')),
-      panes: () => panes, setTimer: () => 1, clearTimer: () => {}, trace: (l: string) => { traces.push(l); }, warn: () => {},
-    }, {
-      askPlan: async (payload: unknown) => { requests.push(JSON.parse(JSON.stringify(payload))); return opts.service(payload as Req); },
-      planConfigured: () => opts.configured !== false,
-      composerAutoApply: () => true,
-      ownKey: () => OWN_KEY,
-    } as never),
-    drawSeed: () => 7,
-  };
-  const ctl = createDescriptionController(ports as never);
-  const el = win.document.createElement('div'); win.document.body.appendChild(el);
-  if (opts.drawn !== undefined) { const host = win.document.createElement('div'); host.className = 'forge-rhythm-score-host'; host.innerHTML = `<svg>${'<g class="measure"></g>'.repeat(opts.drawn)}</svg>`; el.appendChild(host); }
-  panes.push({ path, contentEl: el, tab: true });
-  const flush = async () => { for (let i = 0; i < 400; i++) await Promise.resolve(); };
-  const field = () => el.querySelector('.forge-prompt-box-text') as HTMLTextAreaElement;
-  const type = (t: string) => { field().value = t; field().dispatchEvent(new win.Event('input', { bubbles: true })); };
-  const press = async (init: Record<string, unknown>) => { field().dispatchEvent(new win.KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init })); await flush(); };
-  const enter = () => press({ key: 'Enter' });
-  const list = () => (path.startsWith('bars/') ? (readBarLines(store.get(path)!)?.lines ?? []).filter((l) => !/^Start with /.test(l)) : extractDescription(store.get(path)!).split('\n').filter((l) => l.trim() !== '').map((l) => l.replace(/^\s*\d+[.)]\s+/, '')));
-  const texts = () => dialogEntries(el).map((e) => e.text);
-  const kinds = () => dialogEntries(el).map((e) => e.kind);
-  const suggestion = () => [...el.querySelectorAll('.forge-chat-suggestion-description')].pop()?.textContent ?? '';
-  return { ctl, el, store, requests, traces, type, enter, press, list, texts, kinds, suggestion, ready: async () => { await ctl.inspect(path); await flush(); }, writes: () => [...store.entries()].filter(([k]) => k === path).length,
-    say: async (s: string) => { type(s); await enter(); } };
-}
-type Rig = ReturnType<typeof rig>;
-const lines = (...l: string[]) => async () => ({ status: 200, json: { ok: true, lines: l } });
-const phraseWithHead = async (svc: Svc, drawn = 4): Promise<Rig> => { const r = rig({ service: svc, drawn }); await r.ready(); r.type(EXTEND); await r.enter(); assert.deepEqual(r.list(), [EXTEND]); return r; };
+import { PH, ARR, BAR, EXTEND, SECRET_BODY, OWN_KEY, rig, lines, phraseWithHead, win, type Req, type Svc, type Rig } from './test-support/service-lines-rig.ts';
+import { splitSaid } from './sentence-list-core.ts';
+// 2026-11-21-1015 (deliberate): a plan the SERVICE made keeps the driver's words on its first line (`(you said: ...)`, Part B): these tests are about the plan's lines, so they read the list without the marker (`plain`); src/service-first-place-words.test.ts pins the marker.
+const plain = (l: readonly string[]): string[] => l.map((x) => splitSaid(x).line);
+const plainNoWait = (l: readonly string[]): string[] => plain(l).filter((x) => !/^Waiting:/.test(x));          // a refused answer may leave its waiting line (Part C); no CANONICAL line reaches the list
 
 // ---- the request ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 test('the request for a sentence the grammar cannot read carries the table, the note\'s lines, the drawn bar count and numbers, the instruction; nothing else of the vault; the grammar is asked FIRST (a readable sentence never reaches the service)', async () => {
@@ -101,13 +55,14 @@ test('`put bar 4 in front of bar 2` (the grammar cannot read it) becomes two can
   assert.ok(r.kinds().includes('suggestion'), 'the plan is in the dialog');
   assert.match(r.suggestion(), /Move bar 4 one bar left\./); assert.match(r.suggestion(), /Move bar 3 one bar left\./);
   await r.enter();
-  assert.deepEqual(r.list(), [EXTEND, 'Move bar 4 one bar left.', 'Move bar 3 one bar left.'], 'the lines are list lines, one write');
+  assert.deepEqual(plain(r.list()), [EXTEND, 'Move bar 4 one bar left.', 'Move bar 3 one bar left.'], 'the lines are list lines, one write');
 });
 
-test('`Move bar 4 before bar 2.` is caught FIRST by the 1002 "did you mean" (a deterministic repair, one place), so the service is NOT asked; the person sees the repair, as before 1003', async () => {
-  const r = await phraseWithHead(lines('Move bar 4 one bar left.', 'Move bar 3 one bar left.'));
+// 2026-11-21-1015 (deliberate): it pinned the 1002 order (the repair FIRST, the service NOT asked). The driver chose "service first" for place words ("[7]"): the service is asked first when it is set up, and the repair is the fallback (src/service-first-place-words.test.ts pins both orders).
+test('`Move bar 4 before bar 2.` goes to the service FIRST when it is set up; the 1002 "did you mean" is the fallback (here the service answers no usable plan: the person sees the repair)', async () => {
+  const r = await phraseWithHead(async () => ({ status: 200, json: { ok: false, error: 'no plan' } }));
   await r.say('Move bar 4 before bar 2.');
-  assert.equal(r.requests.length, 0); assert.match(r.texts().join('\n'), /Did you mean: Move bar 4 one bar left/);
+  assert.equal(r.requests.length, 1); assert.match(r.texts().join('\n'), /Did you mean: Move bar 4 one bar left/);
 });
 
 test('`swap the second and third bars` becomes the right move; Esc drops the plan and writes nothing', async () => {
@@ -124,20 +79,20 @@ test('a line the grammar refuses is DROPPED and said; the rest are the plan', as
   const shown = r.texts().join('\n');
   assert.match(shown, /Make it sparkle\./, 'the dropped line is named'); assert.match(shown, /left out|could not use|dropped/i);
   await r.enter();
-  assert.deepEqual(r.list(), [EXTEND, 'Move bar 3 one bar left.'], 'only the readable line was applied');
+  assert.deepEqual(plain(r.list()), [EXTEND, 'Move bar 3 one bar left.'], 'only the readable line was applied');
 });
 
 test('an answer with no usable line is refused in plain words, nothing is written', async () => {
   const r = await phraseWithHead(lines('Make it sparkle.', 'Add some cowbell.'));
   await r.say('swap the second and third bars');
   assert.match(r.texts().join('\n'), /could not use any line/i);
-  await r.enter(); assert.deepEqual(r.list(), [EXTEND]);
+  await r.enter(); assert.deepEqual(r.list(), [EXTEND, 'Waiting: swap the second and third bars']);          // 2026-11-21-1015 (deliberate): kept as a waiting line (Part C); no canonical line
 });
 
 test('an arrangement is under the service too: a recorded answer of canonical lines is checked by the arrangement grammar', async () => {
   const r = rig({ path: ARR, service: lines('Play [[phrase_001]] on the [[rock]] kit.', 'Make it sparkle.'), configured: true }); await r.ready();
   await r.say('put the first phrase on rock please'); assert.equal(r.requests[0].note_kind, 'arrangement'); assert.ok((r.requests[0].grammar as string[]).some((x) => x.startsWith('mute: Mute the [[latin]] kit.')));
-  await r.enter(); assert.deepEqual(r.list(), ['Play [[phrase_001]] on the [[rock]] kit.']);
+  await r.enter(); assert.deepEqual(plain(r.list()), ['Play [[phrase_001]] on the [[rock]] kit.']);
 });
 
 // ---- a question ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -149,7 +104,7 @@ test('an unclear request gets ONE clarifying question: a notice in the dialog, n
   assert.deepEqual(r.list(), [EXTEND]); assert.ok(!r.kinds().includes('suggestion'));
   await r.say('the second and the third');
   assert.deepEqual(r.requests[1].previous, { sentence: 'swap them', question: 'Which two bars do you want to swap?' });
-  await r.enter(); assert.deepEqual(r.list(), [EXTEND, 'Move bar 3 one bar left.']);
+  await r.enter(); assert.deepEqual(plain(r.list()), [EXTEND, 'Move bar 3 one bar left.']);
   await r.say('swap those again'); // a later request carries no stale question
   assert.equal('previous' in r.requests[2], false);
 });
@@ -181,9 +136,9 @@ test('the old refusals are unchanged: no token (status 0), 401, 404 (an old serv
 // ---- malicious answers -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 test('malicious answers never reach the list: markup, an enormous answer, more than 12 lines', async () => {
   const r1 = await phraseWithHead(lines('<script>alert(1)</script>', 'Delete `bar 2`.'));
-  await r1.say('swap the second and third bars'); await r1.enter(); assert.deepEqual(r1.list(), [EXTEND]);
+  await r1.say('swap the second and third bars'); await r1.enter(); assert.deepEqual(plainNoWait(r1.list()), [EXTEND]);
   const r2 = await phraseWithHead(async () => ({ status: 200, json: { ok: true, lines: ['Delete bar 2.'], padding: 'z'.repeat(5000) } }));
-  await r2.say('swap the second and third bars'); assert.match(r2.texts().join('\n'), /too long to trust/); await r2.enter(); assert.deepEqual(r2.list(), [EXTEND]);
+  await r2.say('swap the second and third bars'); assert.match(r2.texts().join('\n'), /too long to trust/); await r2.enter(); assert.deepEqual(plainNoWait(r2.list()), [EXTEND]);
   const r3 = await phraseWithHead(lines(...Array.from({ length: 30 }, () => 'Delete bar 2.')));
   await r3.say('swap the second and third bars'); await r3.enter();
   assert.ok(r3.list().length <= 1 + 12, 'at most 12 lines of an answer are taken');

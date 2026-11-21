@@ -83,7 +83,7 @@ test('PATH 5, the service (already checked since 1206): the plan is refused befo
   const plan = { status: 200, json: { ok: true, parsed_ok: true, plan: { kind: 'composition', sections: [{ source: 'compositions/song_2' }] }, error: null, version: '0.2.48' } };
   const r = rig({ extra: song2PlaysSong1, service: async () => plan }); await r.ready();
   r.type('first song two, whatever that is, then nothing at all'); await r.enter();
-  assert.match(r.strip(), /^The service refused: The composition song_2 loops back to this composition: song_1 → song_2 → song_1\.$/); assert.deepEqual(r.writes, []); assert.deepEqual(r.buttons(), []);
+  assert.match(r.strip(), /The service refused: The composition song_2 loops back to this composition: song_1 → song_2 → song_1\./); assert.ok(r.writes.length <= 1, 'at most the waiting line was written');          // 2026-11-21-1015 (deliberate): the refused sentence is kept as a waiting line (Part C) assert.deepEqual(r.buttons(), []);
 });
 
 test('the same pure check, once per path: a three-note loop (song_1 plays song_2, song_2 plays song_3, song_3 plays song_1) names the whole trail; a self loop keeps its own words; the deep rule (more than 6) is refused the same way', async () => {

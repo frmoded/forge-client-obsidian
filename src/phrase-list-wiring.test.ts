@@ -18,6 +18,9 @@ import { extractDescription, extractPythonSection, extractRecipeSection } from '
 import { replaceDescriptionSection } from './prompt-box-core.ts';
 import { PHRASE_VAULT, PLAYGROUND_PHRASES } from './test-support/phrase-list-fixtures.ts';
 import { ARR_001 } from './test-support/sentence-list-fixtures.ts';
+import { splitSaid } from './sentence-list-core.ts';
+// 2026-11-21-1015 (deliberate): a plan the SERVICE made keeps the driver's words on its first line (`(you said: ...)`, Part B): these tests are about the plan's lines, so they read the list without the marker (`plain`); src/service-first-place-words.test.ts pins the marker.
+const plain = (l: readonly string[]): string[] => l.map((x) => splitSaid(x).line);
 
 const descriptionLines = (text: string): string[] => extractDescription(text).split('\n').filter((l) => l.trim() !== '').map((l) => l.replace(/^\s*\d+[.)]\s+/, ''));
 const win: any = new Window({ url: 'http://localhost/' });
@@ -182,7 +185,7 @@ test('undo of a REPLACED modifier puts the old line back in its place; undoing e
 test('the "+" menu: the New actions, then "Undo last sentence" and "Redo", present and DISABLED (never hidden) when there is nothing, enabled when there is', async () => {
   const r = rig(); await r.ready(); await r.openMenu();
   const undo = r.menuItem('Undo last sentence'), redo = r.menuItem('Redo'); assert.ok(undo !== undefined && redo !== undefined);
-  assert.equal(undo!.getAttribute('aria-disabled'), 'true'); assert.equal(redo!.getAttribute('aria-disabled'), 'true'); assert.deepEqual(r.menuItems().map((b) => b.textContent), ['New phrase', 'Undo last sentence', 'Redo']);
+  assert.equal(undo!.getAttribute('aria-disabled'), 'true'); assert.equal(redo!.getAttribute('aria-disabled'), 'true'); assert.deepEqual(r.menuItems().map((b) => b.textContent), ['New phrase', 'Undo last sentence', 'Redo', 'Translate the waiting line']);          // 2026-11-21-1015 (deliberate): the menu has a third quiet item, `Translate the waiting line` (disabled while no line waits)
   await r.say(EXTEND); await r.openMenu(); assert.equal(r.menuItem('Undo last sentence')!.getAttribute('aria-disabled'), 'false');
   r.menuItem('Undo last sentence')!.click(); await r.flush(); assert.deepEqual(r.list(), []);
 });
@@ -240,12 +243,13 @@ test('the sentence service\'s plan for a phrase is APPENDED as canonical lines (
   r.type('make the sixth bar into a long slow phrase'); await r.enter();
   assert.equal(r.entries().filter((e) => e.kind === 'suggestion').pop()!.text, 'The service suggests this. This replaces: Take [[phrase_003]].'); assert.equal(r.writes.length, w, 'the preview wrote nothing'); assert.equal(r.serviceCalls(), 1);
   await r.enter();
-  assert.deepEqual(r.list(), ['Extend [[bar_006]] to 8 bars, repeating with fills, 10 percent slower.', 'Keep bars 1 to 2.']); assert.equal(r.writes.length, w + 1); assert.equal(r.params().kind, 'extend');
+  assert.deepEqual(plain(r.list()), ['Extend [[bar_006]] to 8 bars, repeating with fills, 10 percent slower.', 'Keep bars 1 to 2.']); assert.equal(r.writes.length, w + 1); assert.equal(r.params().kind, 'extend');
 });
 
 test('a sentence the grammar cannot read is not appended: the dialog says so and (without a service) nothing is written', async () => {
+  // 2026-11-21-1015 (deliberate): a sentence nothing could read is now KEPT as a waiting line (Part C): the failure still writes ONE line, the waiting one; no canonical line is ever written for it
   const r = rig(); await r.ready(); r.type('make it groovier'); await r.enter();
-  assert.ok(r.entries().some((e) => e.kind === 'rejected')); assert.deepEqual(r.writes, []); assert.equal(r.calls(), 0);
+  assert.ok(r.entries().some((e) => e.kind === 'rejected')); assert.deepEqual(r.writes, ['phrases/phrase_001.md'], 'only the waiting line was written'); assert.deepEqual(r.list(), ['Waiting: make it groovier']); assert.equal(r.calls(), 1, 'one process call: the waiting line');
 });
 
 // ---- P3 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

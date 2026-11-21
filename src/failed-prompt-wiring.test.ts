@@ -99,7 +99,8 @@ test('NOT recorded: a sentence the grammar reads; one the 1002 repair offers; a 
 test('the same sentence tried again (Enter twice) is ONE record; a different sentence is another; a success in between starts over', async () => {
   const r = rig({ service: none }); await r.ready();
   await r.say('swap them please'); await r.press({ key: 'Enter' }); await r.say('swap them please'); assert.equal(r.records.length, 1);
-  await r.say('and now something else entirely'); assert.equal(r.records.length, 2);
+  await r.say('and now something else entirely'); assert.equal(r.records.length, 1, '2026-11-21-1015 (deliberate): the first sentence now WAITS in the list (Part C), so the next one is not asked until it is resolved: no second record, and not twice for one sentence');
+  const other = rig({ service: none }); await other.ready(); await other.say('and now something else entirely'); assert.equal(other.records.length, 1, 'a different sentence in its own note is its own record');
 });
 
 test('a sentence over 500 characters (the request is not built) and an empty vault of bars end unprocessed too: `none` with the words', async () => {
@@ -133,7 +134,7 @@ test('the PERSONAL TABLE: a sentence resolved before is offered as "Did you mean
   const r = rig({ service: none, known: { 'swap them please': ['Keep bars 1 to 2.'] } }); await r.ready(); await r.say(EXTEND); r.records.length = 0;
   await r.say('Swap them please.');
   assert.ok(r.texts().some((t) => /Did you mean: Keep bars 1 to 2\? You taught this sentence earlier\./.test(t))); assert.deepEqual(r.list(), [EXTEND], 'never applied silently'); assert.equal(r.records.length, 0); assert.equal(r.requests(), 0);
-  await r.press({ key: 'Enter' }); assert.deepEqual(r.list(), [EXTEND, 'Keep bars 1 to 2.']);
+  await r.press({ key: 'Enter' }); assert.deepEqual(r.list(), [EXTEND, 'Keep bars 1 to 2. (you said: Swap them please.)']);          // 2026-11-21-1015 (deliberate): a taught sentence is a repair: the line keeps the driver's words (Part B)
   const b = rig({ path: BAR, service: none, known: { 'make it groovier': ['Set the tempo to 100.'] } }); await b.ready(); await b.say('make it groovier');
   assert.ok(b.texts().some((t) => /Did you mean: Set the tempo to 100\?/.test(t))); assert.deepEqual(b.list(), []); await b.press({ key: 'Enter' }); assert.deepEqual(b.list(), ['Set the tempo to 100.']);
 });

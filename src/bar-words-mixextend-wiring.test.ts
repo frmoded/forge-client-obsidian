@@ -187,7 +187,7 @@ test('refusals in words, the service NOT asked: a Mix after a Thin out ("Do the 
 test('the service IS asked when the grammar cannot read the sentence (a damaged Extend, the same bar twice): the person is not left with a refusal the service might fix', async () => {
   for (const text of ['Extend bar ZZZ to 4 bars.', 'Mix bars 2 and 2.']) {
     const r = await rig(PLAIN);
-    try { r.type(text); await r.press({ key: 'Enter' }); assert.ok(r.serviceCalls() >= 1, `${text}: the service was asked`); assert.equal(r.calls(), 0); } finally { r.done(); }
+    try { r.type(text); await r.press({ key: 'Enter' }); assert.ok(r.serviceCalls() >= 1, `${text}: the service was asked`); assert.ok(r.calls() <= 1, 'at most the waiting line was written (2026-11-21-1015, deliberate)'); } finally { r.done(); }
   }
 });
 

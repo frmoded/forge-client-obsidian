@@ -35,9 +35,10 @@ import { listModel } from './list-model-selected.ts';       // 2026-11-19-0997: 
 import type { PromptBoxHandle } from './prompt-box-dom.ts';
 import { mountChatPanel, type ChatPanelHandle } from './chat-panel-dom.ts';
 import { append, expireOpen, fromOutcome, memoryStore, openSuggestion, resolveSuggestion, type DialogEntry, type DialogEvent, type DialogStore } from './dialog-core.ts';
-import { createUndoStack, defaultSeed, drawSeeds, isHeadLine, linesOfParams, planAppend, replay, sentencesOfText, stopNotice, type ListStop, type Plan, type ReplayCtx, type UndoStack } from './sentence-list-core.ts';
+import { createUndoStack, defaultSeed, drawSeeds, isHeadLine, linesOfParams, planAppend, replayGrammar, splitSaid, withSaid, replay, sentencesOfText, stopNotice, type ListStop, type Plan, type ReplayCtx, type UndoStack } from './sentence-list-core.ts';
 import { listOfNote, writeListNote } from './sentence-list-note-core.ts';
 import { REDO_ID, REDO_LABEL, UNDO_ID, UNDO_LABEL } from './composer-core.ts';
+const TRANSLATE_ID = '__translate__', TRANSLATE_LABEL = 'Translate the waiting line';          // 2026-11-21-1015 (Part C)
 import { isEmptyNote } from './empty-note-core.ts';
 import { FAMILY_KINDS } from './note-family-core.ts';
 import type { ComposerMenuItem, PreviewResult, PromptBoxPorts } from './prompt-box-dom.ts';
@@ -93,7 +94,7 @@ export interface DescriptionPorts {
   openNote?(id: string): void;
 }
 
-interface Ui { state: DescriptionState; message?: string; preview?: { params: GrammarParams; description: string; recipe: string; forSentence: string; /** 2026-11-19-0970: for an arrangement or composition the sentence service's answer as canonical LINES to append (and the sentence they replace) */ lines?: string[]; replaces?: string }; busy?: boolean; /** the sentence was typed in the prompt box (nothing was written to the note: there is no Revert to offer) */ fromBox?: boolean; /** from the box: the Description ON DISK when the sentence was sent (a preview is applied only over that) */ base?: string }
+interface Ui { state: DescriptionState; message?: string; preview?: { params: GrammarParams; description: string; recipe: string; forSentence: string; /** 2026-11-21-1015: `Translate line N`: the plan REPLACES line N (1-based) of the list instead of being appended */ replaceAt?: number; /** the driver's words the line keeps beside it when the plan is applied (a translate: the box holds `Translate line N.`, the words are the waiting line's) */ said?: string; /** 2026-11-19-0970: for an arrangement or composition the sentence service's answer as canonical LINES to append (and the sentence they replace) */ lines?: string[]; replaces?: string }; busy?: boolean; /** the sentence was typed in the prompt box (nothing was written to the note: there is no Revert to offer) */ fromBox?: boolean; /** from the box: the Description ON DISK when the sentence was sent (a preview is applied only over that) */ base?: string }
 const basename = (path: string): string => path.replace(/^.*\//, '').replace(/\.md$/, '');
 /** 2026-11-19-0970 and 2026-11-19-0980: the three kinds whose Description is a list of canonical sentences (a phrase, an arrangement, a composition). 2026-11-19-0993 (stage 3): a BAR is a list too (front matter `lines:`), but it is not a `Family` (no grammar of the three, no Recipe, no Python, no stamps): it is routed by its PATH (`isBarPath`) to bar-list-controller.ts, which shares this controller's dialog, tracked write and box. */
 type ListFamily = Family;
@@ -154,7 +155,9 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   const askMessage = new Map<string, string>();                   // 2026-11-17-2001: why the last service request ended without a preview (a drop, a refusal): the preview's answer to the composer
   const asked = new Map<string, { sentence: string; question: string }>();                       // 2026-11-20-1003: the clarifying question the service last asked of this note: the NEXT sentence that needs the service goes back with it, once
   const undoTrace = listModel.trace.create({ now: Date.now, expose: globalThis });          // 2026-11-20-1004z (4a): music edition only (lean: a stub that keeps nothing)
-  const fp = listModel.review.track(ports, familyOfPath);          // 2026-11-20-1004: the failed-prompt review queue's bookkeeping (null: no queue)
+  const fpReal = listModel.review.track(ports, familyOfPath);          // 2026-11-20-1004: the failed-prompt review queue's bookkeeping (null: no queue)
+  let fpHold = 0;          // 2026-11-21-1015: while the service is asked FIRST for a place-word sentence a refusal is not yet a failure (the repair may mend it): the record is made after, only when nothing did
+  const fp = fpReal === null ? null : { ...fpReal, fail: (...a: Parameters<typeof fpReal.fail>): void => { if (fpHold === 0) fpReal.fail(...a); }, ended: (...a: Parameters<typeof fpReal.ended>): void => { if (fpHold === 0) fpReal.ended(...a); } };
   const cancelledAsk = new Set<string>();                         // 2026-11-17-2001: Esc while the service thinks: its answer is dropped
   const looked = new WeakMap<HTMLElement, string>();              // pane element -> the note path it was last looked at for (a pane is read once per note it shows)
   let disposed = false;
@@ -328,13 +331,13 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
       return { ok: false };
     }
   }
-  async function applyFromBoxCore(path: string, text: string, said = false, instant = false): Promise<{ ok: boolean; disk?: string; message?: string }> {
+  async function applyFromBoxCore(path: string, text: string, said = false, instant = false, original?: string): Promise<{ ok: boolean; disk?: string; message?: string }> {
     const typed = listModel.typed.apply(path, text, said, stepPorts); if (typed !== null) return typed;          // 2026-11-20-1002: a typed Undo or Redo (every composer): the stack's own take-back, never a line of a list
     if (isBarPath(path)) { if (!said) say(path, { type: 'you', text }); return bar.applyBar(path, text, instant); }       // 2026-11-19-0993: the typed sentences in the bar grammar, appended to the bar's list
     const family = familyOfPath(path); if (family === null) { pbWarn(`ask skipped: ${path} is not a phrase, arrangement or composition note`); return { ok: false }; }
     if (!said) say(path, { type: 'you', text });                                                          // 2026-11-13-1214: the sentence as typed, when Apply is pressed (2026-11-17-2001: said already when the preview was asked for)
     if (family === 'phrase') { const act = listModel.duplicate.readActionText(text); if (act.kind === 'duplicate' || act.kind === 'refused') return applyAction(path, act); }          // 2026-11-19-0992: an action never touches the list: no process call, no write of this note
-    return applyList(path, family, text, instant);                                                                 // 2026-11-19-0970 / 0980: a sentence is APPENDED to the list of a phrase, an arrangement or a composition
+    return applyList(path, family, text, instant, original);                                                       // 2026-11-19-0970 / 0980: a sentence is APPENDED to the list of a phrase, an arrangement or a composition
   }
   const set = (path: string, u: Ui | null): void => { if (u === null || u.state.kind === 'synced') ui.delete(path); else { ui.set(path, u); notices.delete(path); } syncBars(); };
 
@@ -553,9 +556,9 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   const paneOf = (path: string): HTMLElement | undefined => ports.panes().find((p) => p.path === path)?.contentEl;
 
   /** Write `next` as the note's list in ONE `process`, if the Description on disk is still `expectBase` (what the plan was made against). `record` (an apply) goes on the undo stack once it is written. */
-  async function commitList(path: string, family: ListFamily, next: readonly string[], expectBase: string, record?: { before: string[]; added: string[]; replaced: Array<{ index: number; sentence: string }> }): Promise<{ ok: true; change: string; stop: ListStop | null; applied: number } | { ok: false; message: string }> {
+  async function commitList(path: string, family: ListFamily, next: readonly string[], expectBase: string, record?: { before: string[]; added: string[]; replaced: Array<{ index: number; sentence: string }> }, allowNone = false): Promise<{ ok: true; change: string; stop: ListStop | null; applied: number } | { ok: false; message: string }> {
     const rp = await replay(next, family, ctxFor(path));
-    if (rp.params === null && next.length > 0) return { ok: false, message: rp.stop !== null ? stopNotice(rp.stop, 0) : 'No line of the list can be read.' };
+    if (rp.params === null && next.length > 0 && !allowNone) return { ok: false, message: rp.stop !== null ? stopNotice(rp.stop, 0) : 'No line of the list can be read.' };          // (allowNone: a list that is only waiting lines is kept as it is)
     let failure: string | null = null, change = '';
     try {
       await proc(path, (cur) => {
@@ -656,6 +659,63 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     return { ok: true, message: `Added [[${parts.name}]] to the composer.` };       // 2026-11-19-0996b: the 0992 branch (a text that ENDS with the word Duplicate got ` [[name]].` and a preview) is gone: a Duplicate sentence starts the text, so it is a bar word now, and the note copy is the typed `Duplicate [[bar_007]].`
   }
 
+  /** 2026-11-21-1015 (Part C): a sentence that neither the grammar nor the service could turn into lines is KEPT as a waiting line (the driver's words), on the undo stack, said in the dialog with why. Not kept: a question is pending, nothing worth keeping, the same words are already waiting, a cancel. */
+  const droppedAsk = new Set<string>();          // 2026-11-21-1015: an answer that was DROPPED (the text moved on, the note changed, a cancel) is not a verdict on the sentence: no waiting line for it
+  async function keepWaiting(path: string, family: ListFamily, text: string, reason: string): Promise<void> {
+    if (droppedAsk.delete(path) || asked.get(path)?.sentence === text || reason === 'Cancelled.') return;
+    const line = listModel.waiting.line(text); if (line === null) return;
+    let cur = ''; try { cur = await ports.read(path); } catch { return; }
+    const before = listOf(cur, family); if (before.includes(line)) return;
+    const done = await commitList(path, family, [...before, line], extractDescription(cur), { before, added: [line], replaced: [] }, true);
+    if (done.ok === false) { pb(`waiting line not kept: ${done.message}`); return; }
+    pb(`kept as a waiting line: line ${before.length + 1}`);
+    told.delete(path); set(path, null);
+    say(path, { type: 'notice', message: listModel.waiting.kept(before.length + 1, reason.replace(/^The grammar did not accept this sentence[^.]*\.\s*/, '')) });
+  }
+  /** The first line of the list the replay stops at (a waiting line or one the grammar cannot read after a hand edit), 1-based; null when every line reads. */
+  const translatableLine = (path: string): number | null => {
+    const family = familyOfPath(path), text = lastText.get(path); if (family === null || text === undefined) return null;
+    const rp = replayGrammar(listOf(text, family), family, ctxFor(path)); return rp.stop !== null && rp.stop.reason === 'unreadable' ? rp.stop.index + 1 : null;
+  };
+  /** 2026-11-21-1015: `Translate line N.` - the service is asked for line N ALONE (its words, in lines mode); the answer is a PLAN (the suggestion in the dialog) that REPLACES the line when the person confirms; a refusal changes nothing; no call on save. */
+  async function previewTranslate(path: string, family: ListFamily, n: number, cur: string, typed: string): Promise<PreviewResult> {
+    const refuse = (message: string): PreviewResult => { say(path, { type: 'notice', message }); setBoxNote(path, message); return { ok: false, message }; };
+    const list = listOf(cur, family), line = list[n - 1];
+    if (line === undefined) return refuse(`There is no line ${n}.`);
+    const stopped = replayGrammar(list, family, ctxFor(path)).stop;
+    const words = listModel.waiting.words(line) ?? (stopped !== null && stopped.index === n - 1 ? splitSaid(line).line : null);
+    if (words === null) return refuse(`Line ${n} is already a sentence I can read.`);
+    if (ports.askPlan === undefined || ports.configured?.() === false) return refuse('The sentence service is not set up: add its URL and token in Settings → Forge Actions (Beta).');
+    const v = ports.vault();
+    const req = family === 'phrase' ? buildPlanRequest({ sentence: words, barNames: ports.barNames(), phraseNames: ports.phraseNames(), ownKey: ports.ownKey?.() })
+      : buildFamilyPlanRequest({ family, sentence: words, kitNames: v.kits, phraseNames: ports.phraseNames(), arrangementNames: v.arrangements, compositionNames: v.compositions, note: path.replace(/\.md$/, ''), ownKey: ports.ownKey?.() });
+    if (req.ok === false) return refuse(req.message);
+    setBoxBusy(path, 'Asking the sentence service...'); say(path, { type: 'asking' }); ports.trace(askingServiceLine(basename(path)));
+    let outcome: Asked; let question: string | null = null;
+    const head = await replay(list.slice(0, n - 1), family, ctxFor(path)), headNote = writeListNote(cur, basename(path), family, head);          // the note as it is BEFORE line n: the service plans (and the grammar checks) against the lines that come first
+    try {
+      const a = await listModel.service.ask({
+        payload: req.payload, askPlan: (x) => ports.askPlan!(x as PlanPayload), fromBox: true, family, previous: asked.get(path), readNote: async () => (headNote.ok ? headNote.text : cur), pane: paneOf(path), vault: ports.vault(), ctx: ctxFor(path), draw: ports.drawSeed ?? defaultSeed,
+        legacy: async (res) => (family === 'phrase' ? interpretPlanResponse(res, req.payload.bars) : await askNewKind(res, req.payload)),
+      });
+      outcome = a; question = 'question' in a && a.question !== undefined ? a.question : null;
+    } catch (e) { outcome = { ok: false, message: `Could not reach the transpile service (${(e as Error)?.message ?? e}). Check your connection and Settings → Forge Actions (Beta) → Transpile service URL.` }; }
+    setBoxBusy(path, null);
+    if (question !== null) { asked.set(path, { sentence: words, question }); return refuse(`The service asks: ${question}`); }
+    asked.delete(path);
+    if (outcome.ok === false) return refuse(`The service refused: ${outcome.message}`);
+    const lines = outcome.lines ?? linesOfParams(outcome.params, family);
+    if (lines.length === 0) return refuse('The service gave no sentence for that line.');
+    const next = [...list.slice(0, n - 1), withSaid(lines[0], words), ...lines.slice(1), ...list.slice(n)];
+    const rp = await replay(next, family, ctxFor(path));
+    if (rp.stop !== null && rp.stop.index < n - 1 + lines.length) return refuse(`The suggestion does not fit this note: ${stopNotice(rp.stop, rp.applied)}`);
+    const description = lines.join(' ');
+    const state: DescriptionState = { kind: 'rejected', sentence: words, error: { message: '', line: n, column: 1 }, message: '' };
+    set(path, { state, fromBox: true, base: extractDescription(cur), preview: { params: outcome.params, forSentence: typed, said: words, description, recipe: '', lines, replaceAt: n, replaces: line } });
+    ports.trace(askedServiceLine(basename(path), `translate line ${n}`));
+    setBoxNote(path, 'The service answered: the suggestion is in the dialog.'); say(path, { type: 'suggestion', description, recipe: '', replaces: line });
+    return { ok: true, proposal: { description, via: 'service', replaces: line } };
+  }
   /** 2026-11-19-0970 - the composer's FIRST Enter in an arrangement or a composition: the typed sentence(s) APPENDED to the list (or in place of the sentence they replace), nothing written. */
   async function previewList(path: string, family: ListFamily, text: string, cur: string, instant = false): Promise<PreviewResult> {
     previewed.delete(path);
@@ -672,19 +732,29 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     }
     if (plan.reason === 'loop') { pb(`grammar verdict: accepted, then refused: ${plan.message}`); say(path, { type: 'refused', message: plan.message, by: 'plugin' }); setBoxNote(path, `Refused: ${plan.message}`); return { ok: false, message: `Refused: ${plan.message}` }; }
     if (plan.reason !== 'unreadable') { say(path, { type: 'notice', message: plan.message }); setBoxNote(path, plan.message); return { ok: false, message: plan.message }; }       // an unreadable line already in the list, or nothing to add: said in plain words
+    const serviceUp = ports.askPlan !== undefined && ports.configured?.() !== false;
+    const placeWords = serviceUp && listModel.repair.placeWords(text, family);                              // 2026-11-21-1015 (service first, driver "[7]"): place words the grammar cannot read go to the service FIRST; its answer is a plan; the repair below is the fallback
+    let viaService: PreviewResult | null = null;
+    if (placeWords) { fpHold++; try { viaService = await askTail(path, text, saidRejected(path, text, cur, plan)); } finally { fpHold--; } if (viaService.ok) return viaService; }
     const offered = await listModel.repair.offer(text, family, async (repaired) => (await planAppend(listOf(cur, family), family, sentencesOfText(repaired, family), ctxFor(path))).ok, (ev) => say(path, ev), (t) => fp?.known(t) ?? null);          // 2026-11-20-1002 (DID YOU MEAN): a deterministic repair the grammar reads is offered BEFORE the service is asked; Enter or its button applies the SUGGESTION
     if (offered !== null) return offered;
-    return askTail(path, text, saidRejected(path, text, cur, plan));
+    if (viaService !== null) fp?.ended(path, text);                                                         // the service refused and no repair mended it: NOW it is a failure (one record)
+    const result = viaService ?? await askTail(path, text, saidRejected(path, text, cur, plan));
+    if (result.ok === false) await keepWaiting(path, family, text, result.message.replace(/^The grammar did not accept this sentence[^.]*\.\)?\s*/, ''));          // 2026-11-21-1015 (Part C)
+    return result;
   }
   /** 2026-11-19-0970 - the second Enter (or an apply with no preview) in an arrangement or a composition: the same plan, made again against the note as it is NOW, written in one go. */
-  async function applyList(path: string, family: ListFamily, text: string, instant = false): Promise<{ ok: boolean; disk?: string; message?: string }> {
+  async function applyList(path: string, family: ListFamily, text: string, instant = false, original?: string): Promise<{ ok: boolean; disk?: string; message?: string }> {
     let cur = ''; try { cur = await ports.read(path); } catch (e) { console.error('[forge-promptbox] applyList: could not read the note', e); const m = `Could not read the note: ${(e as Error)?.message ?? e}`; say(path, { type: 'failed', message: m }); return { ok: false, message: m }; }
     const before = listOf(cur, family);
-    const plan = await planAppend(before, family, sentencesFor(path, family, text), ctxFor(path));
+    const typedLines = sentencesFor(path, family, text);
+    if (original !== undefined && typedLines.length > 0) typedLines[0] = withSaid(typedLines[0], original);          // 2026-11-21-1015 (provenance): the first canonical line keeps the driver's own words beside it
+    const plan = await planAppend(before, family, typedLines, ctxFor(path));
     if (plan.ok === false) {
       if (plan.reason === 'loop') { pb(`apply refused: ${plan.message}`); say(path, { type: 'refused', message: plan.message, by: 'plugin' }); setBoxNote(path, `Refused: ${plan.message}`); return { ok: false, message: `Refused: ${plan.message}` }; }
       if (plan.reason !== 'unreadable') { say(path, { type: 'notice', message: plan.message }); setBoxNote(path, plan.message); return { ok: false, message: plan.message }; }
-      await askTail(path, text, saidRejected(path, text, cur, plan));
+      const failed = await askTail(path, text, saidRejected(path, text, cur, plan));
+      if (failed.ok === false) await keepWaiting(path, family, text, failed.message);          // 2026-11-21-1015 (Part C)
       return { ok: false };
     }
     pb('grammar verdict: accepted');
@@ -729,7 +799,21 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     const base = extractDescription(cur);
     if (base !== (u.fromBox ? u.base : pv.forSentence)) return fail('The Description changed while the service was thinking; its suggestion was dropped.');
     const before = u.fromBox ? listOf(cur, family) : [];
-    const plan = await planAppend(before, family, pv.lines ?? [], ctxFor(path));
+    if (pv.replaceAt !== undefined) {                                                                      // 2026-11-21-1015: `Translate line N`: the waiting line is REPLACED by the canonical lines (the first carries the driver's words)
+      const lines = [...(pv.lines ?? [])]; if (lines.length > 0) lines[0] = withSaid(lines[0], pv.said ?? pv.forSentence);
+      const old = listOf(cur, family), at = pv.replaceAt - 1;
+      if (old[at] === undefined) return fail('That line is not there any more; ask again.');
+      const next = [...old.slice(0, at), ...lines, ...old.slice(at + 1)];
+      const done = await commitList(path, family, next, base, { before: old, added: lines, replaced: [{ index: at, sentence: old[at] }] });
+      if (done.ok === false) return fail(done.message);
+      told.delete(path); ports.trace(appliedLine(basename(path), done.change)); set(path, null); endSuggestion(path, 'applied');
+      const d = await descriptionOf(path); for (const b of boxes.values()) if (b.path === path) b.handle.reset('');
+      say(path, { type: 'applied', change: done.change, description: d ?? next.join(' ') }); setBoxNote(path, 'Applied.');
+      if (done.stop !== null) sayCut(path, { stop: done.stop, applied: done.applied });
+      return { ok: true, disk: '' };
+    }
+    const svcLines = [...(pv.lines ?? [])]; if (svcLines.length > 0) svcLines[0] = withSaid(svcLines[0], pv.forSentence);          // 2026-11-21-1015 (provenance): the service's first line keeps the words the person typed
+    const plan = await planAppend(before, family, svcLines, ctxFor(path));
     if (plan.ok === false) return fail(plan.message, 'plugin');
     const done = await commitList(path, family, plan.list, base, { before, added: plan.added, replaced: plan.replaced });
     if (done.ok === false) return fail(done.message);
@@ -794,10 +878,10 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   function withListMenu(path: string, base: ReturnType<NonNullable<DescriptionPorts['composerMenu']>>, contentEl: HTMLElement): NonNullable<PromptBoxPorts['menu']> {
     return {
       items: base?.items ?? [],
-      trailing: [{ id: UNDO_ID, label: UNDO_LABEL }, { id: REDO_ID, label: REDO_LABEL }],                  // after "Insert a link to a note": the New actions first, the link, then these two
-      run: (id) => { if (id === UNDO_ID) guarded(contentEl, path, () => { void undoLast(path, 'menu'); }); else if (id === REDO_ID) guarded(contentEl, path, () => { void redoLast(path, 'menu'); }); else base?.run(id); },
+      trailing: [{ id: UNDO_ID, label: UNDO_LABEL }, { id: REDO_ID, label: REDO_LABEL }, ...(familyOfPath(path) !== null ? [{ id: TRANSLATE_ID, label: TRANSLATE_LABEL }] : [])],                  // after "Insert a link to a note": the New actions first, the link, then these two
+      run: (id) => { if (id === UNDO_ID) guarded(contentEl, path, () => { void undoLast(path, 'menu'); }); else if (id === REDO_ID) guarded(contentEl, path, () => { void redoLast(path, 'menu'); }); else if (id === TRANSLATE_ID) { const n = translatableLine(path); if (n !== null) boxes.get(contentEl)?.handle.suggest(`Translate line ${n}.`); } else base?.run(id); },
       ...(base?.pickNote ? { pickNote: base.pickNote } : {}),
-      enabled: (id) => (id === UNDO_ID ? canStep(path, 'undo') : id === REDO_ID ? canStep(path, 'redo') : true),
+      enabled: (id) => (id === UNDO_ID ? canStep(path, 'undo') : id === REDO_ID ? canStep(path, 'redo') : id === TRANSLATE_ID ? translatableLine(path) !== null : true),
     };
   }
 
@@ -854,6 +938,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     }
     // 2026-11-13-1209 (B): every way out after a request left ends VISIBLE and TRACED (a message under the box and in the strip, a `dropped: <why>` trace line), never silent.
     const dropVisibly = async (why: string, message: string, strip?: Ui): Promise<void> => {
+      droppedAsk.add(path);
       ports.trace(askedServiceLine(basename(path), `dropped: ${why}`));
       if (disposed) return;
       askMessage.set(path, message); setBoxNote(path, message); say(path, { type: 'dropped', message: message.replace(/\.$/, '') }); endSuggestion(path, 'expired');
@@ -943,6 +1028,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     try { cur = await ports.read(path); } catch (e) { const m = `Could not read the note: ${(e as Error)?.message ?? e}`; say(path, { type: 'failed', message: m }); return { ok: false, message: m }; }
     const typed = listModel.typed.preview(path, text, stepPorts); if (typed !== null) return typed;         // 2026-11-20-1002: `Undo`, `Undo 3`, `Redo` are read here (the reader of Duplicate): never a line, never the service
     if (family === 'phrase') { const act = listModel.duplicate.readActionText(text); if (act.kind === 'duplicate' || act.kind === 'refused') return previewAction(path, act, instant); }          // 2026-11-19-0992: `Duplicate [[bar_007]].` is an ACTION sentence, read here (no model call) and never a line of the list
+    const tr = listModel.waiting.translate(text); if (tr !== null) return previewTranslate(path, family, tr.n, cur, text);          // 2026-11-21-1015: `Translate line N.` is read here: never a line, never sent as a sentence
     return previewList(path, family, text, cur, instant);                                                          // 2026-11-19-0970 / 0980: the typed sentence APPENDED to the list (or in place of the line it replaces), nothing written
   }
   /** The service, once, for a sentence the grammar did not accept (the same gates as ever); its answer is the proposal the composer shows, or why there is none. (2026-11-19-0970: the tail of previewFromBoxCore, shared with the list.) */
@@ -951,7 +1037,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     if (ports.askPlan === undefined) { pbWarn(gateLine); const m = 'The sentence service is not available in this build.'; say(path, { type: 'notice', message: m }); fp?.fail(path, sentence, 'none', m); return { ok: false, message: `${rejectedText} ${m}` }; }
     if (ports.configured?.() === false) { pbWarn(gateLine); const m = 'The sentence service is not set up: add its URL and token in Settings → Forge Actions (Beta).'; say(path, { type: 'notice', message: m }); fp?.fail(path, sentence, 'not-set-up', m); return { ok: false, message: `${rejectedText} ${m}` }; }
     pb(gateLine);
-    askMessage.delete(path);
+    askMessage.delete(path); droppedAsk.delete(path);
     await ask(path);
     if (cancelledAsk.delete(path)) { fp?.fail(path, sentence, 'cancelled'); return { ok: false, message: 'Cancelled.' }; }
     const after = ui.get(path);
@@ -973,7 +1059,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     pb(`apply pressed: ${basename(path)} family=${familyOfPath(path) ?? 'none'} text=${text.length} chars via=${proposal.via}`);
     try {
       if (proposal.via === 'service') return await applyPreview(path);
-      const r = await applyFromBoxCore(path, proposal.instead ?? text, true, !!(proposal.instant || proposal.instead));          // 2026-11-20-1002: a "did you mean" applies the SUGGESTION, in the instant words
+      const r = await applyFromBoxCore(path, proposal.instead ?? text, true, !!(proposal.instant || proposal.instead), proposal.instead !== undefined ? text : undefined);          // 2026-11-21-1015: the repaired line keeps the words the person typed          // 2026-11-20-1002: a "did you mean" applies the SUGGESTION, in the instant words
       const fail = ui.get(path)?.message;
       if (r.ok) endSuggestion(path, 'applied');
       return r.ok ? r : { ok: false, message: r.message ?? fail ?? 'It did not go through.' };

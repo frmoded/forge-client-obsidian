@@ -211,7 +211,7 @@ test('a plan translated by the sentence service is SHOWN first ("The service sug
   r.type('make the sixth bar into a long slow phrase'); await r.enter();
   assert.equal(r.service(), 1); assert.deepEqual(r.writes, [], 'nothing written by the first Enter'); assert.deepEqual(r.buttons(), ['apply-preview', 'cancel-preview']);
   assert.match(r.entries().filter((e) => e.kind === 'suggestion').pop()!.text, /^The service suggests this\./);
-  await r.enter(); assert.deepEqual(r.list(), ['Extend [[bar_006]] to 8 bars, repeating with fills, 10 percent slower.']); assert.equal(r.writes.length, 1);
+  await r.enter(); assert.deepEqual(unsaid(r.list()), ['Extend [[bar_006]] to 8 bars, repeating with fills, 10 percent slower.']); assert.equal(r.writes.length, 1);
 });
 test('Esc on a service plan drops it and writes nothing; typing a new sentence replaces a showing preview (the old one is no longer current)', async () => {
   const plan = { kind: 'extend', bar: 'bar_006', bars: 8, style: 'repeat_with_fills', tempo_change_pct: -10 };
@@ -240,14 +240,14 @@ test('Move with several places is READ and refused in words (today\'s refusal, k
 });
 test('an unreadable sentence is never applied: without the service it says so in words and writes nothing', async () => {
   const r = rig(); await r.ready(); r.type('make it groovier'); await r.enter();
-  assert.deepEqual(r.writes, []); assert.ok(r.kinds().includes('rejected')); assert.ok(!r.kinds().includes('applied')); assert.equal(r.field().value, 'make it groovier');
+  assert.ok(atMostWaiting(r.writes)); assert.ok(!unsaid(r.list()).some((l) => !/^Waiting:/.test(l))); assert.ok(r.kinds().includes('rejected')); assert.ok(!r.kinds().includes('applied')); assert.equal(r.field().value, 'make it groovier');
   assert.ok(!r.kinds().includes('suggestion'), 'no "Did you mean" without a repair: today\'s message');
 });
 test('a service that is not set up is said in words and nothing is applied; a service that answers nothing usable is not applied either', async () => {
   const off = rig({ service: planOk({}), configured: false }); await off.ready(); off.type('make it groovier'); await off.enter();
-  assert.deepEqual(off.writes, []); assert.match(off.last(), /sentence service is not set up/); assert.equal(off.service(), 0);
+  assert.ok(atMostWaiting(off.writes)); assert.match(off.last(), /sentence service is not set up/); assert.equal(off.service(), 0);
   const nope = rig({ service: async () => ({ status: 200, json: { ok: true, parsed_ok: false, plan: null, error: 'cannot', version: '0.2.48' } }) }); await nope.ready(); nope.type('make it groovier'); await nope.enter();
-  assert.deepEqual(nope.writes, []); assert.ok(!nope.kinds().includes('applied'));
+  assert.ok(atMostWaiting(nope.writes)); assert.ok(!nope.kinds().includes('applied'));
 });
 test('a bar with no service set up: an unreadable sentence is refused in words, nothing is applied, no request', async () => {
   const r = rig({ path: BAR }); await r.ready(); r.type('make the kick louder please'); await r.enter();
@@ -269,13 +269,13 @@ test('an unclosed link in a composition: `Play [[phrase_001]` is NOT applied; th
   assert.ok(!r.kinds().includes('rejected'), 'the bare column error is replaced'); assert.ok(r.repairButton() !== null, 'a button'); assert.deepEqual(r.buttons(), ['apply-preview', 'cancel-preview']);
   assert.equal(r.field().value, 'Play [[phrase_001]', 'the typed text stays until the person says yes');
   await r.enter();
-  assert.deepEqual(r.list(), ['Play [[phrase_001]].']); assert.equal(r.writes.length, 1); assert.ok(empty(r)); assert.equal(r.applied().pop(), 'Applied. Play [[phrase_001]].'); assert.equal(r.service(), 0);
+  assert.deepEqual(unsaid(r.list()), ['Play [[phrase_001]].']); assert.equal(r.writes.length, 1); assert.ok(empty(r)); assert.equal(r.applied().pop()?.replace(/ \(you said: [^()]*\)$/, ''), 'Applied. Play [[phrase_001]].'); assert.equal(r.service(), 0);
 });
 test('the BUTTON applies the suggestion exactly as Enter does', async () => {
   const r = rig({ path: COMP }); await r.ready();
   r.type('Play [[phrase_001]'); await r.enter(); assert.deepEqual(r.writes, []);
   r.repairButton()!.click(); await r.flush();
-  assert.deepEqual(r.list(), ['Play [[phrase_001]].']); assert.equal(r.writes.length, 1); assert.ok(empty(r));
+  assert.deepEqual(unsaid(r.list()), ['Play [[phrase_001]].']); assert.equal(r.writes.length, 1); assert.ok(empty(r));
 });
 test('Esc drops the suggestion, writes nothing, keeps the typed text; typing replaces it; the suggestion is "Discarded" in the dialog', async () => {
   const r = rig({ path: COMP }); await r.ready();
@@ -287,7 +287,7 @@ test('a one-letter typo of a verb: `Delet bar 2.` -> `Did you mean: Delete bar 2
   const r = rig(); await r.ready(); await r.say('Take [[phrase_003]].'); const w = r.writes.length;
   r.type('Delet bar 2.'); await r.enter();
   assert.equal(r.writes.length, w); assert.equal(r.entries().filter((e) => e.kind === 'suggestion').pop()!.text, 'Did you mean: Delete bar 2?'); assert.equal(r.suggestion(), 'Delete bar 2.');
-  await r.enter(); assert.deepEqual(r.list(), ['Take [[phrase_003]].', 'Delete bar 2.']); assert.equal(r.writes.length, w + 1);
+  await r.enter(); assert.deepEqual(unsaid(r.list()), ['Take [[phrase_003]].', 'Delete bar 2.']); assert.equal(r.writes.length, w + 1);
 });
 test('Move with place words: `Move bar 4 before bar 2.` -> `Move bar 4 one bar left.` and the hint that Move takes one bar at a time (say it twice); Enter applies ONE move', async () => {
   const r = rig(); await r.ready(); await r.say('Take [[phrase_003]].'); const w = r.writes.length;
@@ -295,13 +295,13 @@ test('Move with place words: `Move bar 4 before bar 2.` -> `Move bar 4 one bar l
   assert.equal(r.writes.length, w);
   assert.equal(r.entries().filter((e) => e.kind === 'suggestion').pop()!.text, 'Did you mean: Move bar 4 one bar left? Move takes one bar one place at a time. Bar 4 before bar 2 is 2 places left: say it twice (the second time for bar 3).');
   assert.equal(r.suggestion(), 'Move bar 4 one bar left.');
-  await r.enter(); assert.deepEqual(r.list(), ['Take [[phrase_003]].', 'Move bar 4 one bar left.']);
+  await r.enter(); assert.deepEqual(unsaid(r.list()), ['Take [[phrase_003]].', 'Move bar 4 one bar left.']);
 });
 test('a typo and an unclosed link in different sentences of one text: one suggestion for the whole text', async () => {
   const r = rig(); await r.ready();
   r.type('Take [[phrase_003]. Keap bars 1 to 3'); await r.enter();
   assert.equal(r.suggestion(), 'Take [[phrase_003]]. Keep bars 1 to 3.'); await r.enter();
-  assert.deepEqual(r.list(), ['Take [[phrase_003]].', 'Keep bars 1 to 3.']);
+  assert.deepEqual(unsaid(r.list()), ['Take [[phrase_003]].', 'Keep bars 1 to 3.']);
 });
 test('a bar: `Clera kick.` -> `Did you mean: Clear kick?`; Enter applies it', async () => {
   const r = rig({ path: BAR }); await r.ready();
@@ -311,7 +311,7 @@ test('a bar: `Clera kick.` -> `Did you mean: Clear kick?`; Enter applies it', as
 });
 test('with `Preview before applying` ON a suggestion is the same: shown, then Enter', async () => {
   const r = rig({ path: COMP, preview: true }); await r.ready();
-  r.type('Play [[phrase_001]'); await r.enter(); assert.equal(r.suggestion(), 'Play [[phrase_001]].'); assert.deepEqual(r.writes, []); await r.enter(); assert.deepEqual(r.list(), ['Play [[phrase_001]].']);
+  r.type('Play [[phrase_001]'); await r.enter(); assert.equal(r.suggestion(), 'Play [[phrase_001]].'); assert.deepEqual(r.writes, []); await r.enter(); assert.deepEqual(unsaid(r.list()), ['Play [[phrase_001]].']);
 });
 test('NO repair: today\'s message (the grammar\'s "rejected" line), nothing offered; with the service set up it is asked as ever', async () => {
   const none = rig({ path: COMP }); await none.ready(); none.type('make it groovier'); await none.enter();
@@ -321,7 +321,7 @@ test('NO repair: today\'s message (the grammar\'s "rejected" line), nothing offe
 });
 test('a repair the grammar still cannot read is never offered: `Delet bar 2.` in an EMPTY phrase (no head to delete from) gets today\'s message', async () => {
   const r = rig(); await r.ready(); r.type('Delet bar 2.'); await r.enter();
-  assert.ok(!r.kinds().includes('suggestion'), r.kinds().join(',')); assert.deepEqual(r.writes, []);
+  assert.ok(!r.kinds().includes('suggestion'), r.kinds().join(',')); assert.ok(atMostWaiting(r.writes));
 });
 test('a suggestion is never applied by a typed Undo, a click elsewhere or a second look: only Enter or the button', async () => {
   const r = rig({ path: COMP }); await r.ready();
@@ -412,6 +412,10 @@ test('P3: a typed Undo in a note that is not a list family (a plain note with no
 // 6. THE REAL PHRASE TAB (mountPhrase: the Score, the click on a bar) with the real composer: ONE Enter, byte for byte the two-Enter note
 // ================================================================================================================================================================================================
 import { rig as tabRig } from './test-support/phrase-steps-tab-rig.ts';
+// 2026-11-21-1015 (deliberate): a sentence nothing could read is kept as a waiting line (Part C: a refusal may write that ONE line, never a canonical one) and a line the repair or the service made keeps the driver's words (Part B: `(you said: ...)`).
+const unsaid = (l: readonly string[]): string[] => l.map((x) => x.replace(/ \(you said: [^()]*\)$/, ''));
+const atMostWaiting = (w: readonly unknown[]): boolean => w.length <= 1;
+
 test('the REAL phrase tab (mountPhrase): a click on a Score bar while the composer says Delete, then ONE Enter, writes the note the two Enters write, byte for byte; the Score redraws from it', async () => {
   const HEAD = 'Extend [[bar_005]] to 6 bars, repeating with fills.';
   const run = async (instant: boolean) => {

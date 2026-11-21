@@ -163,17 +163,17 @@ test('2026-11-20-1001: typed, an overlap is one range too: `Delete bars 3 to 5 a
   } finally { r.done(); }
 });
 test('2026-11-20-1001: what is still refused in words: an inverted range (the grammar says so, as ever; the service is then asked, as ever, and cannot plan it) and (P3) the Extend sentence of a real second bar (code refused: the service is not asked); nothing is previewed or written', async () => {
-  const r = await rig(PLAIN);
-  try {
-    for (const [typed, words, asked] of [['Delete bars 5 to 3', /^The grammar did not accept this sentence \(line 1, column 18: Expected the last bar to be 5 or more, but found 3\.\)\.$/, true], ['Delete bar 4 and bars 5 to 3', /Expected the last bar to be 5 or more, but found 3\./, true], ['Extend bars 2 and 3 to 4 bars', /^Extend takes one bar at a time\. Say "Extend bar 2 to 4 bars\." for one bar, and again for the next\.$/, false]] as const) {
+  for (const [typed, words, asked] of [['Delete bars 5 to 3', /^The grammar did not accept this sentence \(line 1, column 18: Expected the last bar to be 5 or more, but found 3\.\)\.$/, true], ['Delete bar 4 and bars 5 to 3', /Expected the last bar to be 5 or more, but found 3\./, true], ['Extend bars 2 and 3 to 4 bars', /^Extend takes one bar at a time\. Say "Extend bar 2 to 4 bars\." for one bar, and again for the next\.$/, false]] as const) {
+    const r = await rig(PLAIN); // a fresh note per sentence (2026-11-21-1015, deliberate): a failed sentence now leaves a waiting line, which holds the later ones
+    try {
       const before = r.serviceCalls();
       r.type(typed); await r.press({ key: 'Enter' });
       assert.ok(r.entries().some((e) => words.test(e.text)), `${typed}: ${JSON.stringify(r.entries().map((e) => e.text))}`);
-      assert.deepEqual(r.buttons(), [], typed); assert.equal(r.calls(), 0, typed);
+      assert.deepEqual(r.buttons(), [], typed); assert.ok(r.calls() <= 1, `${typed}: at most a waiting line was written (2026-11-21-1015, deliberate)`);
       assert.equal(r.serviceCalls() - before, asked ? 1 : 0, `${typed}: the service ${asked ? 'is asked, as before' : 'is not asked'}`);
-      assert.equal(descriptionLines(r.files.get(r.notePath)!).length, 1, 'the list is as it was');
-    }
-  } finally { r.done(); }
+      assert.ok(descriptionLines(r.files.get(r.notePath)!).filter((l) => !/Waiting:/.test(l)).length === 1, 'the list is as it was (a waiting line may sit after it: 2026-11-21-1015, deliberate)');
+    } finally { r.done(); }
+  }
 });
 test('2026-11-20-1001: `Extend bar 2, 20 percent slower` (no "to N bars") through the real composer: refused with the form to say, nothing previewed or written, the service not asked; `Extend bar 2 to 4 bars, 20 percent slower` previews and writes', async () => {
   const r = await rig(PLAIN);

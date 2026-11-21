@@ -17,6 +17,9 @@ import { applyPhraseWrite, formatPhraseJson, type PhraseParams } from './phrase-
 import { extractDescription } from './v2-note-core.ts';
 import { ARR_001, C5_LINES, C6_LINES, VAULT } from './test-support/sentence-list-fixtures.ts';
 import { replaceDescriptionSection } from './prompt-box-core.ts';
+import { splitSaid } from './sentence-list-core.ts';
+// 2026-11-21-1015 (deliberate): a plan the SERVICE made keeps the driver's words on its first line (`(you said: ...)`, Part B): these tests are about the plan's lines, so they read the list without the marker (`plain`); src/service-first-place-words.test.ts pins the marker.
+const plain = (l: readonly string[]): string[] => l.map((x) => splitSaid(x).line);
 
 /** The lines of a numbered Description (the test reads the note itself, not through the code under test). */
 const render = (lines: string[]): string => lines.map((l, i) => `${i + 1}. ${l}`).join('\n');
@@ -112,9 +115,10 @@ test('the composer shows nothing of the list: a note with a Description of three
 });
 
 test('a sentence the grammar cannot read is not appended: the dialog says so and (without a service) nothing is written', async () => {
+  // 2026-11-21-1015 (deliberate): a sentence nothing could read is now KEPT as a waiting line (Part C): the failure still writes ONE line, the waiting one; no canonical line is ever written for it
   const r = rig(); await r.ready();
   r.type('Then play [[nobody_here]].'); await r.enter();
-  assert.ok(r.entries().some((e) => e.kind === 'rejected')); assert.deepEqual(r.writes, []); assert.equal(r.calls(), 0);
+  assert.ok(r.entries().some((e) => e.kind === 'rejected')); assert.deepEqual(r.writes, ['compositions/song_1.md'], 'only the waiting line was written'); assert.deepEqual(r.list(), ['Waiting: Then play nobody_here .']); assert.equal(r.calls(), 1, 'one process call: the waiting line');
 });
 
 // ---- the conflict rule -------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -213,7 +217,7 @@ test('the "+" menu has "Undo last sentence" and "Redo": present and DISABLED (no
   const undo = r.menuItem('Undo last sentence'), redo = r.menuItem('Redo');
   assert.ok(undo !== undefined && redo !== undefined, 'both items are in the menu');
   assert.equal(undo!.getAttribute('aria-disabled'), 'true'); assert.equal(redo!.getAttribute('aria-disabled'), 'true'); assert.equal(undo!.hidden, false); assert.equal(redo!.hidden, false);
-  assert.deepEqual(r.menuItems().map((b) => b.textContent), ['New phrase', 'New arrangement', 'Undo last sentence', 'Redo'], 'the New actions first, then the two');
+  assert.deepEqual(r.menuItems().map((b) => b.textContent), ['New phrase', 'New arrangement', 'Undo last sentence', 'Redo', 'Translate the waiting line'], 'the New actions first, then the three');          // 2026-11-21-1015 (deliberate): the menu has a third quiet item, `Translate the waiting line` (disabled while no line waits)
   await r.say('Play [[phrase_001]].'); await r.openMenu();
   assert.equal(r.menuItem('Undo last sentence')!.getAttribute('aria-disabled'), 'false'); assert.equal(r.menuItem('Redo')!.getAttribute('aria-disabled'), 'true');
   await r.chooseMenu('Undo last sentence');
@@ -319,12 +323,12 @@ test('the sentence service\'s plan is APPENDED as lines (and a plan that conflic
   assert.ok(r.entries().some((e) => e.kind === 'suggestion' && e.text === 'The service suggests this.'), JSON.stringify(r.entries().map((e) => e.text)));
   assert.equal(r.writes.length, 1, 'the preview wrote nothing');
   await r.enter();
-  assert.deepEqual(r.list(), ['Play [[phrase_001]] on the [[rock]] kit.', 'Play [[phrase_003]] on the [[jazz]] kit.']); assert.equal(r.writes.length, 2);
+  assert.deepEqual(plain(r.list()), ['Play [[phrase_001]] on the [[rock]] kit.', 'Play [[phrase_003]] on the [[jazz]] kit.']); assert.equal(r.writes.length, 2);
   const again = rig({ path: ARR, service: plan({ kind: 'arrangement', tracks: [{ kit: 'rock', phrase: 'phrase_003' }] }) }); await again.ready();
   await again.say('Play [[phrase_001]] on the [[rock]] kit.');
   again.type('rock should play the third one instead'); await again.enter();
   assert.ok(again.entries().filter((e) => e.kind === 'suggestion').pop()!.text.includes('This replaces: Play [[phrase_001]] on the [[rock]] kit.'));
-  await again.enter(); assert.deepEqual(again.list(), ['Play [[phrase_003]] on the [[rock]] kit.']);
+  await again.enter(); assert.deepEqual(plain(again.list()), ['Play [[phrase_003]] on the [[rock]] kit.']);
 });
 
 test('Esc on a preview discards it: nothing is written, nothing is appended', async () => {
@@ -355,7 +359,7 @@ test('undo does not need the history of this session: a NEW controller on a note
 
 test('a list tab ALWAYS has the "+" menu with Undo and Redo, even where the plugin gave no New actions (the two items are the controller\'s own)', async () => {
   const r = rig({ menu: false }); await r.ready(); await r.openMenu();
-  assert.deepEqual(r.menuItems().map((b) => b.textContent), ['Undo last sentence', 'Redo']);
+  assert.deepEqual(r.menuItems().map((b) => b.textContent), ['Undo last sentence', 'Redo', 'Translate the waiting line']);          // 2026-11-21-1015 (deliberate): the menu has a third quiet item, `Translate the waiting line` (disabled while no line waits)
 });
 
 test('a note that vanished under an undo says so in the dialog (never silent): nothing is written', async () => {

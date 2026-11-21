@@ -81,6 +81,11 @@ export function moveRepair(sentence: string): { sentence: string; hint: string }
   };
 }
 
+/** 2026-11-21-1015 (service first): a PHRASE sentence whose verb the grammar knows but whose place words it cannot read: a Move or Copy of bars with `before bar N` / `after bar N` (one sentence). Such a sentence is asked of the sentence service FIRST when it is set up; the repair above stays the fallback. */
+export function placeWordSentence(text: string, family: RepairFamily): boolean {
+  return family === 'phrase' && /^\s*(?:move|copy)\s+bars?\s+\d+(?:\s*(?:to|and|,)\s*\d+)*\s+(?:before|after)\s+bars?\s+\d+\s*\.?\s*$/i.test(String(text ?? ''));
+}
+
 /** The repaired text, or null when no repair applies: each sentence on its own (a Move with place words; else its links closed and a typo of its first word mended), every sentence with its full stop. The FIRST hint is kept. */
 export function repairCandidate(text: string, family: RepairFamily): Repair | null {
   const sentences = String(text ?? '').trim().split(/(?<=[.!?])\s+|\n+/).map((x) => x.trim()).filter((x) => x !== '');

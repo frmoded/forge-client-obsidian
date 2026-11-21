@@ -12,6 +12,10 @@ import { newCompositionNote, readCompositionNote, type CompositionParams } from 
 import { linesOfParams } from './sentence-list-core.ts';
 import { extractDescription } from './v2-note-core.ts';
 
+// 2026-11-21-1015 (deliberate): a sentence the service could not turn into lines is KEPT as a waiting line (Part C), so the strip also says where it was kept and a refusal may write that ONE line; a plan the service made keeps the driver's words on its first line (Part B).
+const unsaid = (s: string): string => s.replace(/ \(you said: [^()]*\)/g, '');
+const atMostWaiting = (r: { writes: string[] }): void => { assert.ok(r.writes.length <= 1, `at most the waiting line was written: ${r.writes.join(',')}`); };
+
 const win: any = new Window({ url: 'http://localhost/' });
 const ARR = 'arrangements/arr_001.md', COMP = 'compositions/song_1.md';
 const FREE_ARR = 'rock plays phrase one and latin plays phrase two, latin a bit quieter';
@@ -81,7 +85,7 @@ test('ARRANGEMENT: applying the preview writes the note once (the arrangement th
   const read = readArrangementNote(r.store.get(ARR)!);
   assert.ok(read.ok); assert.deepEqual(read.value.tracks, PLAN_ARR.tracks);
   assert.equal(r.field().value, '', '2026-11-19-0970 (the list model): the prompt line is for the NEXT sentence; the list is in the note and the dialog');
-  assert.equal(extractDescription(r.store.get(ARR)!), linesOfParams(parsedArr, 'arrangement').map((l, i) => `${i + 1}. ${l}`).join('\n'), 'the Description is the list of the canonical sentences (the service\'s plan took the place of the sentence about the rock kit and was added after it)');
+  assert.equal(unsaid(extractDescription(r.store.get(ARR)!)), linesOfParams(parsedArr, 'arrangement').map((l, i) => `${i + 1}. ${l}`).join('\n'), 'the Description is the list of the canonical sentences (the service\'s plan took the place of the sentence about the rock kit and was added after it)');
   assert.notEqual(r.field().value, FREE_ARR);
   assert.match(r.strip(), /^✓ Applied \(/, '2026-11-13-1214: the dialog says what was applied, the strip has nothing');
 });
@@ -100,7 +104,7 @@ test('COMPOSITION: the same path - one request (family, phrases, arrangements, c
   const read = readCompositionNote(r.store.get(COMP)!);
   assert.ok(read.ok); assert.deepEqual(read.value.sections, [...COMP_START.sections, ...PLAN_COMP.sections]);
   assert.equal(r.field().value, '');
-  assert.equal(extractDescription(r.store.get(COMP)!), '1. Play [[phrase_003]].\n2. Then play [[phrase_001]].\n3. Then play [[arr_001]] for 4 bars.\n4. Repeat that once more.');
+  assert.equal(unsaid(extractDescription(r.store.get(COMP)!)), '1. Play [[phrase_003]].\n2. Then play [[phrase_001]].\n3. Then play [[arr_001]] for 4 bars.\n4. Repeat that once more.');
 });
 
 test('Cancel writes nothing, the text stays, and no second request was made (arrangement and composition)', async () => {
@@ -155,7 +159,7 @@ test('THE VERSION GATE (the answer carries it): a 0.2.47 service gets the old-se
     r.type(free); await r.enter();
     assert.equal(r.asked.length, 1);
     assert.match(r.strip(), /does not plan arrangements or compositions yet \(it needs version 0\.2\.48 or newer; this one is 0\.2\.47\)/);
-    assert.deepEqual(r.writes, []);
+    atMostWaiting(r);
     assert.ok(!r.buttons().includes('apply-preview'));
     assert.equal(r.field().value, free);
   }
@@ -174,26 +178,26 @@ test('THE VERSION GATE (no version in the answer): a refusal makes the controlle
   const unknown = rig({ path: ARR, note: ARR_NOTE(), service: async () => refusal, version: async () => { throw new Error('offline'); } });
   await unknown.ready(); unknown.type(FREE_ARR); await unknown.enter();
   assert.match(unknown.strip(), /no bars yet/, 'a version that cannot be read is not "old"');
-  assert.deepEqual(unknown.writes, []);
+  atMostWaiting(unknown);
 });
 
 test('SECOND BOUNDARY through the box: a plan naming a kit the vault does not have, and a composition that plays itself, are refused in the dialog - no preview, no write', async () => {
   const kit = rig({ path: ARR, note: ARR_NOTE(), service: async () => OK({ kind: 'arrangement', tracks: [{ kit: 'jazz', phrase: 'phrase_001' }] }) });
   await kit.ready(); kit.type(FREE_ARR); await kit.enter();
-  assert.equal(kit.strip(), 'The service refused: "jazz" is not a kit in this vault.');
-  assert.deepEqual(kit.writes, []); assert.ok(!kit.buttons().includes('apply-preview'));
+  assert.match(kit.strip(), /The service refused: "jazz" is not a kit in this vault\./);
+  atMostWaiting(kit); assert.ok(!kit.buttons().includes('apply-preview'));
   const loop = rig({ path: COMP, note: COMP_NOTE(), service: async () => OK({ kind: 'composition', sections: [{ source: 'compositions/song_1' }] }) });
   await loop.ready(); loop.type(FREE_COMP); await loop.enter();
-  assert.equal(loop.strip(), 'The service refused: The composition "song_1" cannot play itself; that would loop.');
-  assert.deepEqual(loop.writes, []);
+  assert.match(loop.strip(), /The service refused: The composition "song_1" cannot play itself; that would loop\./);
+  atMostWaiting(loop);
 });
 
 test('LOOP THROUGH THE VAULT: song_2 plays song_1, so a plan that makes song_1 play song_2 is refused from song_2\'s own sections (read from the vault), nothing written', async () => {
   const song2 = newCompositionNote('song_2', { kind: 'composition', sections: [{ source: 'compositions/song_1' }] });
   const r = rig({ path: COMP, note: COMP_NOTE(), extra: { 'compositions/song_2.md': song2 }, service: async () => OK({ kind: 'composition', sections: [{ source: 'compositions/song_2' }] }) });
   await r.ready(); r.type(FREE_COMP); await r.enter();
-  assert.match(r.strip(), /^The service refused: The composition song_2 loops back to this composition: song_1 → song_2 → song_1\.$/);
-  assert.deepEqual(r.writes, []); assert.ok(!r.buttons().includes('apply-preview'));
+  assert.match(r.strip(), /The service refused: The composition song_2 loops back to this composition: song_1 → song_2 → song_1\./);
+  atMostWaiting(r); assert.ok(!r.buttons().includes('apply-preview'));
   assert.ok(r.reads.includes('compositions/song_2.md'), 'the vault was asked');
   // the same plan is fine when song_2 does not loop back
   const ok = rig({ path: COMP, note: COMP_NOTE(), extra: { 'compositions/song_2.md': newCompositionNote('song_2', { kind: 'composition', sections: [{ source: 'phrases/phrase_001' }] }) }, service: async () => OK({ kind: 'composition', sections: [{ source: 'compositions/song_2' }] }) });

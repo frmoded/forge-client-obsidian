@@ -42,6 +42,25 @@ const NUMBERED = /^\s*\d+[.)]\s+/;
 const norm = (s: string): string => s.replace(/\s+/g, ' ').trim();
 const same = (a: SentenceList, b: SentenceList): boolean => a.length === b.length && a.every((x, i) => x === b[i]);
 
+// ---- provenance (2026-11-21-1015): the driver's own words beside a line the repair or the service made -------------------------------------------------------------------------------------------------------
+export const SAID_MAX = 160;
+export const WAITING_LINE = /^\s*waiting:/i;
+const SAID_TAIL = /\s*\(you said: ([^()]*)\)\s*$/;
+/** The line without its trailing `(you said: ...)` marker, and the words in it (null = none). Only a TRAILING marker counts. */
+export function splitSaid(line: string): { line: string; said: string | null } {
+  const s = String(line ?? ''); const m = SAID_TAIL.exec(s);
+  return m === null ? { line: s, said: null } : { line: s.slice(0, m.index).trimEnd(), said: m[1].trim() };
+}
+/** The words as the marker may carry them: one line, no brackets or parentheses, no URL, path, file name or token-like run, at most SAID_MAX characters. '' = nothing worth keeping. */
+export function saidText(raw: string): string {
+  const words = String(raw ?? '').replace(/https?:\/\/\S+/gi, ' ').replace(/[\[\]()]/g, ' ').split(/\s+/).filter((w) => w !== '' && !/[\/\\]/.test(w) && !/\.(?:md|json|py|mp3|wav|png|svg|jpg|toml)\b/i.test(w) && !/^[A-Za-z0-9_-]{32,}$/.test(w));
+  let out = words.join(' ');
+  if (out.length > SAID_MAX) { out = out.slice(0, SAID_MAX); const cut = out.lastIndexOf(' '); if (cut > 40) out = out.slice(0, cut); }
+  return out.trim();
+}
+/** `line` with the marker that says what the driver typed (nothing when there is nothing worth keeping). */
+export function withSaid(line: string, said: string): string { const t = saidText(said); return t === '' ? line : `${line} (you said: ${t})`; }
+
 // ---- parse and render ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 const withStop = (t: string): string => (/[.!?]$/.test(t) ? t : `${t}.`);
@@ -58,9 +77,12 @@ export function parseList(text: string, kind: ListKind, vault: GrammarVault): Pa
   if (NUMBERED.test(rows[0])) {
     const items: string[] = [];
     for (const row of rows) { if (NUMBERED.test(row)) items.push(row.replace(NUMBERED, '').trim()); else items[items.length - 1] += ` ${row.trim()}`; }
-    const list = items.flatMap((item) => {                                                              // an item of ONE sentence is the line exactly as written (a line the grammar cannot read is kept to the letter); an item of several is split
+    const list = items.flatMap((full) => {                                                              // an item of ONE sentence is the line exactly as written (a line the grammar cannot read is kept to the letter); an item of several is split
+      const { line: item, said } = splitSaid(full);                                                     // 2026-11-21-1015: the driver's words ride on the item's LAST line (they are not a sentence of their own)
       const raw = sentencesOf(item);
-      return raw.length === 1 && !(kind === 'arrangement' && TOGETHER.test(raw[0].text)) ? [item] : sentencesOfText(item, kind);
+      const lines = raw.length === 1 && !(kind === 'arrangement' && TOGETHER.test(raw[0].text)) ? [item] : sentencesOfText(item, kind);
+      if (said !== null && lines.length > 0) lines[lines.length - 1] = `${lines[lines.length - 1]} (you said: ${said})`;
+      return lines;
     });
     return { list, shape: list.length === 0 ? 'empty' : 'list' };
   }
@@ -83,6 +105,7 @@ const pick = (m: RegExpExecArray, i: number): string => (m[i] ?? m[i + 1] ?? '')
 /** What a line is ABOUT, for the conflict rule: an arrangement line is about a kit's phrase (`play:K`), a kit's volume (`volume:K`), a kit's mute (`mute:K`) or the solo (`only`); a composition line is about nothing (null: compositions
  *  are plain sequences and never conflict), and so is a line of any shape the grammar knows nothing of. A reading of the sentence's SHAPE only: whether the line means anything is the grammar's. */
 export function subjectOf(sentence: string, kind: ListKind): string | null {
+  sentence = splitSaid(sentence).line;                                                                   // 2026-11-21-1015: a line is about what it says, not about the words beside it
   if (kind === 'phrase') return phraseSubjectOf(sentence);
   if (kind !== 'arrangement') return null;
   const s = sentence.trim();
@@ -115,6 +138,7 @@ function phraseSubjectOf(sentence: string): string | null {
 }
 /** The head segments a TYPED head sentence says itself ("to 12 bars", "over 5 bars", "as one bar", "20 percent slower"): a modifier line of that segment is then superseded (the typed words win). */
 export function segmentsSaidBy(head: string): Array<'length' | 'tempo'> {
+  head = splitSaid(head).line;
   const out: Array<'length' | 'tempo'> = [];
   if (/\b(?:to|over)\s+[^\s,]+\s+bars?\b|\b(?:as|in)\s+one\s+bar\b/i.test(head)) out.push('length');
   if (/[^\s,]+\s*(?:percent|%)\s+(?:slower|faster)\b/i.test(head)) out.push('tempo');
@@ -156,7 +180,7 @@ export interface ReplayCtx {
   /** Apply at most this many lines (the loop check of the caller cut the list there). */
   maxApplied?: number;
 }
-export interface ListStop { index: number; reason: 'unreadable' | 'loop'; message: string; line: number; column: number; /** 2026-11-19-0980: the grammar's own code for a refusal that is about the ORDER or the HEAD of a phrase's list (see GrammarError) */ code?: 'order' | 'head' | 'refused' }
+export interface ListStop { index: number; reason: 'unreadable' | 'loop'; message: string; line: number; column: number; /** 2026-11-21-1015: the line that stopped the replay is a WAITING line (`Waiting: <words>`): kept for a later translation, not a mistake */ waiting?: true; /** 2026-11-19-0980: the grammar's own code for a refusal that is about the ORDER or the HEAD of a phrase's list (see GrammarError) */ code?: 'order' | 'head' | 'refused' }
 export interface Replay {
   /** The lines: the ones that were read in their canonical wording, the one that stopped the replay and the ones after it exactly as written. */
   list: string[];
@@ -229,7 +253,8 @@ function wrongKindOf(lines: readonly string[], n: number, kind: ListKind, vault:
 }
 
 function run(list: SentenceList, kind: ListKind, ctx: ReplayCtx): { replay: Replay; per: GrammarParams[] } {
-  const raw = [...list];
+  const split = list.map(splitSaid);                                                                    // 2026-11-21-1015: the grammar reads the lines WITHOUT the driver's words; the output keeps them
+  const raw = split.map((x) => x.line);
   const fixed = withLeads(raw, kind);
   const per: GrammarParams[] = [];
   let stop: ListStop | null = null;
@@ -238,17 +263,23 @@ function run(list: SentenceList, kind: ListKind, ctx: ReplayCtx): { replay: Repl
     const read = parse(prefixText(fixed, i + 1, kind), ctx.vault);
     if (read.ok === false) {
       const other = wrongKindOf(fixed, i + 1, kind, ctx.vault);                                       // a line of the OTHER kind fails in this kind's reading: the message says which kind it is, as a whole-description reading always did
-      stop = { index: i, reason: 'unreadable', message: other ?? read.error.message, line: i + 1, column: other !== null || read.error.line - 1 !== i ? 1 : read.error.column, ...(read.error.code !== undefined && other === null ? { code: read.error.code } : {}) }; break;
+      stop = { index: i, reason: 'unreadable', message: other ?? read.error.message, line: i + 1, column: other !== null || read.error.line - 1 !== i ? 1 : read.error.column, ...(read.error.code !== undefined && other === null ? { code: read.error.code } : {}) };
+      if (WAITING_LINE.test(fixed[i])) stop = { index: i, reason: 'unreadable', message: '', line: i + 1, column: 1, waiting: true };          // 2026-11-21-1015: a waiting line is kept for a translation, said as that
+      break;
     }
     const wrong = wrongKindSentence(kind, read.params.kind, 'the sentence');
     if (wrong !== null) { stop = { index: i, reason: 'unreadable', message: wrong, line: i + 1, column: 1 }; break; }
     per.push(read.params);
   }
   const lines = raw.map((line, i) => {
-    if (i >= per.length) return line;
-    if (kind === 'phrase') return phraseLine(fixed[i], i, per);
-    const added = extra(linesOfParams(per[i], kind), i === 0 ? [] : linesOfParams(per[i - 1], kind));
-    return added.length === 1 ? added[0] : norm(fixed[i]);                       // a line that adds nothing (a mute said twice, a volume back at 100) is kept as written
+    if (i >= per.length) return list[i];                                                                 // not applied (the replay stopped): as written, marker and all
+    const said = split[i].said;
+    const canonical = ((): string => {
+      if (kind === 'phrase') return phraseLine(fixed[i], i, per);
+      const added = extra(linesOfParams(per[i], kind), i === 0 ? [] : linesOfParams(per[i - 1], kind));
+      return added.length === 1 ? added[0] : norm(fixed[i]);                       // a line that adds nothing (a mute said twice, a volume back at 100) is kept as written
+    })();
+    return said === null ? canonical : withSaid(canonical, said);
   });
   const params = per.length === 0 ? null : per[per.length - 1];
   return { replay: { list: lines, applied: per.length, params, ...derived(params), stop }, per };
@@ -275,6 +306,7 @@ export async function replay(list: SentenceList, kind: ListKind, ctx: ReplayCtx)
 
 /** "Line 3 is not a sentence I can read; the note shows lines 1 and 2." plus the grammar's own reason: plain words, said in the dialog, never red. A loop says its own words (both notes and the trail) and where. */
 export function stopNotice(stop: ListStop, applied: number): string {
+  if (stop.waiting === true) return `Line ${stop.index + 1} is waiting for a translation; ${applied === 0 ? 'the note shows nothing yet' : applied === 1 ? 'the note shows line 1' : applied === 2 ? 'the note shows lines 1 and 2' : `the note shows lines 1 to ${applied}`}. Say "Translate line ${stop.index + 1}." to ask the service for it.`;
   const shows = applied === 0 ? 'the note shows nothing yet' : applied === 1 ? 'the note shows line 1' : applied === 2 ? 'the note shows lines 1 and 2' : `the note shows lines 1 to ${applied}`;
   const reason = stop.message.trim();
   return stop.reason === 'loop' ? `Line ${stop.index + 1} is not played: ${reason} ${shows[0].toUpperCase()}${shows.slice(1)}.` : `Line ${stop.index + 1} is not a sentence I can read; ${shows}.${reason === '' ? '' : ` ${reason}`}`;

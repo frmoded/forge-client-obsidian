@@ -185,7 +185,7 @@ test('Esc on a preview writes nothing and the message says Discarded; a NEWER se
 test('service not set up: the dialog says so (and no request was made); the text stays in the box', async () => {
   const r = rig({ configured: false }); await r.open();
   r.type(FREE); await r.enter();
-  assert.deepEqual(kinds(r.el), ['you', 'rejected', 'notice']);
+  assert.deepEqual(kinds(r.el), ['you', 'rejected', 'notice', 'notice']);          // 2026-11-21-1015 (deliberate): + the "Kept as line 1, waiting for a translation" notice (Part C)
   assert.match(dialogEntries(r.el)[2]!.text, /not set up/);
 });
 test('a CONTROL changing the Description adds a CONTROL message ("Controls: <what changed>. The Description is now: ...") and ; a HAND edit and the controller\'s own writes do not', async () => {
