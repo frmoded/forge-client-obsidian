@@ -124,6 +124,9 @@ import {
 } from './expanded-state-core.ts';
 import { PLUGIN_VERSION_AT_BUILD } from './version-constant.generated';
 import { BUILD_STAMP } from './build-stamp.generated.ts';
+import { createVanishedReporter, isVanishedFileError } from './vanished-file-core.ts';
+import { familyOfPath } from './note-family-core.ts';
+import { listModel } from './list-model-selected.ts';
 import { formatBuildStamp, formatLoadBanner, setStatusBarLabel, statusBarLabelText, vaultNameOf } from './build-stamp-core.ts';
 import { EVENT_WRITE_SETTLE_MS, createDeletionTracker, guardedFrontMatterWrite } from './frontmatter-write-guard-core.ts';
 import {
@@ -386,6 +389,8 @@ const SNIPPET_BTN_CLASS = 'forge-snippet-btn';
 // stale buttons left over by older plugin loads after the Run+Generate -> Forge
 // consolidation. They are no longer attached to any new button.
 const RUN_BTN_CLASS = 'forge-run-btn';
+/** 2026-11-20-1005 (F7): a note deleted from outside Obsidian while it is open is said ONCE, as an info line (the handlers that read it no longer log a red ENOENT each). */
+const vanishedNotes = createVanishedReporter((line) => { console.info(line); });
 const HAMMER_BTN_CLASS = 'forge-hammer-btn';
 const EDGES_BTN_CLASS = 'forge-edges-btn';
 const FORGE_BTN_CLASS = 'forge-forge-btn';
@@ -752,6 +757,7 @@ export default class ForgePlugin extends Plugin {
     this.registerEvent(this.app.vault.on('rename', (f, oldPath) => {
       // ...and a renamed note keeps its values under the new id.
       if (f instanceof TFile && f.extension === 'md') {
+        void this.followRenamedDescription(f, oldPath);          // 2026-11-20-1005 (F9): the generated description follows the new name
         const next = renamePanelNote(
           this.settings.panelStripValues ?? {}, this.settings.panelStripSignatures ?? {},
           snippetIdFromPath(oldPath, this.libraryDirNames()), snippetIdFromPath(f.path, this.libraryDirNames()));
@@ -3919,14 +3925,16 @@ export default class ForgePlugin extends Plugin {
    */
   private async refreshSourceLayerStatusBar(): Promise<void> {
     if (!this.sourceLayerStatusBarItem) return;
-    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-    if (!view?.file) {
+    // 2026-11-20-1005 (F3): while a PANEL (the Forge panel after a Run, the edges view) is the active leaf there is no markdown view, but the last active NOTE is still the note the bar speaks of: it keeps saying that note's state
+    // (it used to go blank until the note's tab was clicked again). Blank only when there is no note, or the file is not a note.
+    const file = this.app.workspace.getActiveViewOfType(MarkdownView)?.file ?? this.app.workspace.getActiveFile();
+    if (!file || file.extension !== 'md') {
       this.sourceLayerStatusBarItem.setText('');
       this.sourceLayerStatusBarItem.title = '';
       return;
     }
     try {
-      const body = await this.app.vault.read(view.file);
+      const body = await this.app.vault.read(file);
       // 2026-10-29-0920: the bar and the facet headings are fed by ONE function (source-layer-status-of-body-core), so "synced" is never said of a note whose heading says a facet is out of date or still a stub.
       const status = await sourceLayerStatusOf(body);
       this.sourceLayerStatusBarItem.setText(
@@ -5418,6 +5426,17 @@ export default class ForgePlugin extends Plugin {
    *  onLayoutReady, and inside the modify handler itself. */
   private _facetHashCache: Map<string, FacetHashes> = new Map();
 
+  /** 2026-11-20-1005 (F7): a read of a note failed. A note that vanished (deleted from outside Obsidian: ENOENT, or no longer in the vault) is said once, quietly; anything else is `loud` (the red line it always was). */
+  private fileTaskFailed(label: string, file: TFile, e: unknown, loud: () => void): void {
+    if (isVanishedFileError(e) || this.app.vault.getAbstractFileByPath(file.path) === null) { vanishedNotes.report(file.path, label); return; }
+    loud();
+  }
+
+  /** 2026-11-20-1005 (F9): a renamed note of ours gets its generated description's name followed (rename-follow-core.ts, behind the list-model seam: lean does nothing). */
+  private followRenamedDescription(f: TFile, oldPath: string): Promise<void> {
+    return listModel.renamed.follow(f, oldPath, { read: (x) => this.app.vault.read(x), process: async (x, fn) => { const next = await this.app.vault.process(x, fn); await this.syncMemfsAfterBodyWrite(x, next, 'followRenamedDescription'); }, onError: (x, e) => { this.fileTaskFailed('followRenamedDescription', x, e, () => console.error(`followRenamedDescription: failed for '${x.path}'`, e)); } });
+  }
+
   private async captureFacetHashCacheForFile(file: TFile | null) {
     if (!file) return;
     try {
@@ -5440,7 +5459,7 @@ export default class ForgePlugin extends Plugin {
         pyDerivedFrom: getFmFieldV2(body, 'python_derived_from_recipe_hash'),
       });
     } catch (e) {
-      console.error(`captureFacetHashCacheForFile: failed for '${file.path}'`, e);
+      this.fileTaskFailed('captureFacetHashCacheForFile', file, e, () => console.error(`captureFacetHashCacheForFile: failed for '${file.path}'`, e));
     }
   }
 
@@ -5782,7 +5801,7 @@ export default class ForgePlugin extends Plugin {
         'info',
       );
     } catch (e) {
-      console.error('maybeBackfillV113Shape failed', e);
+      this.fileTaskFailed('maybeBackfillV113Shape', file, e, () => console.error('maybeBackfillV113Shape failed', e));
     }
   }
 
@@ -5845,7 +5864,7 @@ export default class ForgePlugin extends Plugin {
         );
       }
     } catch (e) {
-      console.error('maybeStampTypedLetsInputs failed', e);
+      this.fileTaskFailed('maybeStampTypedLetsInputs', file, e, () => console.error('maybeStampTypedLetsInputs failed', e));
     }
   }
 
@@ -5889,7 +5908,7 @@ export default class ForgePlugin extends Plugin {
     try {
       content = await this.app.vault.read(file);
     } catch (e) {
-      console.error('maybePreviewDataSnippet: could not read data snippet for preview', e);
+      this.fileTaskFailed('maybePreviewDataSnippet', file, e, () => console.error('maybePreviewDataSnippet: could not read data snippet for preview', e));
       return;
     }
     const body = extractDataBody(content);

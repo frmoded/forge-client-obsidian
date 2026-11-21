@@ -112,6 +112,8 @@ export interface ListModel {
   };
   /** 2026-11-20-1002: did-you-mean-core.ts: the deterministic repair of a sentence the grammar cannot read (`Did you mean: ...?`), said in the dialog and handed back as the composer's proposal; null = none. Lean: always null (the bare message stays). */
   repair: { offer: typeof import('./did-you-mean-core.ts').offerRepair };
+  /** 2026-11-20-1005 (F9): a renamed note's generated description follows the new name (rename-follow-core.ts). Lean: nothing (it has none of these notes). */
+  renamed: { follow: typeof import('./rename-follow-core.ts').followRenamedDescription };
   /** 2026-11-20-1004: the failed-prompt review queue (failed-prompt-*.ts): `note` hands one sentence that ended unprocessed to the queue's port (lean: nothing), `create` builds the queue for the plugin (lean: null, so no tab, no command, no menu entry). */
   review: {
     create(...args: Parameters<typeof import('./failed-prompt-setup-core.ts').createReview>): ReturnType<typeof import('./failed-prompt-setup-core.ts').createReview> | null;

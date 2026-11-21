@@ -38,6 +38,7 @@ import { createTransportPlayer, type TransportPlayerHandle } from './score-playe
 import { exportItems, scoreSecondsAt, type ExportItem } from './score-transport-core.ts';
 import { registerScaleExplorer } from './scale-explorer-view.ts';
 import { registerReviewQueue } from './failed-prompt-view.ts';
+import { swallowTfPlatformWarning } from './tf-platform-warning-core.ts';
 
 // html-midi-player registers <midi-player> as a custom element on import. We
 // load it lazily and guard against re-registration (plugin reload would
@@ -48,7 +49,7 @@ async function ensureMidiPlayerLoaded() {
     midiPlayerLoaded = true;
     return;
   }
-  await import('html-midi-player');
+  await swallowTfPlatformWarning(async () => { await import('html-midi-player'); });          // 2026-11-20-1005 (F6): tfjs-core's harmless double platform registration is not logged
   midiPlayerLoaded = true;
 }
 
@@ -57,7 +58,7 @@ async function ensureMidiPlayerLoaded() {
 // down a fetch() path that the bundled node-fetch can't follow ("Only HTTP(S)
 // protocols are supported"). NoteSequence skips the fetch entirely.
 async function midiBase64ToNoteSequence(midiBase64: string): Promise<any> {
-  const mm: any = await import('@magenta/music/esm/core/midi_io');
+  const mm: any = await swallowTfPlatformWarning(async () => await import('@magenta/music/esm/core/midi_io'));
   const bytes = Uint8Array.from(atob(midiBase64), c => c.charCodeAt(0));
   const ns = mm.midiToSequenceProto(bytes);
   // Magenta's parser leaves note.program at the default for non-piano
