@@ -18,6 +18,10 @@ import { LIST_MODEL_SENTINEL_DUPLICATE_UNDO_CORE } from './duplicate-undo-core.t
 import { LIST_MODEL_SENTINEL_PHRASE_STEPS_LINEAGE_CORE, annotateWithSteps, stepLineageOf } from './phrase-steps-lineage-core.ts';
 import { LIST_MODEL_SENTINEL_DID_YOU_MEAN_CORE, offerRepair } from './did-you-mean-core.ts';
 import { LIST_MODEL_SENTINEL_TYPED_STEP_CORE, applyTyped, previewTyped } from './typed-step-core.ts';
+import { LIST_MODEL_SENTINEL_FAILED_PROMPT_CORE } from './failed-prompt-core.ts';
+import { LIST_MODEL_SENTINEL_FAILED_PROMPT_STORE } from './failed-prompt-store.ts';
+import { LIST_MODEL_SENTINEL_FAILED_PROMPT_TAB_DOM } from './failed-prompt-tab-dom.ts';
+import { LIST_MODEL_SENTINEL_FAILED_PROMPT_SETUP_CORE, createReview, createTracker } from './failed-prompt-setup-core.ts';
 import { LIST_MODEL_SENTINEL_SERVICE_LINES_CORE, LINES_SERVICE_VERSION, askLinesBar, askLinesNote, linesRequestFields, readLinesAnswer } from './service-lines-core.ts';
 
 export const listModel: ListModel = {
@@ -25,7 +29,7 @@ export const listModel: ListModel = {
   cores: [
     LIST_MODEL_SENTINEL_BAR_LIST_CONTROLLER, LIST_MODEL_SENTINEL_BAR_LIST_CORE, LIST_MODEL_SENTINEL_BAR_GRAMMAR_CORE, LIST_MODEL_SENTINEL_BAR_BOX_HOST_CORE, LIST_MODEL_SENTINEL_BAR_LIST_NOTE_CORE,
     LIST_MODEL_SENTINEL_DUPLICATE_SENTENCE_CORE, LIST_MODEL_SENTINEL_DUPLICATE_NOTE_CORE, LIST_MODEL_SENTINEL_DUPLICATE_UNDO_CORE,
-    LIST_MODEL_SENTINEL_PHRASE_STEPS_LINEAGE_CORE, LIST_MODEL_SENTINEL_DID_YOU_MEAN_CORE, LIST_MODEL_SENTINEL_TYPED_STEP_CORE, LIST_MODEL_SENTINEL_SERVICE_LINES_CORE,
+    LIST_MODEL_SENTINEL_PHRASE_STEPS_LINEAGE_CORE, LIST_MODEL_SENTINEL_DID_YOU_MEAN_CORE, LIST_MODEL_SENTINEL_TYPED_STEP_CORE, LIST_MODEL_SENTINEL_SERVICE_LINES_CORE, LIST_MODEL_SENTINEL_FAILED_PROMPT_CORE, LIST_MODEL_SENTINEL_FAILED_PROMPT_STORE, LIST_MODEL_SENTINEL_FAILED_PROMPT_TAB_DOM, LIST_MODEL_SENTINEL_FAILED_PROMPT_SETUP_CORE,
   ],
   createBarList,
   createBarBoxHost,
@@ -34,5 +38,6 @@ export const listModel: ListModel = {
   steps: { annotate: annotateWithSteps, lineageOf: stepLineageOf },
   typed: { preview: previewTyped, apply: applyTyped },
   repair: { offer: offerRepair },
+  review: { create: createReview, track: createTracker },          // 2026-11-20-1004
   service: { fields: linesRequestFields, read: readLinesAnswer, version: LINES_SERVICE_VERSION, ask: askLinesNote, askBar: askLinesBar },          // 2026-11-20-1003
 };

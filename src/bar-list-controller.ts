@@ -30,6 +30,8 @@ export interface BarListDeps {
   endSuggestion(path: string, state: 'applied' | 'cancelled' | 'expired'): void;
   basename(path: string): string;
   /** 2026-11-20-1003: a sentence the bar grammar cannot read goes to the sentence service (the description controller owns the request); every line it answers is checked by `check` (the bar grammar) before it is shown. null = the service is not offered. */
+  /** 2026-11-20-1004: the failed-prompt review queue's tracker (null/absent = no queue): a sentence that ended unprocessed, and the personal table. */
+  review?: import('./failed-prompt-setup-core.ts').Tracker | null;
   askLines?(path: string, sentence: string, list: readonly string[], check: (accepted: readonly string[], line: string) => Promise<string | null>): Promise<import('./service-lines-core.ts').LinesRead | null>;
 }
 
@@ -61,6 +63,7 @@ export function createBarList(deps: BarListDeps) {
   const stacks = new Map<string, UndoStack>();
   const stackOf = (path: string): UndoStack => { let s = stacks.get(path); if (!s) { s = barUndoStack(); stacks.set(path, s); } return s; };
   const gestures = new Map<string, { key: string; before: string[]; sentences: string[]; after: string[] }>();
+  const planned = new Map<string, { text: string; lines: readonly string[]; ge: { message: string; column: number } }>();          // 2026-11-20-1004: a SERVICE plan the person has not applied yet (Esc on it is `cancelled` in the review queue)
   const told = new Map<string, string>();
   /** What the list and the fence said the last time this controller looked at the note (or wrote it): a change heard later is told apart by which of the two moved. */
   const seen = new Map<string, { block: string | null; fence: string | null }>();
@@ -141,16 +144,19 @@ export function createBarList(deps: BarListDeps) {
 
   /** The first Enter: what the typed sentences would do (nothing is written). A sentence the grammar cannot read is refused in words; the sentence service knows no bar sentences, so it is not asked. */
   async function previewBar(path: string, text: string, cur: string, instant = false): Promise<PreviewResult> {
+    planned.delete(path);
     const insp = inspectBarNote(cur);
     if (insp.fence === null) { const m = 'This note is not a bar the Beat Box can read.'; deps.say(path, { type: 'notice', message: m }); return { ok: false, message: m }; }
     const plan = planBarAppend(insp.list, barSentencesOf(text));
     if (plan.ok === false) {
       if (plan.reason === 'unreadable') {
-        const offered = await offerRepair(text, 'bar', (repaired) => planBarAppend(insp.list, barSentencesOf(repaired)).ok, (ev) => deps.say(path, ev));          // 2026-11-20-1002 (DID YOU MEAN): a repair the bar grammar reads is offered instead of the bare refusal
+        const offered = await offerRepair(text, 'bar', (repaired) => planBarAppend(insp.list, barSentencesOf(repaired)).ok, (ev) => deps.say(path, ev), deps.review?.known);          // 2026-11-20-1002 (DID YOU MEAN): a repair the bar grammar reads is offered instead of the bare refusal
         if (offered !== null) return offered;
         const asked = deps.askLines === undefined ? null : await deps.askLines(path, text, insp.list, async (acc, line) => { const p = planBarAppend(insp.list, [...acc, line]); return p.ok === false ? p.message : null; });          // 2026-11-20-1003: the service, for a sentence neither the grammar nor a repair reads
+        const ge = { message: plan.message, column: plan.column };
+        if (asked === null) deps.review?.bar(path, text, insp.list, ge, 'unoffered');
         if (asked !== null) {
-          if (asked.kind === 'refused') { deps.say(path, { type: 'refused', message: asked.message, by: 'plugin' }); deps.setBoxNote(path, asked.message); return { ok: false, message: asked.message }; }
+          if (asked.kind === 'refused') { deps.review?.bar(path, text, insp.list, ge, { ...(asked.status !== undefined ? { status: asked.status } : {}), text: asked.message }); deps.say(path, { type: 'refused', message: asked.message, by: 'plugin' }); deps.setBoxNote(path, asked.message); return { ok: false, message: asked.message }; }
           if (asked.kind === 'question') { const m = `The service asks: ${asked.question}`; deps.say(path, { type: 'notice', message: m }); deps.setBoxNote(path, asked.question); return { ok: false, message: m }; }
           if (asked.kind === 'lines') {
             const sp = planBarAppend(insp.list, asked.lines);
@@ -159,6 +165,7 @@ export function createBarList(deps: BarListDeps) {
             const sdesc = sp.added.length > 0 ? sp.added.join(' ') : `Takes back: ${sp.replaced.map((r) => r.sentence).join(' ')}`, srepl = sp.replaced.map((r) => r.sentence).join(' ');
             if (asked.dropped.length > 0) deps.say(path, { type: 'notice', message: `Left out of the service's answer: ${asked.dropped.map((d) => `"${d.line}" (${d.why})`).join('; ')}.` });
             deps.say(path, { type: 'suggestion', description: sdesc, recipe: '', via: 'service', ...(srepl !== '' ? { replaces: srepl } : {}) });
+            planned.set(path, { text, lines: insp.list, ge });
             return { ok: true, proposal: { description: sdesc, via: 'grammar', instead: asked.lines.join(' '), ...(srepl !== '' ? { replaces: srepl } : {}) } };
           }
         }
@@ -176,6 +183,7 @@ export function createBarList(deps: BarListDeps) {
 
   /** The second Enter (or an apply with no preview): the same plan against the bar as it is now, written in one go and recorded for undo. */
   async function applyBar(path: string, text: string, instant = false): Promise<{ ok: boolean; disk?: string; message?: string }> {
+    planned.delete(path);
     const r = await appendBar(path, text, { loud: true, ...(instant ? { instant: true } : {}) });
     if (!r.ok) {
       const m = r.reason === 'unreadable' ? refusedWords('unreadable', r.message, 1, 1) : r.message;
@@ -264,6 +272,8 @@ export function createBarList(deps: BarListDeps) {
 
   return {
     appendBar, previewBar, applyBar, stepBar, canStepBar, evaluateBar, canonicalOf,
+    /** 2026-11-20-1004: Esc on a plan the service made for a bar: the sentence ended unprocessed (cancelled). */
+    discard(path: string): void { const e = planned.get(path); planned.delete(path); if (e !== undefined) deps.review?.bar(path, e.text, e.lines, e.ge, 'cancelled'); },
     reset(path: string): void { stacks.delete(path); gestures.delete(path); told.delete(path); },
     dispose(): void { stacks.clear(); gestures.clear(); told.clear(); },
   };

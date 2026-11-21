@@ -38,6 +38,8 @@ export interface DescriptionHooks {
   composerMenu?: DescriptionPorts['composerMenu'];
   /** 2026-11-19-0992: the plugin's opener of a note by lineage id (a bar opens in the Beat Box): the links of the dialog use it. */
   openNote?: DescriptionPorts['openNote'];
+  /** 2026-11-20-1004: the failed-prompt review queue's port (see DescriptionPorts). */
+  failedPrompts?: DescriptionPorts['failedPrompts'];
 }
 
 export function descriptionPortsFor(env: DescriptionEnv, hooks: DescriptionHooks): DescriptionPorts {
@@ -64,5 +66,6 @@ export function descriptionPortsFor(env: DescriptionEnv, hooks: DescriptionHooks
     ...(create && exists && isAlreadyExists ? { duplicate: (of: Parameters<NonNullable<DescriptionPorts['duplicate']>>[0]) => listModel.duplicate.duplicateNote({ read: (p) => env.read(p), listBasenames: (folder) => env.basenamesIn(folder), exists, create, isAlreadyExists, trace: (line) => env.trace(line) }, of, vault()) } : {}),
     ...(create && exists && isAlreadyExists && env.trash ? { undoCopy: (mark: Parameters<typeof undoCopy>[1]) => listModel.duplicate.undoCopy({ read: (p) => env.read(p), exists, trash: (p) => env.trash!(p) }, mark) } : {}),     // 2026-11-19-0992a: a copy is an undo entry only where the plugin can move it to the trash
     ...(hooks.openNote ? { openNote: hooks.openNote } : {}),
+    failedPrompts: hooks.failedPrompts,
   };
 }

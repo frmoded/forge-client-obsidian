@@ -2,6 +2,7 @@ import { App, PluginSettingTab, Setting } from 'obsidian';
 import { musicRibbonStatusText } from './music-ribbon-status.ts';
 import { BUILD_STAMP } from './build-stamp.generated.ts';
 import { formatBuildLine, vaultNameOf } from './build-stamp-core.ts';
+import { listModel } from './list-model-selected.ts';
 import type ForgePlugin from './main.ts';
 
 export interface ForgeSettings {
@@ -69,6 +70,8 @@ export interface ForgeSettings {
   dialogRatio: number;
   /** 2026-11-20-1002: `Preview before applying` (default OFF): off = ONE Enter applies a sentence the grammar reads completely; on = the first Enter shows what would be written and the second applies (the old behaviour). Replaces the old auto-apply key (a stored one is ignored). */
   previewBeforeApplying: boolean;
+  /** 2026-11-20-1004: `Keep unprocessed sentences for review` (default OFF): a sentence typed in a composer that neither the grammar nor the sentence service could turn into canonical lines is kept in a local file in this plugin's own folder, for the review tab. Nothing leaves the machine. */
+  keepUnprocessedSentences: boolean;
 }
 
 export const DEFAULT_SETTINGS: ForgeSettings = {
@@ -92,6 +95,7 @@ export const DEFAULT_SETTINGS: ForgeSettings = {
   dialogHeight: 112,
   dialogRatio: 0.4,
   previewBeforeApplying: false,
+  keepUnprocessedSentences: false,
 };
 
 export class ForgeSettingTab extends PluginSettingTab {
@@ -248,6 +252,22 @@ export class ForgeSettingTab extends PluginSettingTab {
           .setValue(this.plugin.settings.previewBeforeApplying)
           .onChange(async (value) => {
             this.plugin.settings.previewBeforeApplying = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    if (listModel.present) new Setting(containerEl)          // 2026-11-20-1004: music edition only (the composer's list model)
+      .setName('Keep unprocessed sentences for review')
+      .setDesc(
+        'Off (default): nothing is kept. On: a sentence you type into a composer that the grammar cannot read and the sentence service cannot turn into canonical sentences is kept in failed-prompts.jsonl, in this plugin\'s own folder, '
+        + 'for the command "Review unprocessed sentences". What is kept: the sentence as typed, the note\'s own canonical lines (at most 50), the bar count, the grammar\'s message and the service\'s result, a random id for this vault and the build. '
+        + 'Never a file name, a note body, a token or your name. Nothing leaves this machine.'
+      )
+      .addToggle(toggle =>
+        toggle
+          .setValue(this.plugin.settings.keepUnprocessedSentences)
+          .onChange(async (value) => {
+            this.plugin.settings.keepUnprocessedSentences = value;
             await this.plugin.saveSettings();
           })
       );

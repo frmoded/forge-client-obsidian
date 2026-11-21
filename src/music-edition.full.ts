@@ -37,6 +37,7 @@ import { mountScoreTransport, disposeScoreTransports, type TransportPlayer } fro
 import { createTransportPlayer, type TransportPlayerHandle } from './score-player-adapter.ts';
 import { exportItems, scoreSecondsAt, type ExportItem } from './score-transport-core.ts';
 import { registerScaleExplorer } from './scale-explorer-view.ts';
+import { registerReviewQueue } from './failed-prompt-view.ts';
 
 // html-midi-player registers <midi-player> as a custom element on import. We
 // load it lazily and guard against re-registration (plugin reload would
@@ -729,6 +730,9 @@ export const musicEdition: MusicEdition = {
   registerScaleExplorer(plugin) {
     // 2026-11-04-1170: the forge-scale block + the side view + the command (scale-explorer-view.ts).
     registerScaleExplorer(plugin);
+  },
+  registerReviewQueue(plugin, setup) {
+    return registerReviewQueue(plugin, setup);          // 2026-11-20-1004
   },
   stopPlayers(root, onError) {
     // v0.2.224 — silence audio before tearing down DOM. Removing a <midi-player> from the DOM

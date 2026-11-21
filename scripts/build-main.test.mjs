@@ -87,7 +87,10 @@ test("lean build stays lean in size: code-only, far below the music build, indep
   // 2026-11-20-1002: the cap does NOT move: one Enter applies, "did you mean" and the typed Undo / Redo took lean code-only from 1_513_119 to 1_515_420 bytes (+2_301: the thin shared path, the dialog words, the repair button, the setting); every pure function is behind the seam (did-you-mean-core, typed-step-core).
   // 2026-11-20-1002 (deliberate): the cap moves from 1_516_000 to 1_520_000. The same source measured 1_515_420 bytes in the working tree and 1_517_461 in the matrix's music-leg worktree (the matrix's copy of node_modules is a symlink, so esbuild's per-module path comments are longer there: the code-only size depends on WHERE it is built, by about 2 KB). Earlier drains passed only because their headroom (about 2.9 KB) hid that; 1002 left 580 bytes, so the matrix went red on a size that is not code. The cap is the old headroom restored (about 2.5 KB over the matrix's own measure); the real fix (a size that ignores the build location) is recommended to forge-core, not done here.
   // The cap is the measured module bytes plus a stated margin of 5_122 bytes (0.34 %): 1_504_878 + 5_122 = 1_510_000. The old file-size caps (1_520_000 and before) are retired; they hid a 2 KB working-directory effect inside their headroom.
-  assert.ok(lean < 1_510_000, `lean code grew to ${lean} module bytes (1_504_878 at 2026-11-20-1001zz; the cap is that plus 5_122)`);
+  // 2026-11-20-1004 (deliberate): the cap moves from 1_510_000 to 1_515_000 (+5_000). The thin hooks of the failed-prompt review queue and of the sentence service (1003) live in the SHARED controller (description-apply.ts: a fp?.call at each place a sentence ends,
+  // the request fields, the lines reader's call): lean code grew from 1_504_878 (1001zz) to 1_509_578 on a working tree (+4_700: the thin hooks, the settings toggle's `if (listModel.present)` and the main.ts registration), and the matrix's tree measures 2_041 MORE than a working tree (its generated asset manifest and stamps), so about 1_511_600 there: over the old cap.
+  // Everything else of both features is behind the list-model seam (no sentinel in lean: asserted above); the lean stubs add 0.4 KB. The margin is now about 3_400 bytes. The size test should measure with the generated files stubbed so a working tree and the matrix agree (a recommendation sent to forge-core).
+  assert.ok(lean < 1_515_000, `lean code grew to ${lean} module bytes (1_504_878 at 2026-11-20-1001zz; the cap moved to 1_515_000 at 2026-11-20-1004)`);
   assert.ok(lean * 5 < music, `lean (${lean}) is no longer far below music (${music})`);
 });
 
@@ -108,6 +111,7 @@ const LIST_MODEL_CORES = [
   "bar-list-controller", "bar-list-core", "bar-grammar-core", "bar-box-host-core", "bar-list-note-core",
   "duplicate-sentence-core", "duplicate-note-core", "duplicate-undo-core",
   "phrase-steps-lineage-core",          // 2026-11-20-1000 (deliberate): the Inspector through the step lines (a Score-only core)
+  "failed-prompt-core", "failed-prompt-store", "failed-prompt-tab-dom", "failed-prompt-setup-core",  // 2026-11-20-1004 (deliberate): the failed-prompt review queue (the record, its store, the review tab's DOM, the setup): composer-only code
   "service-lines-core",  // 2026-11-20-1003 (deliberate): the sentence service as the fluent front end (the grammar table, the lines reader): composer-only code
   "did-you-mean-core", "typed-step-core",  // 2026-11-20-1002 (deliberate): the repairs of a sentence the grammar cannot read, and the typed Undo / Redo reader (composer-only code)
 ];

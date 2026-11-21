@@ -12,6 +12,9 @@ export const musicEdition: MusicEdition = {
   registerScaleExplorer() {
     // The Scale Explorer (forge-scale block, side view, command) is music-domain: not registered in the lean edition.
   },
+  registerReviewQueue() {
+    return null;          // 2026-11-20-1004: the review queue is music-composer code
+  },
   stopPlayers() {
     // No MIDI players exist in the lean edition.
   },

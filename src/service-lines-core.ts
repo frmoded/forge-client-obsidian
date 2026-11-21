@@ -54,7 +54,8 @@ export type LinesRead =
   | { kind: 'legacy' }
   | { kind: 'lines'; lines: string[]; dropped: Array<{ line: string; why: string }> }
   | { kind: 'question'; question: string }
-  | { kind: 'refused'; message: string };
+  /** `status` (askLinesBar only): the HTTP status of an answer that was refused for its transport (0 = unreachable); absent = the service answered and refused. */
+  | { kind: 'refused'; message: string; status?: number };
 
 /** What the grammar says of the next line, given the lines accepted so far: null = it reads it, else the reason. */
 export type LineCheck = (accepted: readonly string[], line: string) => Promise<string | null>;
@@ -146,9 +147,9 @@ export async function askLinesBar(io: AskBarIo): Promise<LinesRead | null> {
   io.asking();
   let res: Res;
   try { res = await io.askPlan({ ...built.payload, ...linesRequestFields({ family: 'bar', list: io.list, barCount: null, ...(io.previous !== undefined ? { previous: io.previous } : {}) }) }); }
-  catch (e) { return { kind: 'refused', message: `Could not reach the transpile service (${(e as Error)?.message ?? e}). Check your connection and Settings → Forge → Transpile service URL.` }; }
+  catch (e) { return { kind: 'refused', status: 0, message: `Could not reach the transpile service (${(e as Error)?.message ?? e}). Check your connection and Settings → Forge → Transpile service URL.` }; }
   const lr = await readLinesAnswer(res, io.check);
-  if (lr.kind === 'legacy') { io.remember(null); return { kind: 'refused', message: planTransportRefusal(res, LINES_SERVICE_VERSION) ?? `This transpile service does not know bar sentences yet (it needs version ${LINES_SERVICE_VERSION} or newer). The person who runs it has to update it.` }; }
+  if (lr.kind === 'legacy') { io.remember(null); return { kind: 'refused', status: res.status, message: planTransportRefusal(res, LINES_SERVICE_VERSION) ?? `This transpile service does not know bar sentences yet (it needs version ${LINES_SERVICE_VERSION} or newer). The person who runs it has to update it.` }; }
   io.remember(lr.kind === 'question' ? { sentence: io.sentence, question: lr.question } : null);
   io.trace(lr.kind);
   return lr;

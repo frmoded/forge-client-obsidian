@@ -4,6 +4,7 @@
 // person can see: no "New bar" command and no ribbon button are registered. The vault's profile is a constant, so both are added once, when the workspace is ready; a forge.toml
 // edited mid-session to ADD the profile takes effect on the next load.
 
+import type { FailedPromptsPort } from './failed-prompt-setup-core.ts';
 import { addQuietRibbonIcon } from './sr-label-core.ts';
 import { composerAutoApplyOf, uiFlags } from './ui-flags-core.ts';
 import { onHandEditRefusal } from './hand-edit-refusal-core.ts';
@@ -81,6 +82,8 @@ export const REFRESH_LINKS_COMMAND_ID = 'refresh-note-links';
 export const REFRESH_LINKS_COMMAND_NAME = 'Refresh note links';
 
 export interface ScoreFirstHooks {
+  /** 2026-11-20-1004: the failed-prompt review queue's port (music edition; absent in lean): the composer's controller records the sentences that end unprocessed through it, and its "+" menu offers `Review unprocessed (N)`. */
+  failedPrompts?: FailedPromptsPort;
   /** Open a rhythm note in the Beat Box (the plugin's own opener: a tab already showing the note is reused, else a new tab). */
   openRhythmNote(file: TFile): Promise<void>;
   /** 2026-10-26-1250 (M12): keep this leaf showing this (bar) note as text, so the Beat Box default view does not swap the notes pane into an editor. Absent = nothing is marked. */
@@ -565,8 +568,8 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
         composerAutoApply: () => composerAutoApplyOf(uiFlags()),
         openNote,                                                                                          // 2026-11-19-0992: the links of the dialog ("Created [[bar_010]], a copy of [[bar_007]].") open the note the way a lineage link does (a bar in the Beat Box)
         composerMenu: () => ({
-          items: newMenuItems().map((item) => ({ id: item.commandId, label: item.title })),
-          run: (id) => { const item = newMenuItems().find((i) => i.commandId === id); if (item) runNewMenuItem(item, ribbonRunDeps); },
+          items: [...newMenuItems().map((item) => ({ id: item.commandId, label: item.title })), ...(hooks.failedPrompts?.menuItem?.() ? [hooks.failedPrompts.menuItem()!] : [])],          // 2026-11-20-1004: `Review unprocessed (N)` when N > 0
+          run: (id) => { if (id === hooks.failedPrompts?.menuItem?.()?.id) { hooks.failedPrompts.open?.(); return; } const item = newMenuItems().find((i) => i.commandId === id); if (item) runNewMenuItem(item, ribbonRunDeps); },
           pickNote: () => pickNoteLink(app),
         }),
       }));

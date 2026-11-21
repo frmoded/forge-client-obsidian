@@ -15,6 +15,7 @@
 //
 // This file is types only: no runtime code, nothing to bundle.
 import type { Plugin } from 'obsidian';
+import type { FailedPromptsPort } from './failed-prompt-setup-core.ts';
 
 /** Per-render options. Absent = what every surface did before. */
 export interface RenderOptions {
@@ -38,6 +39,9 @@ export interface MusicEdition {
 
   /** 2026-11-04-1170: register the Scale Explorer — the `forge-scale` code block, its side view and the command "Open Scale Explorer". Lean: no-op, so a lean vault sees no new block, view or command. */
   registerScaleExplorer(plugin: Plugin): void;
+
+  /** 2026-11-20-1004: the failed-prompt review queue: the plugin tab, its two commands and its file store (failed-prompt-view.ts). Returns the port the composer's controller records through, or null when this edition has none. Lean: null (no tab, no command, nothing kept). */
+  registerReviewQueue(plugin: Plugin, setup: { enabled(): boolean; build(): string }): { port: FailedPromptsPort; open(): Promise<void> } | null;
 
   /** Silence any playing MIDI players under `root` before the DOM is torn down (Clear, close,
    *  preview swap). Lean: no-op — there are no players. */
@@ -108,6 +112,12 @@ export interface ListModel {
   };
   /** 2026-11-20-1002: did-you-mean-core.ts: the deterministic repair of a sentence the grammar cannot read (`Did you mean: ...?`), said in the dialog and handed back as the composer's proposal; null = none. Lean: always null (the bare message stays). */
   repair: { offer: typeof import('./did-you-mean-core.ts').offerRepair };
+  /** 2026-11-20-1004: the failed-prompt review queue (failed-prompt-*.ts): `note` hands one sentence that ended unprocessed to the queue's port (lean: nothing), `create` builds the queue for the plugin (lean: null, so no tab, no command, no menu entry). */
+  review: {
+    create(...args: Parameters<typeof import('./failed-prompt-setup-core.ts').createReview>): ReturnType<typeof import('./failed-prompt-setup-core.ts').createReview> | null;
+    /** The controller's bookkeeping of which sentence ended how; null in lean and when there is no queue port. */
+    track: typeof import('./failed-prompt-setup-core.ts').createTracker;
+  };
   /** 2026-11-20-1003: service-lines-core.ts: the sentence service as the FLUENT FRONT END: the extra request fields (the grammar table, the note's lines, the Score's bar numbers) and the reader of an answer of canonical LINES or one clarifying QUESTION (every line is checked by the grammar first). `fields` null = lean: nothing is added and every answer is LEGACY (read as it always was). */
   service: {
     fields(input: Parameters<typeof import('./service-lines-core.ts').linesRequestFields>[0]): ReturnType<typeof import('./service-lines-core.ts').linesRequestFields> | null;

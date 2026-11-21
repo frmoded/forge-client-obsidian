@@ -102,7 +102,9 @@ export function repairCandidate(text: string, family: RepairFamily): Repair | nu
 }
 
 /** The repair, if there is one AND `reads` says the grammar reads the repaired text; a reader that throws is a no. */
-export async function suggestRepair(text: string, family: RepairFamily, reads: (repaired: string) => boolean | Promise<boolean>): Promise<Repair | null> {
+export async function suggestRepair(text: string, family: RepairFamily, reads: (repaired: string) => boolean | Promise<boolean>, known?: (text: string) => string[] | null): Promise<Repair | null> {
+  // 2026-11-20-1004: a sentence the person (or the driver) RESOLVED in the review queue is offered first, in its own lines, if the grammar still reads them
+  try { const k = known?.(text); if (k !== undefined && k !== null && k.length > 0) { const joined = k.join(' '); if (await reads(joined)) return { sentence: joined, hint: 'You taught this sentence earlier.' }; } } catch { /* a table that cannot answer offers nothing */ }
   const c = repairCandidate(text, family);
   if (c === null) return null;
   try { return (await reads(c.sentence)) ? c : null; } catch { return null; }
@@ -112,8 +114,8 @@ export async function suggestRepair(text: string, family: RepairFamily, reads: (
 export const didYouMeanQuestion = (r: Repair): string => `Did you mean: ${r.sentence.replace(/\.\s*$/, '')}?${r.hint !== undefined ? ` ${r.hint}` : ''}`;
 
 /** The repair, if the grammar reads it, SAID in the dialog by `say` (the question with its button) and handed back as the composer's proposal (the sentence to apply INSTEAD of the typed text, only when the person presses Enter or the button); null = no repair, today's message stays. */
-export async function offerRepair(text: string, family: RepairFamily, reads: (repaired: string) => boolean | Promise<boolean>, say: (ev: { type: 'suggestion'; description: string; recipe: ''; via: 'repair'; question: string }) => void): Promise<{ ok: true; proposal: { description: string; via: 'grammar'; instead: string } } | null> {
-  const fix = await suggestRepair(text, family, reads);
+export async function offerRepair(text: string, family: RepairFamily, reads: (repaired: string) => boolean | Promise<boolean>, say: (ev: { type: 'suggestion'; description: string; recipe: ''; via: 'repair'; question: string }) => void, known?: (text: string) => string[] | null): Promise<{ ok: true; proposal: { description: string; via: 'grammar'; instead: string } } | null> {
+  const fix = await suggestRepair(text, family, reads, known);
   if (fix === null) return null;
   say({ type: 'suggestion', description: fix.sentence, recipe: '', via: 'repair', question: didYouMeanQuestion(fix) });
   return { ok: true, proposal: { description: fix.sentence, via: 'grammar', instead: fix.sentence } };

@@ -501,6 +501,8 @@ export default class ForgePlugin extends Plugin {
     musicEdition.registerInputWidgets();
     // 2026-11-04-1170 — the Scale Explorer (the forge-scale block, a side view, the command "Open Scale Explorer"): music edition only, a no-op in lean.
     musicEdition.registerScaleExplorer(this);
+    // 2026-11-20-1004 — the failed-prompt review queue (the plugin tab, the commands `Review unprocessed sentences` and `Copy the failure list`, the local file in the plugin's own folder): music edition only (null in lean), and nothing is kept unless the setting `Keep unprocessed sentences for review` is on.
+    const reviewQueue = musicEdition.registerReviewQueue(this, { enabled: () => this.settings.keepUnprocessedSentences === true, build: () => `${this.manifest.version} ${EDITION} ${formatBuildStamp(BUILD_STAMP)}` });
 
     // v0.2.131 — stale-main.js self-check. BRAT sometimes updates
     // manifest.json but fails to replace main.js, leaving cohort
@@ -788,7 +790,7 @@ export default class ForgePlugin extends Plugin {
     // score_first_experiment M1 (drain 2026-10-21-1100): "New bar" — registered for every vault, offered only where forge.toml declares profile = "score_first".
     // 1155-91: the profile answer arrives after load; the markdown header is re-decided when it does (the edges button is not drawn in a score-first vault).
     this.register(messageDelivery.onScoreFirst(() => { this.syncAllHeaderActions(); }));
-    registerScoreFirst(this, { openRhythmNote: (file) => this.rhythmEdit?.openRhythmNote(file) ?? Promise.resolve(), markRhythmText: (leaf, path) => { this.rhythmEdit?.markAsText(leaf, path); }, holdRhythmText: (leaf, on) => { this.rhythmEdit?.holdAsText(leaf, on); }, askPlan: (payload) => planPhraseAlpha(this.settings.transpileServiceUrl, this.settings.transpileServiceToken, payload), ownKey: () => resolveUserAnthropicKey(this.settings), serviceVersion: () => fetchServiceVersion(this.settings.transpileServiceUrl), planConfigured: () => !!this.settings.transpileServiceUrl?.trim() && !!this.settings.transpileServiceToken?.trim(), dialogStore: settingsStore(this.settings, () => { this.saveDialogSoon(); }) });
+    registerScoreFirst(this, { ...(reviewQueue !== null ? { failedPrompts: reviewQueue.port } : {}), openRhythmNote: (file) => this.rhythmEdit?.openRhythmNote(file) ?? Promise.resolve(), markRhythmText: (leaf, path) => { this.rhythmEdit?.markAsText(leaf, path); }, holdRhythmText: (leaf, on) => { this.rhythmEdit?.holdAsText(leaf, on); }, askPlan: (payload) => planPhraseAlpha(this.settings.transpileServiceUrl, this.settings.transpileServiceToken, payload), ownKey: () => resolveUserAnthropicKey(this.settings), serviceVersion: () => fetchServiceVersion(this.settings.transpileServiceUrl), planConfigured: () => !!this.settings.transpileServiceUrl?.trim() && !!this.settings.transpileServiceToken?.trim(), dialogStore: settingsStore(this.settings, () => { this.saveDialogSoon(); }) });
     // v0.2.84 (replaces v0.2.83 polling) — register the facet-mutex
     // ViewPlugin once at onload. CM6 instantiates the plugin per
     // EditorView; per-view state lives on the plugin instance, the

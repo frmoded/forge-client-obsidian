@@ -21,6 +21,7 @@ import { COMMENTS_NOT_KEPT_BAR, bothEditedLineOf, pythonAppliedLine, pythonCusto
 import { CUSTOM_BANNER } from './phrase-notes-core.ts';
 import type { GrammarParams, GrammarVault } from './phrase-grammar-core.ts';
 import { buildPlanRequest, interpretPlanResponse, type PlanPayload } from './sentence-plan-core.ts';
+import type { FailedPromptsPort } from './failed-prompt-setup-core.ts';
 import { FAMILY_SERVICE_VERSION, OLD_FAMILY_SERVICE, buildFamilyPlanRequest, compositionLoopRefusal, familyRecipeSteps, interpretFamilyResponse } from './sentence-plan-families-core.ts';
 import { versionAtLeast } from './notebook-request-core.ts';
 import { readCompositionNote } from './composition-core.ts';
@@ -61,6 +62,8 @@ export interface DescriptionPorts {
   panes(): Array<{ path: string; contentEl: HTMLElement; /** 2026-11-12-1203: this pane is a score tab (the phrase, arrangement or composition Score), where the docked prompt box lives; the notes pane and the text view are not. */ tab?: boolean }>;
   /** POST /plan, as the sentence dialog sends it. Absent, or `configured()` false = the service is not offered. */
   askPlan?(payload: PlanPayload): Promise<{ status: number; json: unknown }>;
+  /** 2026-11-20-1004: the failed-prompt review queue (the setting `Keep unprocessed sentences for review`, default OFF): a sentence that ends unprocessed is handed to `record`; `known` is the personal table (a resolved sentence typed again is offered through "did you mean"). Absent = nothing is kept (lean, a vault with the setting off). */
+  failedPrompts?: FailedPromptsPort;
   configured?(): boolean;
   ownKey?(): string | undefined;
   /** 2026-11-12-1206: the service's /health version, or null. Asked only when an answer to an arrangement or composition sentence carried no version and was a refusal (a service before 0.2.42): to tell an old service from a sentence it cannot plan. */
@@ -147,6 +150,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   const sentHistory = new Map<string, string[]>();                // 2026-11-17-2001: the sentences sent from each note (Up recalls them), in memory
   const askMessage = new Map<string, string>();                   // 2026-11-17-2001: why the last service request ended without a preview (a drop, a refusal): the preview's answer to the composer
   const asked = new Map<string, { sentence: string; question: string }>();                       // 2026-11-20-1003: the clarifying question the service last asked of this note: the NEXT sentence that needs the service goes back with it, once
+  const fp = listModel.review.track(ports, familyOfPath);          // 2026-11-20-1004: the failed-prompt review queue's bookkeeping (null: no queue)
   const cancelledAsk = new Set<string>();                         // 2026-11-17-2001: Esc while the service thinks: its answer is dropped
   const looked = new WeakMap<HTMLElement, string>();              // pane element -> the note path it was last looked at for (a pane is read once per note it shows)
   let disposed = false;
@@ -270,7 +274,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     askPlan: ports.askPlan, configured: ports.configured, barNames: () => ports.barNames(), ownKey: () => ports.ownKey?.(), sentence, list, check, previous: asked.get(path),
     remember: (q) => { if (q === null) asked.delete(path); else asked.set(path, q); }, asking: () => { say(path, { type: 'asking' }); ports.trace(askingServiceLine(basename(path))); }, trace: (o) => ports.trace(askedServiceLine(basename(path), o)),
   });
-  const bar = listModel.createBarList({ askLines: (path, sentence, list, check) => askBarLines(path, sentence, list, check), proc: (path, fn) => proc(path, fn), say: (path, ev) => say(path, ev), pb: (line) => pb(line), pbWarn: (line) => pbWarn(line), trace: (line) => ports.trace(line), setBoxNote: (path, m) => setBoxNote(path, m), endSuggestion: (path, state) => endSuggestion(path, state), basename });
+  const bar = listModel.createBarList({ review: fp, askLines: (path, sentence, list, check) => askBarLines(path, sentence, list, check), proc: (path, fn) => proc(path, fn), say: (path, ev) => say(path, ev), pb: (line) => pb(line), pbWarn: (line) => pbWarn(line), trace: (line) => ports.trace(line), setBoxNote: (path, m) => setBoxNote(path, m), endSuggestion: (path, state) => endSuggestion(path, state), basename });
   /** The Description on disk, again, into every box of this note (a control wrote it, a hand edit, an apply): unapplied typing is never overwritten (the box offers the choice). */
   const refreshBoxes = async (path: string): Promise<void> => {
     if (disposed) return;
@@ -547,13 +551,14 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     } catch (e) { failure = `Apply: ${(e as Error)?.message ?? e}`; console.error('[forge-promptbox] could not write the list', e); pbWarn(`could not write the note: ${(e as Error)?.message ?? e}`); }
     if (failure !== null) return { ok: false, message: failure };
     if (record) stackOf(path).push({ before: record.before, after: [...rp.list], added: record.added, replaced: record.replaced });
-    asked.delete(path);
+    asked.delete(path); fp?.forget(path);
     return { ok: true, change, stop: rp.stop, applied: rp.applied };
   }
 
   /** The grammar could not read the typed sentence in the list (or the line it would follow): the same strip, trace, dialog line and ONE request to the service as ever (the service only ever PREVIEWS). Returns the sentence the dialog said. */
   function saidRejected(path: string, text: string, cur: string, plan: Extract<Plan, { ok: false }>): string {
     const error = { message: plan.message, line: plan.line, column: plan.column };
+    fp?.rejected(path, plan, cur);
     const state: DescriptionState = { kind: 'rejected', sentence: text, error, message: rejectionMessage(error) };
     set(path, { state, message: state.message, fromBox: true, base: extractDescription(cur) });
     pb('grammar verdict: rejected');
@@ -650,7 +655,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     }
     if (plan.reason === 'loop') { pb(`grammar verdict: accepted, then refused: ${plan.message}`); say(path, { type: 'refused', message: plan.message, by: 'plugin' }); setBoxNote(path, `Refused: ${plan.message}`); return { ok: false, message: `Refused: ${plan.message}` }; }
     if (plan.reason !== 'unreadable') { say(path, { type: 'notice', message: plan.message }); setBoxNote(path, plan.message); return { ok: false, message: plan.message }; }       // an unreadable line already in the list, or nothing to add: said in plain words
-    const offered = await listModel.repair.offer(text, family, async (repaired) => (await planAppend(listOf(cur, family), family, sentencesOfText(repaired, family), ctxFor(path))).ok, (ev) => say(path, ev));          // 2026-11-20-1002 (DID YOU MEAN): a deterministic repair the grammar reads is offered BEFORE the service is asked; Enter or its button applies the SUGGESTION
+    const offered = await listModel.repair.offer(text, family, async (repaired) => (await planAppend(listOf(cur, family), family, sentencesOfText(repaired, family), ctxFor(path))).ok, (ev) => say(path, ev), (t) => fp?.known(t) ?? null);          // 2026-11-20-1002 (DID YOU MEAN): a deterministic repair the grammar reads is offered BEFORE the service is asked; Enter or its button applies the SUGGESTION
     if (offered !== null) return offered;
     return askTail(path, text, saidRejected(path, text, cur, plan));
   }
@@ -801,28 +806,28 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     if (family === null) return;                                                                          // a note that is not ours costs nothing and says nothing
     if (!u || u.state.kind !== 'rejected' || !ports.askPlan) { pb(`ask skipped: ${!u ? 'no pending sentence for this note' : u.state.kind !== 'rejected' ? `the note's state is ${u.state.kind}` : 'no sentence service in this build'}`); return; }
     if (u.busy) { pb('ask skipped: a request is already in flight'); return; }                                                                                    // ONE request in flight: a second ask while the service thinks does nothing
-    const sentence = u.state.sentence;
+    const sentence = u.state.sentence; fp?.svc(path, null);
     const v = ports.vault();
     const req = family === 'phrase'
       ? buildPlanRequest({ sentence, barNames: ports.barNames(), phraseNames: ports.phraseNames(), ownKey: ports.ownKey?.() })
       : buildFamilyPlanRequest({ family, sentence, kitNames: v.kits, phraseNames: ports.phraseNames(), arrangementNames: v.arrangements, compositionNames: v.compositions, note: path.replace(/\.md$/, ''), ownKey: ports.ownKey?.() });
     const keepBox = (x: Ui): Ui => (x.fromBox ? { ...x, fromBox: true, base: x.base } : x);
-    if (req.ok === false) { pbWarn(`request not built: ${req.message}`); set(path, keepBox({ state: u.state, message: req.message, fromBox: u.fromBox, base: u.base })); if (u.fromBox) { setBoxNote(path, req.message); say(path, { type: 'notice', message: req.message }); } return; }
+    if (req.ok === false) { fp?.svc(path, 'none', req.message); pbWarn(`request not built: ${req.message}`); set(path, keepBox({ state: u.state, message: req.message, fromBox: u.fromBox, base: u.base })); if (u.fromBox) { setBoxNote(path, req.message); say(path, { type: 'notice', message: req.message }); } return; }
     set(path, { ...u, busy: true });
     if (u.fromBox) { setBoxBusy(path, 'Asking the sentence service...'); say(path, { type: 'asking' }); }
     ports.trace(askingServiceLine(basename(path)));                                                         // 2026-11-13-1209 (C): a request LEFT
-    let outcome: Asked; let question: string | null = null;
+    let outcome: Asked; let question: string | null = null; let code = 200;
     try {
       // 2026-11-20-1003 (THE SENTENCE SERVICE AS THE FLUENT FRONT END): a sentence typed in the composer goes with the grammar table, the note's own lines and the Score's bar numbers, and may be answered with CANONICAL LINES
       // (each one checked by the grammar before anything is shown) or ONE clarifying question; an answer with neither is the old plan, read as it always was. The work is in service-lines-core (behind the seam); lean asks the old way.
       const a = await listModel.service.ask({
         payload: req.payload, askPlan: (x) => ports.askPlan!(x as PlanPayload), fromBox: u.fromBox, family, previous: asked.get(path), readNote: () => ports.read(path), pane: paneOf(path), vault: ports.vault(), ctx: ctxFor(path), draw: ports.drawSeed ?? defaultSeed,
-        legacy: async (res) => (family === 'phrase' ? interpretPlanResponse(res, req.payload.bars) : await askNewKind(res, req.payload)),
+        legacy: async (res) => (code = res.status, family === 'phrase' ? interpretPlanResponse(res, req.payload.bars) : await askNewKind(res, req.payload)),
       });
       outcome = a; question = 'question' in a && a.question !== undefined ? a.question : null;
       if (question === null) asked.delete(path);
     }
-    catch (e) { outcome = { ok: false, message: `Could not reach the transpile service (${(e as Error)?.message ?? e}). Check your connection and Settings → Forge → Transpile service URL.` }; }
+    catch (e) { code = 0; outcome = { ok: false, message: `Could not reach the transpile service (${(e as Error)?.message ?? e}). Check your connection and Settings → Forge → Transpile service URL.` }; }
     if (u.fromBox) setBoxBusy(path, null);
     if (cancelledAsk.has(path)) {                                                                        // 2026-11-17-2001: Esc while the service thought: the answer is dropped, said once
       ports.trace(askedServiceLine(basename(path), 'dropped: cancelled'));
@@ -853,7 +858,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
       return;
     }
     ports.trace(askedServiceLine(basename(path), outcome.ok === false ? `refused: ${outcome.message}` : `${outcome.params.kind}`));
-    if (outcome.ok === false) { set(path, { state: now.state, message: outcome.message, ...(now.fromBox ? { fromBox: true, base: now.base } : {}) }); if (now.fromBox) { askMessage.set(path, `The service refused: ${outcome.message}`); setBoxNote(path, `The service refused: ${outcome.message}`); say(path, { type: 'refused', message: outcome.message }); } return; }
+    if (outcome.ok === false) { fp?.svc(path, code, outcome.message); set(path, { state: now.state, message: outcome.message, ...(now.fromBox ? { fromBox: true, base: now.base } : {}) }); if (now.fromBox) { askMessage.set(path, `The service refused: ${outcome.message}`); setBoxNote(path, `The service refused: ${outcome.message}`); say(path, { type: 'refused', message: outcome.message }); } return; }
     const name = basename(path);
     const recipe = (outcome.params.kind === 'arrangement' || outcome.params.kind === 'composition' ? familyRecipeSteps(outcome.params) : phraseRecipeSteps(outcome.params as PhraseParams)).join('\n');
     // 2026-11-19-0970: for an arrangement or a composition the service's plan is the CANONICAL LINES of what the typed sentence says; they are appended to the note's list (a Description edited by hand that the grammar could not read: the whole list)
@@ -925,21 +930,23 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   /** The service, once, for a sentence the grammar did not accept (the same gates as ever); its answer is the proposal the composer shows, or why there is none. (2026-11-19-0970: the tail of previewFromBoxCore, shared with the list.) */
   async function askTail(path: string, sentence: string, rejectedText: string): Promise<PreviewResult> {
     const gateLine = `service gate: askPlan=${ports.askPlan === undefined ? 'absent' : 'present'} configured=${ports.configured === undefined ? 'unset' : String(ports.configured())}`;
-    if (ports.askPlan === undefined) { pbWarn(gateLine); const m = 'The sentence service is not available in this build.'; say(path, { type: 'notice', message: m }); return { ok: false, message: `${rejectedText} ${m}` }; }
-    if (ports.configured?.() === false) { pbWarn(gateLine); const m = 'The sentence service is not set up: add its URL and token in Settings -> Forge.'; say(path, { type: 'notice', message: m }); return { ok: false, message: `${rejectedText} ${m}` }; }
+    if (ports.askPlan === undefined) { pbWarn(gateLine); const m = 'The sentence service is not available in this build.'; say(path, { type: 'notice', message: m }); fp?.fail(path, sentence, 'none', m); return { ok: false, message: `${rejectedText} ${m}` }; }
+    if (ports.configured?.() === false) { pbWarn(gateLine); const m = 'The sentence service is not set up: add its URL and token in Settings -> Forge.'; say(path, { type: 'notice', message: m }); fp?.fail(path, sentence, 'not-set-up', m); return { ok: false, message: `${rejectedText} ${m}` }; }
     pb(gateLine);
     askMessage.delete(path);
     await ask(path);
-    if (cancelledAsk.delete(path)) return { ok: false, message: 'Cancelled.' };
+    if (cancelledAsk.delete(path)) { fp?.fail(path, sentence, 'cancelled'); return { ok: false, message: 'Cancelled.' }; }
     const after = ui.get(path);
     if (after?.preview && after.preview.forSentence === sentence) return { ok: true, proposal: { description: after.preview.description, via: 'service', ...(after.preview.replaces ? { replaces: after.preview.replaces } : {}) } };
+    fp?.ended(path, sentence);
     return { ok: false, message: askMessage.get(path) ?? after?.message ?? 'The service did not suggest anything.' };
   }
 
   /** 2026-11-17-2001 - Esc on a preview (or typing over it): drop the proposal, nothing was written. */
   function discardPreview(path: string): void {
     previewed.delete(path);
-    const u = ui.get(path); if (u?.preview) { const rest = { ...u }; delete rest.preview; set(path, rest); }
+    const u = ui.get(path); if (u?.preview) { if (u.fromBox) fp?.fail(path, u.preview.forSentence, 'cancelled'); const rest = { ...u }; delete rest.preview; set(path, rest); }
+    bar.discard(path);
     endSuggestion(path, 'cancelled');
   }
 
@@ -960,7 +967,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     }
   }
 
-  return {
+  const api = {
     modified(path) {
       if (disposed || (familyOfPath(path) === null && !isBarPath(path))) return;
       void refreshBoxes(path);                                                                         // a control wrote the Description (or a hand edit): the box follows at once, not after the debounce
@@ -986,4 +993,6 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     canUpdate: (path) => { const u = ui.get(path); return u !== undefined && (u.state.kind === 'apply' || u.state.kind === 'recipe-apply' || u.state.kind === 'python-apply' || u.state.kind === 'python-custom'); },
     dispose() { disposed = true; bar.dispose(); notices.clear(); stacks.clear(); previewed.clear(); for (const t of timers.values()) ports.clearTimer(t); timers.clear(); for (const h of bars.values()) h.dispose(); bars.clear(); for (const b of boxes.values()) b.handle.dispose(); boxes.clear(); ui.clear(); },
   };
+  ports.failedPrompts?.attach?.(api);          // 2026-11-20-1004: the review tab's "Apply to the open note" goes through this controller's appendLine
+  return api;
 }

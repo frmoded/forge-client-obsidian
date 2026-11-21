@@ -16,7 +16,9 @@ import { editionPlugin } from '../scripts/build-main.mjs';
 
 const SRC = path.join(process.cwd(), 'src');
 /** The cores behind the seam. A new core of the list model goes here AND gets its sentinel (see the cores' own line). */
-const CORES = ['bar-list-controller', 'bar-list-core', 'bar-grammar-core', 'bar-box-host-core', 'bar-list-note-core', 'duplicate-sentence-core', 'duplicate-note-core', 'duplicate-undo-core', 'phrase-steps-lineage-core', 'did-you-mean-core', 'typed-step-core', 'service-lines-core'];          // 2026-11-20-1002 (deliberate): the last two (did you mean, the typed Undo and Redo reader)          // 2026-11-20-1000 (deliberate): + phrase-steps-lineage-core (the Inspector through the step lines: a Score-only core, behind the seam so lean does not carry it)
+const CORES = ['bar-list-controller', 'bar-list-core', 'bar-grammar-core', 'bar-box-host-core', 'bar-list-note-core', 'duplicate-sentence-core', 'duplicate-note-core', 'duplicate-undo-core', 'phrase-steps-lineage-core', 'did-you-mean-core', 'typed-step-core', 'service-lines-core', 'failed-prompt-core', 'failed-prompt-store', 'failed-prompt-tab-dom', 'failed-prompt-setup-core'];          // 2026-11-20-1002 (deliberate): the last two (did you mean, the typed Undo and Redo reader)          // 2026-11-20-1000 (deliberate): + phrase-steps-lineage-core (the Inspector through the step lines: a Score-only core, behind the seam so lean does not carry it)
+/** 2026-11-20-1004 (deliberate): modules that use the cores by value because they are reached ONLY from music-edition.full.ts (the Obsidian view of the failed-prompt review queue: ItemView, commands, the file adapter). The test below pins that nothing else imports them. */
+const MUSIC_ONLY = ['failed-prompt-view'];
 const read = (f: string): string => fs.readFileSync(path.join(SRC, f), 'utf8');
 
 test('mechanism: the committed selector is the FULL list model (tests and tsc see the real cores); only the lean BUILD is redirected', () => {
@@ -101,7 +103,7 @@ test('no module outside the seam imports a list-model core by value: lean reache
   const files = fs.readdirSync(SRC).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts') && f !== 'list-model.full.ts');
   const importRe = /^\s*(import|export)\s+(type\s+)?([^;]*?)\s*from\s*['"]\.\/([\w-]+)\.ts['"]/gm;
   for (const f of files) {
-    if (CORES.includes(f.replace(/\.ts$/, ''))) continue;                       // the cores may use each other (they are all behind the seam together)
+    if (CORES.includes(f.replace(/\.ts$/, '')) || MUSIC_ONLY.includes(f.replace(/\.ts$/, ''))) continue;                       // the cores may use each other (they are all behind the seam together); 2026-11-20-1004 (deliberate): so may the music-only Obsidian view of the review queue
     const text = read(f).replace(/\/\*[\s\S]*?\*\//g, '');
     for (const m of text.matchAll(importRe)) {
       if (!CORES.includes(m[4])) continue;
@@ -116,4 +118,9 @@ test('no module outside the seam imports a list-model core by value: lean reache
 test('the lean stub module imports no core (not even by accident)', () => {
   const text = read('list-model.lean.ts').replace(/\/\/.*$/gm, '');
   assert.deepEqual([...text.matchAll(/from\s*['"]\.\/([\w.-]+)['"]/g)].map((m) => m[1]), ['music-edition.ts']);
+});
+
+test('2026-11-20-1004: the music-only review view is imported by music-edition.full.ts and by NOTHING else (lean never reaches it)', () => {
+  const importers = fs.readdirSync(SRC).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts') && f !== 'failed-prompt-view.ts' && /from\s*['"]\.\/failed-prompt-view\.ts['"]/.test(read(f)));
+  assert.deepEqual(importers, ['music-edition.full.ts']);
 });

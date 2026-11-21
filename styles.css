@@ -2872,3 +2872,27 @@ button.forge-chat-link:not(.clickable-icon) {
 .forge-newnote-message { min-height: 1.5em; color: var(--text-muted); font-size: var(--font-ui-small, 13px); line-height: 1.5; overflow-wrap: anywhere; }
 .forge-newnote-buttons { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .forge-newnote-create:disabled { opacity: 0.5; cursor: default; }
+
+/* 2026-11-20-1004 (THE FAILED-PROMPT REVIEW QUEUE): the review tab (failed-prompt-tab-dom.ts). Obsidian's own variables only, muted words, NO red, no tooltips, no hover-only behaviour: every control is a real button or box with a visible
+   focus ring (the same 2px accent ring as the dialog's links), readable in light and dark. */
+.forge-review-tab { padding: var(--size-4-4, 16px); max-width: 52em; margin: 0 auto; box-sizing: border-box; color: var(--text-normal); }
+.forge-review-title { margin: 0 0 4px; font-size: var(--font-ui-large, 18px); font-weight: var(--font-semibold, 600); }
+.forge-review-muted { color: var(--text-muted); font-size: var(--font-ui-small, 13px); }
+.forge-review-count { margin: 0 0 var(--size-4-3, 12px); }
+.forge-review-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+.forge-review-card { border: 1px solid var(--background-modifier-border); border-radius: var(--radius-m, 8px); padding: var(--size-4-3, 12px) var(--size-4-4, 16px); background: var(--background-secondary); }
+.forge-review-sentence { font-size: var(--font-ui-medium, 15px); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; border-left: 3px solid var(--background-modifier-border-hover, var(--background-modifier-border)); padding-left: var(--size-4-3, 12px); margin: 0 0 8px; user-select: text; -webkit-user-select: text; }
+.forge-review-meta { margin: 0 0 8px; overflow-wrap: anywhere; }
+.forge-review-label { margin: 8px 0 2px; font-weight: var(--font-medium, 500); }
+.forge-review-lines { margin: 0 0 8px; padding-left: 1.6em; }
+.forge-review-line { overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
+.forge-review-grammar, .forge-review-service { margin: 4px 0; overflow-wrap: anywhere; color: var(--text-muted); }
+.forge-review-panel { margin-top: 8px; }
+.forge-review-box { width: 100%; box-sizing: border-box; font-family: var(--font-monospace, monospace); font-size: var(--font-ui-small, 13px); }
+.forge-review-box:focus-visible, .forge-review-tab button:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 2px; }
+.forge-review-checks { margin: 4px 0; }
+.forge-review-check { margin: 2px 0; overflow-wrap: anywhere; }
+.forge-review-plan { border: 1px solid var(--background-modifier-border); border-radius: var(--radius-s, 4px); padding: 8px 12px; margin-top: 8px; }
+.forge-review-status { min-height: 1.5em; margin: 8px 0 0; }
+.forge-review-tab button:disabled { opacity: 0.5; cursor: default; }
+@media (max-width: 480px) { .forge-review-tab { padding: var(--size-4-2, 8px); } .forge-review-actions button { flex: 1 1 100%; } }
