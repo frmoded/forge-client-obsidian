@@ -1,3 +1,6 @@
+---
+description: "Build natural minor from any note: lower the 3rd, 6th and 7th of major, or follow W-H-W-W-H-W-W, and spell it right."
+---
 Major set the standard; natural minor is what you get when you lower three of its notes by a half step.
 
 ## The recipe

@@ -1,3 +1,6 @@
+---
+description: "Build the major scale from any home note with the W-W-H-W-W-W-H recipe, and get its sharps and flats spelled right."
+---
 A scale is a recipe of steps that starts on a home note, the **tonic**, the lowest note of the scale. Intervals gave you distances; a scale lines a few of them up in a fixed order and turns them into a sound. Change the tonic and the recipe stays. That's the whole idea.
 
 ## Major

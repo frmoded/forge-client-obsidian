@@ -1,3 +1,6 @@
+---
+description: "Find the minor twin of any major key, the one with the same notes, by climbing to the 6th note or dropping three half steps."
+---
 Every major key has a minor key that uses exactly the same notes. It's a twin with a different home.
 
 The minor key starts on the 6th note of the major, which is a minor third (three half steps) below the major's home note. C major's 6th note is A, so A minor is its relative: C D E F G A B, just starting from A instead. Same signature, different centre, different mood.

@@ -1,3 +1,6 @@
+---
+description: "See why twelve stacked fifths close into a ring that brings you back to C, and where the sharp keys hand off to the flat keys."
+---
 Start on C and go up a fifth. You land on G. Go up another fifth from G and you're on D. Keep climbing and something odd happens: you never run out of new keys, and then, suddenly, you're home.
 
 A fifth is seven half steps, or five letters counting both ends: C D E F G. Stack them and you get C, G, D, A, E, B, F♯, then D♭, A♭, E♭, B♭, F, and the next fifth up from F is C again. Twelve steps, twelve keys, one loop.

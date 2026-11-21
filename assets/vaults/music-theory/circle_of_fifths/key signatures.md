@@ -1,3 +1,6 @@
+---
+description: "Read any key signature with no table: count the steps from C, learn the order of sharps and flats, and spot the home note."
+---
 Every step clockwise adds one sharp. Every step counter-clockwise from C adds one flat. G has one sharp, F♯. D has two, F♯ and C♯. Keep walking and F♯ major has six. Go the other way: F has one flat, B♭. Then B♭ major has two (B♭ E♭), E♭ three, A♭ four, D♭ five, G♭ six.
 
 The sharps always show up in the same order: F C G D A E B. That's the circle read clockwise, starting from F instead of C. The flats come in the reverse order: B E A D G C F. Same list, backwards.

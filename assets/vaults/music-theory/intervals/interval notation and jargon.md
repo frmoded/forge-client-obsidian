@@ -1,3 +1,6 @@
+---
+description: "Name any interval from unison to octave, read symbols like m3 and P5, and tell a whole step from a half step."
+---
 You can count an interval. Now for the names: every distance has one, and musicians use them without blinking. Not sure how to count? That's [[what matters is intervals]].
 
 A name has two parts: a **size** (2nd, 3rd, 4th and so on) and a **quality** (minor, major, perfect, diminished or augmented). Squash them together and you get a symbol: m3 for a minor third, M3 for a major third, P5 for a perfect fifth.

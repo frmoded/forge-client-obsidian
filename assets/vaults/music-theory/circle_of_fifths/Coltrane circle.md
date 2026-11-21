@@ -1,3 +1,6 @@
+---
+description: "See Coltrane's hand-drawn circle of fifths and the exact patterns hiding in it: scales, whole-tone sets and diminished chords."
+---
 John Coltrane drew his own version of the circle of fifths, by hand. It's widely reproduced, and people call it the Coltrane circle. Here it is.
 
 ![[circle_of_fifths/resources/images/coltrane_circle.jpg|Coltrane's hand-drawn version of the circle of fifths: two rings of note names, some boxed or circled, lines through the middle, small numbers in the margin]]

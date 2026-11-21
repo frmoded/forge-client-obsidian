@@ -1,3 +1,6 @@
+---
+description: "Train your ear to find the second note of a pair, sounding in turn or together, up or down, until you land it in a try or two."
+---
 Names from [[interval notation and jargon]], distances from [[what matters is intervals]]: now use your ears.
 
 You hear two notes, but the piano only shows you the first. Your job is to find the second one and click it. The piano then shows you where it really was. Next gives you another pair, and it can go up or down. Replay plays the pair again.

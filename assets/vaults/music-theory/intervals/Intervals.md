@@ -1,3 +1,6 @@
+---
+description: "Count the gap between two notes, name it and hear it, because scales, the circle of fifths and chords are all built from those gaps."
+---
 Forget the notes for a second: the distance between two of them is the whole game. Scales, the circle of fifths, triads and chords are all patterns of those distances.
 
 1. [[what matters is intervals]] — count the gap between two notes, and see why a tune survives any key.

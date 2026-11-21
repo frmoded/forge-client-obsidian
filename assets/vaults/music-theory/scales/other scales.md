@@ -1,3 +1,6 @@
+---
+description: "Build the pentatonic, blues, whole-tone and diminished scales from their step recipes, and know why improvisers love five notes."
+---
 Major and the minors use seven notes. Plenty of music gets by on fewer, or on stranger recipes, and these are the ones worth knowing. A half step is the next piano key (black keys count) or the next fret; a whole step is two of them.
 
 ## Pentatonic

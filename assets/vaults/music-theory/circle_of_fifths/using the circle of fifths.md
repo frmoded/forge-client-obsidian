@@ -1,3 +1,6 @@
+---
+description: "Use the wheel six ways: read a signature, find a minor twin, pick the I, IV and V, change key, follow a progression, recall the order."
+---
 The circle isn't a poster. It's a tool, and you'll reach for it six ways.
 
 **Read a key signature.** From C, each step clockwise adds one sharp: G has one, D two, A three, E four, B five, F♯ six. Each step counter-clockwise adds one flat: F has one, B♭ two, E♭ three, A♭ four, D♭ five, G♭ six. Count the steps, done. [[key signatures]] has the trick.

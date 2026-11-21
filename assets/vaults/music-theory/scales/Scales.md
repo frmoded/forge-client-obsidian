@@ -1,3 +1,6 @@
+---
+description: "Build every scale in the chapter by counting steps: major, three minors, seven modes, pentatonic, blues, whole-tone, diminished."
+---
 A scale is a recipe of steps that starts from a home note: change the home note and the recipe stays.
 
 By the end of this chapter you'll know how to build every one of these scales: major, natural, harmonic and melodic minor, the seven modes, pentatonic, blues, whole-tone and diminished. No guessing, just counting steps.

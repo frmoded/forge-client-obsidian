@@ -1,3 +1,6 @@
+---
+description: "Find any key's signature in seconds, name its relative minor and see which keys sit close, with no table to memorise."
+---
 ![[circle_of_fifths/resources/images/circle_of_fifths_wheel.svg]]
 
 The circle of fifths is the compass and the cornerstone of music theory. Mystical? Magical? A little of both. This chapter shows where it comes from, how it's built and how it's used. By the end you can find the key signature of any key in seconds, name its relative minor and say which keys sit close together. No table to memorise. You get the basics here; chords and harmony will lean on it again.

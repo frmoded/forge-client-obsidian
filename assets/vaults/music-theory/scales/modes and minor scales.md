@@ -1,3 +1,6 @@
+---
+description: "Build the seven modes, see how each one bends major, and add harmonic and melodic minor."
+---
 With the spelling rule from [[scales jargon]] in hand, you can start bending the major scale.
 
 Play the major scale but start on a different note of it, and you get a **mode**. Same notes, new home base, different feel. There are seven: Ionian, Dorian, Phrygian, Lydian, Mixolydian, Aeolian and Locrian. The worked examples all start on C, so you can watch the recipe change and nothing else. A half step is the next piano key (black keys count) or the next fret.

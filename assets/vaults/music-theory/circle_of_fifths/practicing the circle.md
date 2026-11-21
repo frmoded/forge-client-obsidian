@@ -1,3 +1,6 @@
+---
+description: "Drill the circle at the hard level with three exercises: key to signature, signature to key and minor, and a key's neighbours."
+---
 Last page. Three exercises, one for each thing this chapter taught you. Do them in order.
 
 First, from a key to its signature. A key shows up, you tell me how many sharps or flats it carries.

@@ -1,3 +1,6 @@
+---
+description: "Train your ear to name the scale you hear, starting with telling major from minor."
+---
 You've met the scales; now make your ears earn their keep.
 
 One game, three levels: easy, medium and hard give you 5, 3 or 1 tries per question. Every right answer inside your tries scores a point, and the score lives on the page until you reload.

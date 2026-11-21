@@ -1,3 +1,6 @@
+---
+description: "Tell which keys sit close: neighbours on the wheel share six of seven notes, and the key across the wheel shares only two."
+---
 Neighbours on the circle share six of their seven notes. That's why moving to one sounds smooth, like stepping into the next room instead of leaving the building. C and G differ by a single note: F in one, F♯ in the other.
 
 Two steps apart and you share five notes. Three steps, four. The overlap shrinks with every step you take around the wheel, until you reach the opposite side. Six steps away, C and F♯ share only two notes. That's the longest jump you can make, and it sounds like it.

@@ -1,3 +1,6 @@
+---
+description: "Count the half steps between two notes and see why a tune survives any key: your ear hears the gaps, not the pitches."
+---
 Music runs on 12 notes per octave. Step to the very next one, black keys included, and you've moved one **half step**, also called a [[semitone]]. On a [[guitar]], that's one fret. An **interval** is the distance between two of those notes, counted in half steps from 0 to 12. Always count up from the lower note. Start on C, go three half steps (C♯, D, then E♭) and you land on E-flat. Three half steps. Done.
 
 What each distance is called is on [[interval notation and jargon]].
