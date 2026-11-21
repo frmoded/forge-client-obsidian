@@ -108,6 +108,7 @@ const LIST_MODEL_CORES = [
   "bar-list-controller", "bar-list-core", "bar-grammar-core", "bar-box-host-core", "bar-list-note-core",
   "duplicate-sentence-core", "duplicate-note-core", "duplicate-undo-core",
   "phrase-steps-lineage-core",          // 2026-11-20-1000 (deliberate): the Inspector through the step lines (a Score-only core)
+  "service-lines-core",  // 2026-11-20-1003 (deliberate): the sentence service as the fluent front end (the grammar table, the lines reader): composer-only code
   "did-you-mean-core", "typed-step-core",  // 2026-11-20-1002 (deliberate): the repairs of a sentence the grammar cannot read, and the typed Undo / Redo reader (composer-only code)
 ];
 const sentinelOf = (core) => `forge-list-model-core:${core}`;

@@ -29,6 +29,8 @@ export interface BarListDeps {
   setBoxNote(path: string, message: string | null): void;
   endSuggestion(path: string, state: 'applied' | 'cancelled' | 'expired'): void;
   basename(path: string): string;
+  /** 2026-11-20-1003: a sentence the bar grammar cannot read goes to the sentence service (the description controller owns the request); every line it answers is checked by `check` (the bar grammar) before it is shown. null = the service is not offered. */
+  askLines?(path: string, sentence: string, list: readonly string[], check: (accepted: readonly string[], line: string) => Promise<string | null>): Promise<import('./service-lines-core.ts').LinesRead | null>;
 }
 
 export interface BarAppendOpts {
@@ -146,6 +148,20 @@ export function createBarList(deps: BarListDeps) {
       if (plan.reason === 'unreadable') {
         const offered = await offerRepair(text, 'bar', (repaired) => planBarAppend(insp.list, barSentencesOf(repaired)).ok, (ev) => deps.say(path, ev));          // 2026-11-20-1002 (DID YOU MEAN): a repair the bar grammar reads is offered instead of the bare refusal
         if (offered !== null) return offered;
+        const asked = deps.askLines === undefined ? null : await deps.askLines(path, text, insp.list, async (acc, line) => { const p = planBarAppend(insp.list, [...acc, line]); return p.ok === false ? p.message : null; });          // 2026-11-20-1003: the service, for a sentence neither the grammar nor a repair reads
+        if (asked !== null) {
+          if (asked.kind === 'refused') { deps.say(path, { type: 'refused', message: asked.message, by: 'plugin' }); deps.setBoxNote(path, asked.message); return { ok: false, message: asked.message }; }
+          if (asked.kind === 'question') { const m = `The service asks: ${asked.question}`; deps.say(path, { type: 'notice', message: m }); deps.setBoxNote(path, asked.question); return { ok: false, message: m }; }
+          if (asked.kind === 'lines') {
+            const sp = planBarAppend(insp.list, asked.lines);
+            if (sp.ok === false) { deps.say(path, { type: 'refused', message: sp.message, by: 'plugin' }); return { ok: false, message: sp.message }; }
+            if (sp.unchanged) { const m = 'Nothing changed: the bar already says this.'; deps.say(path, { type: 'notice', message: m }); return { ok: false, message: m }; }
+            const sdesc = sp.added.length > 0 ? sp.added.join(' ') : `Takes back: ${sp.replaced.map((r) => r.sentence).join(' ')}`, srepl = sp.replaced.map((r) => r.sentence).join(' ');
+            if (asked.dropped.length > 0) deps.say(path, { type: 'notice', message: `Left out of the service's answer: ${asked.dropped.map((d) => `"${d.line}" (${d.why})`).join('; ')}.` });
+            deps.say(path, { type: 'suggestion', description: sdesc, recipe: '', via: 'service', ...(srepl !== '' ? { replaces: srepl } : {}) });
+            return { ok: true, proposal: { description: sdesc, via: 'grammar', instead: asked.lines.join(' '), ...(srepl !== '' ? { replaces: srepl } : {}) } };
+          }
+        }
         deps.say(path, { type: 'rejected', line: plan.line, column: plan.column, message: plan.message }); deps.setBoxNote(path, refusedWords(plan.reason, plan.message, plan.line, plan.column)); return { ok: false, message: refusedWords(plan.reason, plan.message, plan.line, plan.column) }; }
       deps.say(path, { type: 'notice', message: plan.message }); deps.setBoxNote(path, plan.message);
       return { ok: false, message: plan.message };

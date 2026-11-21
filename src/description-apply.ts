@@ -146,6 +146,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   const notices = new Map<string, { message: string; text: string; /** 2026-11-13-1214: it came from the box: said in the dialog, never in the strip */ fromBox?: boolean }>();     // path -> a sentence that stays on the note's bar after a successful apply (D4: comments dropped), until the note's text changes
   const sentHistory = new Map<string, string[]>();                // 2026-11-17-2001: the sentences sent from each note (Up recalls them), in memory
   const askMessage = new Map<string, string>();                   // 2026-11-17-2001: why the last service request ended without a preview (a drop, a refusal): the preview's answer to the composer
+  const asked = new Map<string, { sentence: string; question: string }>();                       // 2026-11-20-1003: the clarifying question the service last asked of this note: the NEXT sentence that needs the service goes back with it, once
   const cancelledAsk = new Set<string>();                         // 2026-11-17-2001: Esc while the service thinks: its answer is dropped
   const looked = new WeakMap<HTMLElement, string>();              // pane element -> the note path it was last looked at for (a pane is read once per note it shows)
   let disposed = false;
@@ -264,7 +265,12 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   const setBoxBusy = (path: string, message: string | null): void => { for (const b of boxes.values()) if (b.path === path) b.handle.setBusy(message); };
   const setBoxNote = (path: string, message: string | null): void => { if (message !== null && ports.showBoxStatus && !ports.showBoxStatus()) return; for (const b of boxes.values()) if (b.path === path) b.handle.setNote(message); };        // 2026-11-15-1217: the status line is the legacy view; a clear (null) always goes through
   /** 2026-11-19-0993 (THE LIST MODEL, stage 3: BARS): a bar note is a list too (`lines:`); its half of this controller (bar-list-controller.ts) shares the dialog, the tracked write, the box and the trace lines. A bar is routed to it by its PATH (`isBarPath`), never by `familyOfPath`. */
-  const bar = listModel.createBarList({ proc: (path, fn) => proc(path, fn), say: (path, ev) => say(path, ev), pb: (line) => pb(line), pbWarn: (line) => pbWarn(line), trace: (line) => ports.trace(line), setBoxNote: (path, m) => setBoxNote(path, m), endSuggestion: (path, state) => endSuggestion(path, state), basename });
+  /** 2026-11-20-1003: a BAR sentence the bar grammar cannot read goes to the service (the request, the answer and the older-service words live in service-lines-core, behind the seam; lean: null = not offered). */
+  const askBarLines = (path: string, sentence: string, list: readonly string[], check: Parameters<typeof listModel.service.read>[1]) => listModel.service.askBar({
+    askPlan: ports.askPlan, configured: ports.configured, barNames: () => ports.barNames(), ownKey: () => ports.ownKey?.(), sentence, list, check, previous: asked.get(path),
+    remember: (q) => { if (q === null) asked.delete(path); else asked.set(path, q); }, asking: () => { say(path, { type: 'asking' }); ports.trace(askingServiceLine(basename(path))); }, trace: (o) => ports.trace(askedServiceLine(basename(path), o)),
+  });
+  const bar = listModel.createBarList({ askLines: (path, sentence, list, check) => askBarLines(path, sentence, list, check), proc: (path, fn) => proc(path, fn), say: (path, ev) => say(path, ev), pb: (line) => pb(line), pbWarn: (line) => pbWarn(line), trace: (line) => ports.trace(line), setBoxNote: (path, m) => setBoxNote(path, m), endSuggestion: (path, state) => endSuggestion(path, state), basename });
   /** The Description on disk, again, into every box of this note (a control wrote it, a hand edit, an apply): unapplied typing is never overwritten (the box offers the choice). */
   const refreshBoxes = async (path: string): Promise<void> => {
     if (disposed) return;
@@ -522,6 +528,8 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   };
   const ctxFor = (path: string): ReplayCtx => ({ vault: ports.vault(), self: noteId(path), readSections: readSectionsOf });
   const listOf = (cur: string, family: ListFamily): string[] => listOfNote(cur, family, ports.vault()).list;
+  /** 2026-11-20-1003: the open pane of this note (the seam counts the bars its Score DRAWS: only a count is sent to the service, never the music). */
+  const paneOf = (path: string): HTMLElement | undefined => ports.panes().find((p) => p.path === path)?.contentEl;
 
   /** Write `next` as the note's list in ONE `process`, if the Description on disk is still `expectBase` (what the plan was made against). `record` (an apply) goes on the undo stack once it is written. */
   async function commitList(path: string, family: ListFamily, next: readonly string[], expectBase: string, record?: { before: string[]; added: string[]; replaced: Array<{ index: number; sentence: string }> }): Promise<{ ok: true; change: string; stop: ListStop | null; applied: number } | { ok: false; message: string }> {
@@ -539,6 +547,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     } catch (e) { failure = `Apply: ${(e as Error)?.message ?? e}`; console.error('[forge-promptbox] could not write the list', e); pbWarn(`could not write the note: ${(e as Error)?.message ?? e}`); }
     if (failure !== null) return { ok: false, message: failure };
     if (record) stackOf(path).push({ before: record.before, after: [...rp.list], added: record.added, replaced: record.replaced });
+    asked.delete(path);
     return { ok: true, change, stop: rp.stop, applied: rp.applied };
   }
 
@@ -769,7 +778,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     };
   }
 
-  type Asked = { ok: true; params: GrammarParams } | { ok: false; message: string };
+  type Asked = { ok: true; params: GrammarParams; /** 2026-11-20-1003: the service answered in canonical LINES (already checked by the grammar, seeds drawn): they are the plan itself */ lines?: string[]; droppedNotice?: string } | { ok: false; message: string };
   /** 2026-11-12-1206: the service's answer for an ARRANGEMENT or a COMPOSITION sentence, read by the plugin's own validators and the vault's lists, gated on the service version, and (a composition) checked for loops through the vault. */
   async function askNewKind(res: { status: number; json: unknown }, payload: PlanPayload): Promise<Asked> {
     const family = payload.family!;
@@ -802,10 +811,16 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     set(path, { ...u, busy: true });
     if (u.fromBox) { setBoxBusy(path, 'Asking the sentence service...'); say(path, { type: 'asking' }); }
     ports.trace(askingServiceLine(basename(path)));                                                         // 2026-11-13-1209 (C): a request LEFT
-    let outcome: Asked;
+    let outcome: Asked; let question: string | null = null;
     try {
-      const res = await ports.askPlan(req.payload);
-      outcome = family === 'phrase' ? interpretPlanResponse(res, req.payload.bars) : await askNewKind(res, req.payload);
+      // 2026-11-20-1003 (THE SENTENCE SERVICE AS THE FLUENT FRONT END): a sentence typed in the composer goes with the grammar table, the note's own lines and the Score's bar numbers, and may be answered with CANONICAL LINES
+      // (each one checked by the grammar before anything is shown) or ONE clarifying question; an answer with neither is the old plan, read as it always was. The work is in service-lines-core (behind the seam); lean asks the old way.
+      const a = await listModel.service.ask({
+        payload: req.payload, askPlan: (x) => ports.askPlan!(x as PlanPayload), fromBox: u.fromBox, family, previous: asked.get(path), readNote: () => ports.read(path), pane: paneOf(path), vault: ports.vault(), ctx: ctxFor(path), draw: ports.drawSeed ?? defaultSeed,
+        legacy: async (res) => (family === 'phrase' ? interpretPlanResponse(res, req.payload.bars) : await askNewKind(res, req.payload)),
+      });
+      outcome = a; question = 'question' in a && a.question !== undefined ? a.question : null;
+      if (question === null) asked.delete(path);
     }
     catch (e) { outcome = { ok: false, message: `Could not reach the transpile service (${(e as Error)?.message ?? e}). Check your connection and Settings → Forge → Transpile service URL.` }; }
     if (u.fromBox) setBoxBusy(path, null);
@@ -830,6 +845,13 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
       await dropVisibly('the text in the box changed', message, { state: now.state, message, fromBox: true, base: now.base });
       return;
     }
+    if (question !== null) {                                                                              // 2026-11-20-1003: one clarifying question: said in the dialog, nothing written; the next sentence that needs the service goes back with it
+      asked.set(path, { sentence, question }); ports.trace(askedServiceLine(basename(path), 'question'));
+      const m = `The service asks: ${question}`;
+      set(path, { state: now.state, message: question, ...(now.fromBox ? { fromBox: true, base: now.base } : {}) });
+      if (now.fromBox) { askMessage.set(path, m); setBoxNote(path, question); say(path, { type: 'notice', message: m }); }
+      return;
+    }
     ports.trace(askedServiceLine(basename(path), outcome.ok === false ? `refused: ${outcome.message}` : `${outcome.params.kind}`));
     if (outcome.ok === false) { set(path, { state: now.state, message: outcome.message, ...(now.fromBox ? { fromBox: true, base: now.base } : {}) }); if (now.fromBox) { askMessage.set(path, `The service refused: ${outcome.message}`); setBoxNote(path, `The service refused: ${outcome.message}`); say(path, { type: 'refused', message: outcome.message }); } return; }
     const name = basename(path);
@@ -838,7 +860,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     let listed: { description: string; lines: string[]; replaces?: string } | null = null;
     if (FAMILY_KINDS[family].includes(outcome.params.kind)) {
       let cur = ''; try { cur = await ports.read(path); } catch { /* the note went away: the apply says so */ }
-      const lines = linesOfParams(outcome.params, family);
+      const lines = outcome.lines ?? linesOfParams(outcome.params, family);
       const plan = await planAppend(now.fromBox ? listOf(cur, family) : [], family, lines, ctxFor(path));
       if (plan.ok === false || (plan.unchanged && now.fromBox)) {
         const message = plan.ok === false ? (plan.reason === 'loop' ? plan.message : `The suggestion does not fit this note: ${plan.message}`) : 'Nothing changed: the note already says this.';
@@ -851,6 +873,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     }
     const shown = listed?.description ?? describe(outcome.params);
     set(path, { state: now.state, ...(now.fromBox ? { fromBox: true, base: now.base } : {}), preview: { params: outcome.params, forSentence: sentence, description: shown, recipe, ...(listed ? { lines: listed.lines, ...(listed.replaces ? { replaces: listed.replaces } : {}) } : {}) } });
+    if (now.fromBox && outcome.droppedNotice !== undefined) say(path, { type: 'notice', message: outcome.droppedNotice });
     if (now.fromBox) { setBoxNote(path, 'The service answered: the suggestion is in the dialog.'); say(path, { type: 'suggestion', description: shown, recipe, ...(listed?.replaces ? { replaces: listed.replaces } : {}) }); }
     if (family === 'phrase') void phraseDescription(name, outcome.params as PhraseParams);
   }

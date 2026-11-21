@@ -249,9 +249,13 @@ test('a service that is not set up is said in words and nothing is applied; a se
   const nope = rig({ service: async () => ({ status: 200, json: { ok: true, parsed_ok: false, plan: null, error: 'cannot', version: '0.2.48' } }) }); await nope.ready(); nope.type('make it groovier'); await nope.enter();
   assert.deepEqual(nope.writes, []); assert.ok(!nope.kinds().includes('applied'));
 });
-test('a bar has no service: an unreadable sentence is refused in words, nothing is applied', async () => {
-  const r = rig({ path: BAR, service: planOk({}) }); await r.ready(); r.type('make the kick louder please'); await r.enter();
+test('a bar with no service set up: an unreadable sentence is refused in words, nothing is applied, no request', async () => {
+  const r = rig({ path: BAR }); await r.ready(); r.type('make the kick louder please'); await r.enter();
   assert.deepEqual(r.writes, []); assert.equal(r.service(), 0); assert.ok(r.kinds().includes('rejected'));
+});
+test('2026-11-20-1003 (deliberate: bars were never under the service before): a bar WITH a service asks it once for a sentence the bar grammar cannot read; an older service\'s answer is refused in words, nothing is applied', async () => {
+  const r = rig({ path: BAR, service: planOk({}) }); await r.ready(); r.type('make the kick louder please'); await r.enter();
+  assert.deepEqual(r.writes, []); assert.equal(r.service(), 1); assert.ok(r.kinds().includes('refused')); assert.ok(r.entries().some((e) => /does not know bar sentences yet/.test(e.text)));
 });
 
 // ================================================================================================================================================================================================

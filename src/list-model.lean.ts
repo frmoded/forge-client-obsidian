@@ -38,4 +38,5 @@ export const listModel: ListModel = {
   steps: { annotate: () => null, lineageOf: () => [] },          // 2026-11-20-1000: lean has no Score: nothing is tied through steps
   typed: { preview: () => null, apply: () => null },     // 2026-11-20-1002: lean reads no step sentence (Undo is the grammar's to refuse, as before) and offers no "did you mean" (the bare message stays)
   repair: { offer: async () => null },
+  service: { fields: () => null, read: async () => ({ kind: 'legacy' }), version: '', ask: async (io) => io.legacy(await io.askPlan(io.payload)), askBar: async () => null },          // 2026-11-20-1003: lean adds nothing to a request and reads every answer as it always did
 };

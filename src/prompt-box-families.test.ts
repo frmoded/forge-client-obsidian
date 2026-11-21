@@ -24,6 +24,9 @@ const ARR_NOTE = (): string => newArrangementNote('arr_001', { kind: 'arrangemen
 const COMP_START: CompositionParams = { kind: 'composition', sections: [{ source: 'phrases/phrase_003' }] };
 const COMP_NOTE = (): string => newCompositionNote('song_1', COMP_START);
 
+/** 2026-11-20-1003 (deliberate): a sentence typed in the composer now ALSO carries the lines-mode fields (service-lines-core: mode, note_kind, grammar, list, bar_count, bar_numbers, instruction, previous: pinned in service-lines-wiring.test.ts); the fields this file pins (family, kits, phrases, bars, note, ...) are exactly what they were, so they are compared without the new ones. */
+const LINES_FIELDS = ['mode', 'note_kind', 'grammar', 'list', 'bar_count', 'bar_numbers', 'instruction', 'previous'];
+const withoutLinesFields = (payload: any) => Object.fromEntries(Object.entries(payload).filter(([k]) => !LINES_FIELDS.includes(k)));
 function rig(opts: { service?: (payload: any) => Promise<Answer>; configured?: boolean; path: string; note: string; extra?: Record<string, string>; version?: () => Promise<string | null>; compositions?: string[] }) {
   const store = new Map<string, string>([[opts.path, opts.note], ...Object.entries(opts.extra ?? {})]);
   const writes: string[] = [], asked: any[] = [], reads: string[] = [];
@@ -36,7 +39,7 @@ function rig(opts: { service?: (payload: any) => Promise<Answer>; configured?: b
     setTimer: () => 0, clearTimer: () => {},
     trace: () => {}, panes: () => panes,
     ...(opts.version !== undefined ? { serviceVersion: opts.version } : {}),
-    ...(opts.service !== undefined ? { askPlan: async (payload: any) => { asked.push(payload); return opts.service!(payload); }, configured: () => opts.configured !== false } : {}),
+    ...(opts.service !== undefined ? { askPlan: async (payload: any) => { asked.push(withoutLinesFields(payload)); return opts.service!(payload); }, configured: () => opts.configured !== false } : {}),
   };
   const ctl = createDescriptionController(ports);
   const el = win.document.createElement('div'); win.document.body.appendChild(el);

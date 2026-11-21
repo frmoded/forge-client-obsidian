@@ -108,4 +108,15 @@ export interface ListModel {
   };
   /** 2026-11-20-1002: did-you-mean-core.ts: the deterministic repair of a sentence the grammar cannot read (`Did you mean: ...?`), said in the dialog and handed back as the composer's proposal; null = none. Lean: always null (the bare message stays). */
   repair: { offer: typeof import('./did-you-mean-core.ts').offerRepair };
+  /** 2026-11-20-1003: service-lines-core.ts: the sentence service as the FLUENT FRONT END: the extra request fields (the grammar table, the note's lines, the Score's bar numbers) and the reader of an answer of canonical LINES or one clarifying QUESTION (every line is checked by the grammar first). `fields` null = lean: nothing is added and every answer is LEGACY (read as it always was). */
+  service: {
+    fields(input: Parameters<typeof import('./service-lines-core.ts').linesRequestFields>[0]): ReturnType<typeof import('./service-lines-core.ts').linesRequestFields> | null;
+    read: typeof import('./service-lines-core.ts').readLinesAnswer;
+    /** The version of the service that answers in lines ('' in lean). */
+    version: string;
+    /** The controller's ask for a list note (composer sentence): fields, answer, lines checked through `io.plan`. Lean: just the old request, every answer LEGACY. */
+    ask: typeof import('./service-lines-core.ts').askLinesNote;
+    /** The bar composer's ask. Lean: null (the service is not offered for a bar). */
+    askBar: typeof import('./service-lines-core.ts').askLinesBar;
+  };
 }

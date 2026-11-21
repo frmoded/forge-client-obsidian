@@ -276,7 +276,13 @@ test('the composer on a bar: a typed sentence is previewed (nothing written), En
   assert.deepEqual(r.lines(), [BAR_HEAD, 'Hit kick on steps 3 and 9.']); assert.equal(r.calls(), 1); assert.equal(r.writes.length, 1); assert.ok(empty(r));
   assert.equal(dataOf(r.text()).channels.kick[2], true);
   r.type('Frobnicate the kick'); await r.enter();
-  assert.equal(r.service(), 0, 'the sentence service knows no bar sentences: it is not asked');
+  assert.equal(r.service(), 1, '2026-11-20-1003 (deliberate): bars are under the sentence service now: a sentence the bar grammar cannot read is asked ONCE (it was never asked before 1003)');
+  assert.match(r.field().closest('.forge-chat-panel, .forge-prompt-box')?.textContent ?? '', /does not know bar sentences yet/, 'an older service (it answers the old plan) says so in words');
+});
+test('2026-11-20-1003: a bar with NO service set up is refused in the bar grammar\'s own words, as before (no request)', async () => {
+  const r = rig(); await r.ready();
+  r.type('Frobnicate the kick'); await r.enter();
+  assert.equal(r.service(), 0);
   assert.match(r.field().closest('.forge-chat-panel, .forge-prompt-box')?.textContent ?? '', /do not know how to read/);
 });
 

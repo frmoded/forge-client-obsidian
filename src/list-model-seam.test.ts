@@ -16,7 +16,7 @@ import { editionPlugin } from '../scripts/build-main.mjs';
 
 const SRC = path.join(process.cwd(), 'src');
 /** The cores behind the seam. A new core of the list model goes here AND gets its sentinel (see the cores' own line). */
-const CORES = ['bar-list-controller', 'bar-list-core', 'bar-grammar-core', 'bar-box-host-core', 'bar-list-note-core', 'duplicate-sentence-core', 'duplicate-note-core', 'duplicate-undo-core', 'phrase-steps-lineage-core', 'did-you-mean-core', 'typed-step-core'];          // 2026-11-20-1002 (deliberate): the last two (did you mean, the typed Undo and Redo reader)          // 2026-11-20-1000 (deliberate): + phrase-steps-lineage-core (the Inspector through the step lines: a Score-only core, behind the seam so lean does not carry it)
+const CORES = ['bar-list-controller', 'bar-list-core', 'bar-grammar-core', 'bar-box-host-core', 'bar-list-note-core', 'duplicate-sentence-core', 'duplicate-note-core', 'duplicate-undo-core', 'phrase-steps-lineage-core', 'did-you-mean-core', 'typed-step-core', 'service-lines-core'];          // 2026-11-20-1002 (deliberate): the last two (did you mean, the typed Undo and Redo reader)          // 2026-11-20-1000 (deliberate): + phrase-steps-lineage-core (the Inspector through the step lines: a Score-only core, behind the seam so lean does not carry it)
 const read = (f: string): string => fs.readFileSync(path.join(SRC, f), 'utf8');
 
 test('mechanism: the committed selector is the FULL list model (tests and tsc see the real cores); only the lean BUILD is redirected', () => {
@@ -71,6 +71,10 @@ test('the lean stubs answer what lean answered before the list model: no action 
   for (const sentence of ['Undo', 'Undo 3', 'Redo', 'undo that']) assert.deepEqual(d.readActionText(sentence), { kind: 'none' }, sentence);
   assert.equal(await lean.repair.offer('Delet bar 2.', 'phrase', async () => true, () => { throw new Error('lean said something'); }), null);
   assert.equal(lean.typed.preview('bars/bar_001.md', 'Undo', {} as never), null); assert.equal(lean.typed.apply('bars/bar_001.md', 'Undo 3', true, {} as never), null);
+  // 2026-11-20-1003: lean adds NOTHING to a service request and reads every answer as the old plan (P3: the lean edition is byte for byte what it was)
+  assert.equal(lean.service.fields({ family: 'phrase', list: ['Keep bars 1 to 2.'], barCount: 4 }), null);
+  for (const json of [{ ok: true, lines: ['Delete bar 2.'] }, { ok: true, question: 'Which?' }, { ok: true, plan: {} }]) assert.deepEqual(await lean.service.read({ status: 200, json }, async () => null), { kind: 'legacy' });
+  assert.equal(lean.service.version, '');
 });
 
 test('the FULL model is the real thing (the stubs above would pass if both sides were stubs): the same questions get the real answers', async () => {
@@ -87,6 +91,9 @@ test('the FULL model is the real thing (the stubs above would pass if both sides
   const ports = { you() {}, canStep: () => false, step: async () => ({ ok: true, message: '' }), say() {}, note() {}, pb() {} };
   assert.notEqual(full.typed.apply('bars/bar_001.md', 'Undo', true, ports), null, 'a step sentence is the full model\'s');
   assert.equal(full.typed.apply('bars/bar_001.md', 'Keep bars 1 to 2.', true, ports), null);
+  const f = full.service.fields({ family: 'phrase', list: ['Keep bars 1 to 2.'], barCount: 4 });
+  assert.equal(f?.mode, 'lines'); assert.deepEqual(f?.bar_numbers, [1, 2, 3, 4]); assert.equal(full.service.version, '0.2.49');
+  assert.deepEqual(await full.service.read({ status: 200, json: { ok: true, lines: ['Delete bar 2.'] } }, async () => null), { kind: 'lines', lines: ['Delete bar 2.'], dropped: [] });
 });
 
 test('no module outside the seam imports a list-model core by value: lean reaches them only through list-model-selected (type-only imports are erased and allowed)', () => {
