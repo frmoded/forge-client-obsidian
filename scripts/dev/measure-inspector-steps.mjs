@@ -6,6 +6,7 @@
 //     <dir>      default ~/.forge-mem-evidence/measure/inspector-steps (the bundle, the stylesheets and the shots go here)
 //     --quick    every other case only (a smoke run)
 // It builds the bundle itself unless --no-build (EDITION=music ENTRY=entry-phrase.ts), takes the heavy lock (a second Chrome job waits), and needs the music wheels. Run it ALONE, `nice -n 10`.
+// 2026-11-20-1002a: a long score is several Verovio PAGES (one svg each); the bars are counted over the whole score host, not the largest page.
 // Verdicts: everyBarPinsAndNamesANote (the real click on every bar: lines[0] is `bar N of M`, one line says `from <note>` or `made by step K: <sentence>`), neverCouldNotBeMapped (before any click and after every click), barsAreDrawn (the SVG has the bars the steps leave), madeBarsSayTheirStep (a bar a step made says which, with its sentence, and its source bars),
 // carriedBarsNameTheirNote (a Keep / Copy / Move / shifted bar says `from <the note of its head bar>`), barWordClickInsertsPosition (Delete on every bar, Move and Copy on every bar of every third case and on the first and last of the others: the field says `<Verb> bar N`), barWordClickPinsNothing,
 // noConsoleErrors (the harness player's `[forge-player] sounds could not be loaded` is the harness' own and is left out). Screenshots: inspector-<case>.png (the Score with one bar pinned and its stack).
@@ -47,6 +48,8 @@ const SRC_PHRASE = noteContentFor('phrase_002', { kind: 'extend', source: 'bar_0
 const HEADS = {
   extend: { lines: ['Extend [[bar_005]] to 4 bars, repeating with fills.'], bars: 4, notes: () => ['bars/bar_005'] },
   morph: { lines: ['Morph [[bar_005]] into [[bar_006]] over 5 bars, in musical order.'], bars: 5, notes: (h, n) => [h <= (n + 1) / 2 ? 'bars/bar_005' : 'bars/bar_006'] },
+  // 2026-11-20-1002a: the driver's phrase: a LONG Morph (27 bars) and then Delete bar 2 and bar 4.
+  morph27: { lines: ['Morph [[bar_005]] into [[bar_006]] over 27 bars, in musical order.'], bars: 27, notes: (h, n) => [h <= (n + 1) / 2 ? 'bars/bar_005' : 'bars/bar_006'] },
   mix: { lines: ['Mix [[bar_005]] and [[bar_006]].', 'Extend bar 1 to 4 bars.'], bars: 1, notes: () => ['bars/bar_005', 'bars/bar_006'] },
   take: { lines: ['Take [[phrase_002]].'], bars: 4, notes: () => ['phrases/phrase_002'] },
 };
@@ -65,6 +68,7 @@ const CASES = [
   { name: 'extend+del,copy,mix', head: 'extend', steps: [S.del, S.copy12, S.mix13] }, { name: 'extend+mix,moveL,extR', head: 'extend', steps: [S.mix, S.moveL, S.extR] }, { name: 'extend+morph,del1,copy12', head: 'extend', steps: [S.morph, S.del1, S.copy12] },
   { name: 'extend+extI,keep25,moveR', head: 'extend', steps: [S.extI, S.keep25, S.moveR] }, { name: 'extend+copy,morph12,del1', head: 'extend', steps: [S.copy12, S.morph12, S.del1] }, { name: 'extend+keep,extR,mix12', head: 'extend', steps: [S.keep, S.extR, S.mix12] },
   // the other heads
+  { name: 'morph27+del2and4', head: 'morph27', steps: ['Delete bar 2 and bar 4.'] }, { name: 'morph27+del', head: 'morph27', steps: [S.del] },
   { name: 'morph+del', head: 'morph', steps: [S.del] }, { name: 'morph+mix,copy', head: 'morph', steps: [S.mix, S.copy12] }, { name: 'morph+moveL,morph,del1', head: 'morph', steps: [S.moveL, S.morph12, S.del1] },
   { name: 'mix+mix', head: 'mix', steps: [S.mix] }, { name: 'mix+del,copy', head: 'mix', steps: [S.del, S.copy12] },
   { name: 'take+del', head: 'take', steps: [S.del] }, { name: 'take+mix,moveL', head: 'take', steps: [S.mix, S.moveL] }, { name: 'take+extI,del1,copy12', head: 'take', steps: [S.extI, S.del1, S.copy12] },
@@ -117,12 +121,12 @@ for (const [ci, c] of CASES.entries()) {
     await q.ev(`window.__mountPhrase(document.getElementById('pane'), { describe: true, barHost: true, phrase: ${JSON.stringify(text)}, bar: ${JSON.stringify(BAR5)}, bars: { bar_006: ${JSON.stringify(BAR6)} }, phrases: { phrase_002: ${JSON.stringify(SRC_PHRASE)} }, path: 'phrases/phrase_001.md', name: 'phrase_001' })`);
     for (let w = 0; w < 40000; w += 100) { if (await q.ev(`!!document.querySelector('.forge-rhythm-score-host svg g.measure')`)) break; await sleep(100); }
     await sleep(2500);
-    const n = await q.ev(`(() => { const all = [...document.querySelectorAll('svg')].filter((x) => x.querySelector('g.measure')); const s = all.sort((p, r) => r.querySelectorAll('g.measure').length - p.querySelectorAll('g.measure').length)[0]; return s ? s.querySelectorAll('g.measure').length : 0; })()`);
+    const n = await q.ev(`(() => { const all = [...document.querySelectorAll('svg')].filter((x) => x.querySelector('g.measure')); const s = all.sort((p, r) => r.querySelectorAll('g.measure').length - p.querySelectorAll('g.measure').length)[0]; const host = s ? (s.closest('.forge-rhythm-score-host') ?? s.parentElement) : null; return host ? host.querySelectorAll('g.measure').length : 0; })()`);
     const before = await q.ev(bodyText);
     if (/could not be mapped/.test(before)) fail('neverCouldNotBeMapped', `${c.name}: before any click: ${before.slice(0, 160)}`);
     if (n !== model.length) fail('barsAreDrawn', `${c.name}: the SVG has ${n} bars, the steps leave ${model.length}`);
     const rec = { bars: n, expected: model.length, pins: [], inserted: [] };
-    const centers = await q.ev(`(() => { const all = [...document.querySelectorAll('svg')].filter((x) => x.querySelector('g.measure')); const s = all.sort((p, r) => r.querySelectorAll('g.measure').length - p.querySelectorAll('g.measure').length)[0]; return s ? [...s.querySelectorAll('g.measure')].map((m) => m.id) : []; })()`);
+    const centers = await q.ev(`(() => { const all = [...document.querySelectorAll('svg')].filter((x) => x.querySelector('g.measure')); const s = all.sort((p, r) => r.querySelectorAll('g.measure').length - p.querySelectorAll('g.measure').length)[0]; const host = s ? (s.closest('.forge-rhythm-score-host') ?? s.parentElement) : null; return host ? [...host.querySelectorAll('g.measure')].map((m) => m.id) : []; })()`);
     const centerOf = async (id) => q.ev(`(() => { const m = document.getElementById(${JSON.stringify(id)}); if (!m) return null; m.scrollIntoView({ block: 'center', inline: 'center' }); const r = m.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height }; })()`);
     // 1. the empty composer: a real click on EVERY bar pins it
     for (const [i, id] of centers.entries()) {
