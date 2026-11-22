@@ -4,7 +4,7 @@
 //   node scripts/refresh-token-copies.mjs --dry-run             verify the source and say which files WOULD change; nothing is written or restarted
 // Defaults: the source is music-playground's forge-actions data file; the targets are every plugin data file in the ClaudeQA vault (plugins `forge-actions` and `forge`) and the music-sandbox vault (when it exists) that
 // already has a `transpileServiceToken` key; the forge-mcp launchd file is ~/Library/LaunchAgents/com.forge.mcp.plist (its FORGE_MCP_BEARER). Flags (the tests use them on a temp directory and a local stand-in service):
-//   --source <data.json>  --vault <dir> (repeatable; replaces the default vaults)  --plist <file> (or --no-plist)  --url <base url>  --no-restart  --dry-run
+//   --source <data.json>  --vault <dir> (repeatable; replaces the default vaults)  --plist <file> (or --no-plist)  --env <file> (or --no-env; default ~/projects/forge-transpile/.env, its FORGE_TRANSPILE_SECRET= line only)  --url <base url>  --no-restart  --dry-run
 // Exit 0 done and every copy answers 422; 1 stopped (said why, in words, no values); 2 changed but a copy is still refused; 64 bad usage. It prints file names, lengths and status codes only.
 import fs from 'node:fs';
 import os from 'node:os';
@@ -15,10 +15,10 @@ import { refresh } from './refresh-token-copies-core.mjs';
 const args = process.argv.slice(2);
 const take = (name) => { const out = []; for (let i = 0; i < args.length; i++) if (args[i] === name) { out.push(args[i + 1]); args.splice(i, 2); i--; } return out; };
 const has = (name) => { const i = args.indexOf(name); if (i < 0) return false; args.splice(i, 1); return true; };
-const dryRun = has('--dry-run'), noRestart = has('--no-restart'), noPlist = has('--no-plist');
-const sources = take('--source'), vaultsGiven = take('--vault'), plists = take('--plist'), urls = take('--url');
-if (args.length > 0 || sources.length > 1 || plists.length > 1 || urls.length > 1 || [...sources, ...vaultsGiven, ...plists, ...urls].some((v) => v === undefined || v.startsWith('--'))) {
-  console.error('usage: node scripts/refresh-token-copies.mjs [--dry-run] [--no-restart] [--source <data.json>] [--vault <dir>]... [--plist <file> | --no-plist] [--url <base url>]');
+const dryRun = has('--dry-run'), noRestart = has('--no-restart'), noPlist = has('--no-plist'), noEnv = has('--no-env');
+const sources = take('--source'), vaultsGiven = take('--vault'), plists = take('--plist'), urls = take('--url'), envs = take('--env');
+if (args.length > 0 || sources.length > 1 || plists.length > 1 || urls.length > 1 || envs.length > 1 || [...sources, ...vaultsGiven, ...plists, ...urls, ...envs].some((v) => v === undefined || v.startsWith('--'))) {
+  console.error('usage: node scripts/refresh-token-copies.mjs [--dry-run] [--no-restart] [--source <data.json>] [--vault <dir>]... [--plist <file> | --no-plist] [--env <file> | --no-env] [--url <base url>]');
   process.exit(64);
 }
 const home = os.homedir();
@@ -30,6 +30,9 @@ const sourcePath = expand(sources[0] ?? '~/projects/music-playground/.obsidian/p
 const vaults = (vaultsGiven.length ? vaultsGiven : ['~/forge-vaults/ClaudeQA', '~/forge-vaults/music-sandbox', '~/projects/music-sandbox']).map(expand);
 const targetFiles = vaults.flatMap((v) => ['forge-actions', 'forge'].map((plugin) => ({ name: tilde(pluginData(v, plugin)), path: pluginData(v, plugin) }))).filter((t) => t.path !== sourcePath);
 const plistFile = noPlist ? null : (() => { const p = expand(plists[0] ?? '~/Library/LaunchAgents/com.forge.mcp.plist'); return { name: tilde(p), path: p }; })();
+
+// 2026-11-22-1017: the forge-transpile .env (its FORGE_TRANSPILE_SECRET= line only): the server's own secret, which `deploy/smoke.sh` reads
+const envFile = noEnv ? null : (() => { const p = expand(envs[0] ?? '~/projects/forge-transpile/.env'); return { name: tilde(p), path: p }; })();
 
 // the service URL: the argument, else the (non-secret) transpileServiceUrl of the source file, else the hosted service
 let url = urls[0];
@@ -54,5 +57,5 @@ const deps = {
   say: (line) => console.log(line),
 };
 
-const result = await refresh(deps, { sourceFile: { name: tilde(sourcePath), path: sourcePath }, targetFiles, plistFile, url, dryRun, restart: !noRestart });
+const result = await refresh(deps, { sourceFile: { name: tilde(sourcePath), path: sourcePath }, targetFiles, plistFile, envFile, url, dryRun, restart: !noRestart });
 process.exit(result.code);

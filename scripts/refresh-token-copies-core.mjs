@@ -6,11 +6,13 @@
 //   2. verifies it with the status-code check of step 3 (POST /generate, empty body {}: 422 = the token is accepted, 401 = rejected; no model call) and REFUSES to copy a token the service does not accept;
 //   3. writes it at the same key into every target plugin data file that already has the key (the vaults' plugin folders), keeping every other key, the file's indentation and its mode; a file already holding it is not rewritten;
 //   4. writes it into the forge-mcp launchd file's `FORGE_MCP_BEARER` (the same secret: forge-mcp forwards it to the transpile service), keeping the mode, then restarts the agent (`launchctl kickstart -k`);
+//   4b. (2026-11-22-1017) writes it into the `FORGE_TRANSPILE_SECRET=` line of the forge-transpile `.env` (that line only; every other line, the quotes and the mode are kept; a missing file or a missing line is skipped, never created or added), so `deploy/smoke.sh` reads the secret the service runs;
 //   5. re-runs the status check against what each copy holds NOW.
 // Everything it says is a file name, a length or a status code. Every line goes through `scrub` (any token it ever held is replaced) before it is shown. A step that needs a human choice stops the run and says which.
 
 export const TOKEN_KEY = 'transpileServiceToken';
 export const BEARER_ENV = 'FORGE_MCP_BEARER';
+export const ENV_KEY = 'FORGE_TRANSPILE_SECRET';   // 2026-11-22-1017: the line of the forge-transpile `.env` that is the SERVER's secret (the hosted service runs the same value)
 export const ACCEPTED = 422;   // the service checks the token BEFORE the body: an empty body is invalid on purpose, a right token reaches that check
 export const REJECTED = 401;
 
@@ -56,6 +58,19 @@ export function setPlistBearer(text, token) {
   return { ok: true, changed: true, text: text.replace(BEARER_RE, (_m, head) => `${head}<string>${xmlEscape(token)}</string>`) };
 }
 
+const ENV_RE = new RegExp(`^(export[ \\t]+)?${ENV_KEY}=(.*)$`, 'm');
+const unquote = (v) => (v.length >= 2 && ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) ? v.slice(1, -1) : v);
+/** The secret the `.env` text holds on its FORGE_TRANSPILE_SECRET= line (never the _PREVIOUS line, whose name differs), or that there is no such line. */
+export function envSecret(text) { const m = ENV_RE.exec(text); return m ? { found: true, value: unquote(m[2].trim()) } : { found: false }; }
+/** The same text with ONLY the value of that one line replaced (an `export` prefix, a quote style, every other line and the end of the file kept byte for byte). */
+export function setEnvSecret(text, token) {
+  const m = ENV_RE.exec(text); if (!m) return { ok: false };
+  const raw = m[2].trim(); const cur = unquote(raw);
+  if (cur === token) return { ok: true, changed: false, text };
+  const q = raw.length >= 2 && (raw.startsWith('"') || raw.startsWith("'")) && raw.endsWith(raw[0]) ? raw[0] : '';
+  return { ok: true, changed: true, text: text.replace(ENV_RE, (_all, ex) => `${ex ?? ''}${ENV_KEY}=${q}${token}${q}`) };
+}
+
 /**
  * The whole run. `deps`: readFile(path) -> text | null (null = no such file), writeFileAtomic(path, text) (keeps the file's mode), check(url, token) -> status code | null (null = no answer), restart() -> { ok },
  * say(line). `opts`: sourceFile, targetFiles (data files, display name -> path), plistFile, url, dryRun, restart (bool). Returns { code, changed: [names], statuses: { name: code } }.
@@ -94,6 +109,22 @@ export async function refresh(deps, opts) {
     if (!next.changed) { say(`${t.name}: already holds it`); continue; }
     plan.push({ t, text: next.text });
   }
+  // 2026-11-22-1017: the forge-transpile .env (its FORGE_TRANSPILE_SECRET line only; never created, never given a line it did not have)
+  let envPlan = null; let envHolder = null;
+  if (opts.envFile) {
+    const text = deps.readFile(opts.envFile.path);
+    if (text === null) say(`${opts.envFile.name}: not there, skipped`);
+    else {
+      const cur = envSecret(text);
+      if (!cur.found) say(`${opts.envFile.name}: has no ${ENV_KEY}= line, left alone`);
+      else {
+        if (cur.value) secrets.push(cur.value);
+        envHolder = opts.envFile;
+        const next = setEnvSecret(text, token);
+        if (next.changed) envPlan = { t: opts.envFile, text: next.text }; else say(`${opts.envFile.name}: ${ENV_KEY} already holds it`);
+      }
+    }
+  }
   // the launchd file
   let plistPlan = null; let plistHolder = null;
   if (opts.plistFile) {
@@ -110,7 +141,7 @@ export async function refresh(deps, opts) {
   }
 
   if (opts.dryRun) {
-    for (const p of [...plan, ...(plistPlan ? [plistPlan] : [])]) say(`would change: ${p.t.name}`);
+    for (const p of [...plan, ...(envPlan ? [envPlan] : []), ...(plistPlan ? [plistPlan] : [])]) say(`would change: ${p.t.name}`);
     say('dry run: nothing written, nothing restarted');
     return { code: 0, changed: [], statuses: {}, lines };
   }
@@ -118,6 +149,10 @@ export async function refresh(deps, opts) {
   for (const p of plan) {
     try { deps.writeFileAtomic(p.t.path, p.text); changed.push(p.t.name); say(`changed: ${p.t.name}`); }
     catch { return stop(`${p.t.name} could not be written (permission or a protected location?): that is a human choice. Changed so far: ${changed.length ? changed.join(', ') : 'nothing'}.`, { changed }); }
+  }
+  if (envPlan) {
+    try { deps.writeFileAtomic(envPlan.t.path, envPlan.text); changed.push(envPlan.t.name); say(`changed: ${envPlan.t.name} (${ENV_KEY})`); }
+    catch { return stop(`${envPlan.t.name} could not be written (permission or a protected location?): that is a human choice. Changed so far: ${changed.length ? changed.join(', ') : 'nothing'}.`, { changed }); }
   }
   if (plistPlan) {
     try { deps.writeFileAtomic(plistPlan.t.path, plistPlan.text); changed.push(plistPlan.t.name); say(`changed: ${plistPlan.t.name} (${BEARER_ENV})`); }
@@ -128,9 +163,9 @@ export async function refresh(deps, opts) {
 
   // 5. what each copy holds NOW answers what?
   const statuses = {}; let worst = 0;
-  for (const h of [...holders, ...(plistHolder ? [plistHolder] : [])]) {
+  for (const h of [...holders, ...(envHolder ? [envHolder] : []), ...(plistHolder ? [plistHolder] : [])]) {
     const text = deps.readFile(h.path);
-    const now = text === null ? { ok: false } : h === plistHolder ? (() => { const b = plistBearer(text); return b.found && b.value ? { ok: true, token: b.value } : { ok: false }; })() : tokenOf(parseSettings(text));
+    const now = text === null ? { ok: false } : h === envHolder ? (() => { const e = envSecret(text); return e.found && e.value ? { ok: true, token: e.value } : { ok: false }; })() : h === plistHolder ? (() => { const b = plistBearer(text); return b.found && b.value ? { ok: true, token: b.value } : { ok: false }; })() : tokenOf(parseSettings(text));
     if (!now.ok) { statuses[h.name] = null; say(`${h.name}: could not be read back`); worst = 2; continue; }
     secrets.push(now.token);
     const s = await deps.check(opts.url, now.token); statuses[h.name] = s;

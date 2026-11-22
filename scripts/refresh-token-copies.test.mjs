@@ -9,7 +9,7 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 
-import { plistBearer, refresh, scrub, setPlistBearer, setTokenInJson, tokenOf } from './refresh-token-copies-core.mjs';
+import { envSecret, plistBearer, refresh, scrub, setEnvSecret, setPlistBearer, setTokenInJson, tokenOf } from './refresh-token-copies-core.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const SCRIPT = path.join(ROOT, 'scripts/refresh-token-copies.mjs');
@@ -18,7 +18,10 @@ const STALE_A = 'fake-STALE-token-aaaaaaaa1111111111';
 const STALE_B = 'fake-STALE-token-bbbbbbbb2222222222';
 const STALE_PLIST = 'fake-STALE-bearer-cccccccc3333333333';
 const BAD = 'fake-REJECTED-token-dddddddd4444444444';
-const ALL = [NEW, STALE_A, STALE_B, STALE_PLIST, BAD];
+const STALE_ENV = 'fake-STALE-envsecret-eeeeeeee5555555555';
+const PREVIOUS_ENV = 'fake-PREVIOUS-secret-ffffffff6666666666';
+const ANTHROPIC = 'fake-anthropic-key-gggggggg7777777777';
+const ALL = [NEW, STALE_A, STALE_B, STALE_PLIST, BAD, STALE_ENV, PREVIOUS_ENV, ANTHROPIC];
 
 function service() {
   const calls = [];
@@ -49,7 +52,8 @@ const PLIST = (bearer) => `<?xml version="1.0" encoding="UTF-8"?>
 `;
 const dataJson = (token, extra = {}) => JSON.stringify({ transpileServiceUrl: 'https://example.test', transpileServiceToken: token, showBarNumbers: true, dialogHistory: { a: [1, 2] }, ...extra }, null, 2);
 
-function world({ sourceToken = NEW, qa = true, qaForge = true, sandbox = false, plist = true } = {}) {
+const ENV_TEXT = (secret) => `# the service's own settings\nANTHROPIC_API_KEY=${ANTHROPIC}\nFORGE_TRANSPILE_SECRET=${secret}\nFORGE_TRANSPILE_SECRET_PREVIOUS=${PREVIOUS_ENV}\nPORT=8000\n`;
+function world({ sourceToken = NEW, qa = true, qaForge = true, sandbox = false, plist = true, env = true } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'refresh-tokens-'));
   const put = (rel, text, mode = 0o644) => { const p = path.join(dir, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, text, { mode }); fs.chmodSync(p, mode); return p; };
   const w = {
@@ -59,6 +63,7 @@ function world({ sourceToken = NEW, qa = true, qaForge = true, sandbox = false, 
     qaForge: qaForge ? put('forge-vaults/ClaudeQA/.obsidian/plugins/forge/data.json', dataJson(STALE_B, { dialogDock: 'right' }), 0o600) : null,
     sandbox: sandbox ? put('forge-vaults/music-sandbox/.obsidian/plugins/forge-actions/data.json', dataJson(STALE_A)) : null,
     plist: plist ? put('Library/LaunchAgents/com.forge.mcp.plist', PLIST(STALE_PLIST), 0o600) : path.join(dir, 'Library/LaunchAgents/com.forge.mcp.plist'),
+    env: env ? put('projects/forge-transpile/.env', ENV_TEXT(STALE_ENV), 0o600) : path.join(dir, 'projects/forge-transpile/.env'),
     vaults: [path.join(dir, 'forge-vaults/ClaudeQA'), path.join(dir, 'forge-vaults/music-sandbox')],
     read: (p) => fs.readFileSync(p, 'utf8'),
     mode: (p) => fs.statSync(p).mode & 0o777,
@@ -115,7 +120,7 @@ test('the launchd file: only the bearer string changes (byte for byte elsewhere)
 
 // ---- the whole script, on a temp directory -----------------------------------------------------------------------------------------------------------------------------------------
 test('the run: the service accepts the source token, every plugin data file that has the key gets it (other keys, formatting and mode kept), the launchd bearer too, the source is untouched, the re-check says 422 for each', async () => {
-  const svc = await service(); const w = world({ sandbox: true });
+  const svc = await service(); const w = world({ sandbox: true, env: false });          // 2026-11-22-1017: the default .env target is its own tests' business (a world with no .env: the count of files below is the old one)
   try {
     const before = { source: w.read(w.source), plistOther: w.read(w.plist).replace(STALE_PLIST, '@@') };
     const r = await run(w, svc);
@@ -269,4 +274,64 @@ test('the script file itself never prints a variable that holds a token (a stati
     }
   }
   assert.ok(seen > 10, 'non-vacuity: the check looked at the interpolations');
+});
+
+// ---- 2026-11-22-1017: the forge-transpile .env is a target too (its FORGE_TRANSPILE_SECRET line only) ----------------------------------------------------------------------------------------------------------------
+test('1017 the .env pieces: envSecret reads the FORGE_TRANSPILE_SECRET line only (never _PREVIOUS); setEnvSecret changes that ONE line and keeps every other line byte for byte, a quote style and an `export` prefix; the same value is no change; no line is no change and says so', () => {
+  assert.deepEqual(envSecret(ENV_TEXT(STALE_ENV)), { found: true, value: STALE_ENV });
+  assert.deepEqual(envSecret(`FORGE_TRANSPILE_SECRET_PREVIOUS=${PREVIOUS_ENV}\n`), { found: false }, 'the previous-secret line is not the secret');
+  assert.deepEqual(envSecret('ANTHROPIC_API_KEY=x\n'), { found: false });
+  const next = setEnvSecret(ENV_TEXT(STALE_ENV), NEW);
+  assert.equal(next.ok, true); assert.equal(next.changed, true);
+  assert.equal(next.text, ENV_TEXT(NEW), 'only that line differs');
+  assert.equal(setEnvSecret(ENV_TEXT(NEW), NEW).changed, false);
+  assert.equal(setEnvSecret('export FORGE_TRANSPILE_SECRET="old-quoted-value-1234"\nX=1\n', NEW).text, `export FORGE_TRANSPILE_SECRET="${NEW}"\nX=1\n`, 'export prefix and quotes kept');
+  assert.equal(setEnvSecret('X=1', NEW).ok, false); assert.equal(setEnvSecret('FORGE_TRANSPILE_SECRET=old-1234567', NEW).text, `FORGE_TRANSPILE_SECRET=${NEW}`, 'no trailing newline added');
+});
+
+test('1017 the run writes the .env: the mismatched secret line is replaced, every other line and the mode (600) are kept, no temp file is left, the re-check says 422 for the .env too, and NOTHING printed holds any of the fake secrets (the old .env secret, the previous one, the Anthropic key included)', async () => {
+  const svc = await service(); const w = world();
+  try {
+    const r = await run(w, svc, ['--env', w.env]);
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.equal(w.read(w.env), ENV_TEXT(NEW)); assert.equal(w.mode(w.env), 0o600);
+    assert.equal(fs.readdirSync(path.dirname(w.env)).filter((f) => f.includes('.tmp-')).length, 0);
+    assert.match(r.stdout, /changed: .*forge-transpile\/\.env/); assert.match(r.stdout, /\.env: the service answers 422 \(accepted\)/);
+    noToken(r, '.env run');
+  } finally { await svc.close(); w.clean(); }
+});
+
+test('1017 the DEFAULT target is ~/projects/forge-transpile/.env (HOME on a temp directory): no flag needed; --no-env leaves it alone', async () => {
+  const svc = await service(); const w = world();
+  try {
+    const off = await run(w, svc, ['--no-env']);
+    assert.equal(off.status, 0, off.stdout + off.stderr); assert.equal(w.read(w.env), ENV_TEXT(STALE_ENV), '--no-env: untouched');
+    const on = await run(w, svc);
+    assert.equal(on.status, 0, on.stdout + on.stderr); assert.equal(w.read(w.env), ENV_TEXT(NEW), 'the default path is the forge-transpile .env');
+    noToken(off, '--no-env'); noToken(on, 'default');
+  } finally { await svc.close(); w.clean(); }
+});
+
+test('1017 --dry-run says `would change` for a mismatched .env and `already holds it` for a matching one, shows no value, and writes nothing', async () => {
+  const svc = await service(); const w = world();
+  try {
+    const before = w.read(w.env);
+    const r = await run(w, svc, ['--env', w.env, '--dry-run']);
+    assert.equal(r.status, 0, r.stdout + r.stderr); assert.match(r.stdout, /would change: .*forge-transpile\/\.env/); assert.equal(w.read(w.env), before); noToken(r, 'dry run');
+    fs.writeFileSync(w.env, ENV_TEXT(NEW));
+    const same = await run(w, svc, ['--env', w.env, '--dry-run']);
+    assert.match(same.stdout, /forge-transpile\/\.env: FORGE_TRANSPILE_SECRET already holds it/); assert.doesNotMatch(same.stdout, /would change: .*\.env/); noToken(same, 'dry run, same');
+  } finally { await svc.close(); w.clean(); }
+});
+
+test('1017 a missing .env is skipped with a plain message and NEVER created; a .env with no FORGE_TRANSPILE_SECRET= line is left alone and the line is never added', async () => {
+  const svc = await service(); const w = world({ env: false });
+  try {
+    const r = await run(w, svc, ['--env', w.env]);
+    assert.equal(r.status, 0, r.stdout + r.stderr); assert.match(r.stdout, /forge-transpile\/\.env: not there, skipped/); assert.equal(fs.existsSync(w.env), false, 'not created');
+    const text = 'ANTHROPIC_API_KEY=' + ANTHROPIC + '\nFORGE_TRANSPILE_SECRET_PREVIOUS=' + PREVIOUS_ENV + '\n'; fs.mkdirSync(path.dirname(w.env), { recursive: true }); fs.writeFileSync(w.env, text, { mode: 0o600 });
+    const r2 = await run(w, svc, ['--env', w.env]);
+    assert.equal(r2.status, 0, r2.stdout + r2.stderr); assert.match(r2.stdout, /forge-transpile\/\.env: has no FORGE_TRANSPILE_SECRET= line, left alone/); assert.equal(w.read(w.env), text, 'byte for byte');
+    noToken(r, 'missing'); noToken(r2, 'no line');
+  } finally { await svc.close(); w.clean(); }
 });
