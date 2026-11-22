@@ -37,6 +37,13 @@ const FAMILIES: Family[] = [
     asked: (w, n) => w.asked.some((a) => a.params.kind === 'arrangement' && (a.data.tracks ?? []).length === n) },
 ];
 
+/** 2026-11-22-1016 (deliberate): a hand-edited Recipe that reads is HELD, not applied by itself (11i): the strip says the list no longer matches the script, and the driver asks for `Rewrite the list from the script`. The rest of each test is what it always was. */
+async function askRewrite(w: MusicTabsWorld, tab: any): Promise<void> {
+  const button = tab.view.contentEl.querySelector('[data-action="update-recipe"]') as HTMLElement | null;
+  assert.ok(button, 'the strip offers the rewrite of the list from the script');
+  button.click(); await w.settle(800);
+}
+
 /** steps 1 to 3: New <family> (an empty note, opened by the plugin), renamed to A in the file list, its content written (by hand in the Recipe, or through the composer), a second note B made and renamed. */
 async function driverSteps(w: MusicTabsWorld, f: Family, how: 'hand' | 'composer'): Promise<{ aText: string }> {
   await w.newNote(f.newId);                                                      // 2026-11-19-0991 (deliberate): the command asks for the NAME first; the person presses Enter on the default (what it chose before: comp_001 / arr_001)
@@ -48,6 +55,7 @@ async function driverSteps(w: MusicTabsWorld, f: Family, how: 'hand' | 'composer
   } else {
     await w.say(tab.view, f.first);                                              // the Recipe the controls wrote, then the person types a line of their own into it
     await w.handEdit(f.a, (t) => withRecipe(t, addLine(recipeOf(t), f.second)));
+    await askRewrite(w, tab);
   }
   const aText = w.store.get(f.a)!;
   await w.newNote(f.newId);                                                      // B
@@ -65,6 +73,7 @@ for (const f of FAMILIES) {
       const tab = w.leaves.find((l) => w.typeOf(l) === f.type)!;
       await w.say(tab.view, f.first);
       await w.handEdit(f.a, (t) => withRecipe(t, addLine(recipeOf(t), f.second)));
+      await askRewrite(w, tab);
       const text = w.store.get(f.a)!;
       assert.equal(fences(text), 1, 'hypothesis (b)/(d): after the hand edit there is still exactly one json fence');
       assert.match(text, /source_facet: recipe/, 'the Recipe is the source facet now');

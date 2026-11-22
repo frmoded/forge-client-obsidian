@@ -12,6 +12,7 @@ import { bundleRealPlugin, type RealPlugin } from './test-support/bundle-real-pl
 import { installHostClock, iterateAllLeavesLikeObsidian } from './test-support/host-workspace.ts';
 import { loadRealOnload } from './test-support/real-onload.ts';
 import { DESCRIPTION_DEBOUNCE_MS } from './description-apply-core.ts';
+import { ASK_ONCE } from './script-edit-core.ts';
 import { PHRASE_DEFAULTS, PHRASE_VIEW_TYPE, noteContentFor, type PhraseParams } from './phrase-core.ts';
 import { extractDescription, extractRecipeSection } from './v2-note-core.ts';
 import { BOTH_EDITED } from './recipe-apply-core.ts';
@@ -202,10 +203,15 @@ for (const edition of ['lean', 'music'] as const) {
       await w.wait(DESCRIPTION_DEBOUNCE_MS - 100);
       assert.deepEqual(w.writes, [], 'still within the wait');
       await w.wait(150);
+      if (edition === 'music') {          // 2026-11-22-1016 (deliberate): the music edition HOLDS a Recipe that reads (11i): the list is marked, and the rewrite is asked for; lean applies it by itself, as before
+        assert.deepEqual(w.writes, [], 'the list is not rewritten at once');
+        assert.match(tab.contentEl.querySelector('.forge-description-message').textContent, /^The list no longer matches the script/);
+        (tab.contentEl.querySelector('[data-action="update-recipe"]') as HTMLElement).click(); await w.wait(100);
+      }
       assert.deepEqual(w.writes, [PATH], 'one write');
       assert.equal(w.store.get(PATH), asRecipeSourced(asListNote(noteContentFor('phrase_001', { ...EXTEND, bars: 6 }), 'phrase_001'))); // 2026-11-19-0980 (deliberate): a phrase's Description is a numbered list now: the note a write leaves is the list note
       assert.equal(tab.contentEl.querySelector('.forge-phrase-bars').value, '6');
-      assert.deepEqual(w.lines, ['[forge-recipe] applied phrase_001 (8 -> 6 bars)']);
+      assert.deepEqual(w.lines, edition === 'music' ? ['[forge-recipe] held phrase_001: the list no longer matches the script', '[forge-recipe] applied phrase_001 (8 -> 6 bars)'] : ['[forge-recipe] applied phrase_001 (8 -> 6 bars)']);
       await w.wait(3000);
       assert.deepEqual(w.writes, [PATH]);
       assert.equal(tab.contentEl.querySelector('.forge-description-bar'), null);
@@ -243,9 +249,10 @@ for (const edition of ['lean', 'music'] as const) {
       assert.deepEqual(w.writes, []);
       for (const view of [tab, notes]) {
         const bar = view.contentEl.querySelector('.forge-description-bar');
-        assert.equal(bar.querySelector('.forge-description-message').textContent, BOTH_EDITED);
-        assert.deepEqual([...bar.querySelectorAll('.forge-description-button')].map((b: any) => [b.getAttribute('data-action'), b.textContent]), [['update', 'Update from Description'], ['update-recipe', 'Update from Recipe']]);
+        assert.equal(bar.querySelector('.forge-description-message').textContent, edition === 'music' ? ASK_ONCE : BOTH_EDITED);          // 2026-11-22-1016 (deliberate): the music edition asks ONCE (11i)
+        assert.deepEqual([...bar.querySelectorAll('.forge-description-button')].map((b: any) => [b.getAttribute('data-action'), b.textContent]), edition === 'music' ? [['keep-script', 'Keep my script edits'], ['update', 'Replace them with the list']] : [['update', 'Update from Description'], ['update-recipe', 'Update from Recipe']]);
       }
+      if (edition === 'music') { (notes.contentEl.querySelector('[data-action="keep-script"]') as any).click(); await w.wait(100); assert.deepEqual(w.writes, [], '2026-11-22-1016 (deliberate): Keep writes nothing'); }
       (notes.contentEl.querySelector('[data-action="update-recipe"]') as any).click(); await w.wait(100);
       assert.deepEqual(w.writes, [PATH]);
       assert.equal(tab.contentEl.querySelector('.forge-phrase-bars').value, '6');
@@ -256,8 +263,9 @@ for (const edition of ['lean', 'music'] as const) {
   test(`[${edition}] after the Recipe is applied the note is Recipe-sourced: its stamps say so (source_facet: recipe, and the Description stamped as derived from that Recipe)`, async () => {
     const w = await world(SCORE_FIRST_TOML);
     try {
-      await w.openTab();
+      const tab = await w.openTab();
       w.type(editRecipe(w.store.get(PATH)!, '8 bars', '6 bars')); await w.wait();
+      if (edition === 'music') { (tab.contentEl.querySelector('[data-action="update-recipe"]') as HTMLElement | null)?.click(); await w.wait(100); }          // 2026-11-22-1016 (deliberate): the rewrite is asked for
       const done = w.store.get(PATH)!;
       assert.match(done, /^source_facet: recipe$/m);
       assert.match(done, /^description_derived_from_recipe_hash: [0-9a-f]{64}$/m);
@@ -333,7 +341,7 @@ for (const edition of ['lean', 'music'] as const) {
         w.type(editRecipe(w.store.get(PATH)!, '8 bars', '6 bars')); await w.wait(100);
         typeInto(win, barsOf(tab), '9'); await w.wait(50);
         assert.match(statusOf(tab), /^Not saved: the Recipe was edited by hand/, how);
-        if (how === 'apply') await w.wait(DESCRIPTION_DEBOUNCE_MS + 50);
+        if (how === 'apply') { await w.wait(DESCRIPTION_DEBOUNCE_MS + 50); if (edition === 'music') { (tab.contentEl.querySelector('.forge-description-button[data-action="update-recipe"]') as HTMLElement).click(); await w.wait(100); } }          // 2026-11-22-1016 (deliberate): the music edition holds a Recipe that reads until the driver asks for the rewrite
         else { (tab.contentEl.querySelector('.forge-description-button[data-action="revert"]') as HTMLElement).click(); await w.wait(100); }
         assert.equal(w.writes.length, 1, `${how}: one write settled the note`);
         assert.equal(statusOf(tab), '', `${how}: the refusal of a state that no longer exists is gone`);

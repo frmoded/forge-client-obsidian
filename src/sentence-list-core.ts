@@ -420,9 +420,11 @@ export function listAfterParams(list: SentenceList, params: GrammarParams, kind:
 // ---- undo and redo (in memory, per open note) -------------------------------------------------------------------------------------------------------------------------------------------
 
 /** `copy` (2026-11-19-0992a): the entry of a COPY made by `Duplicate [[bar_007]].`: it changes no line (`before` and `after` are the same list); undoing it hands the copy back (the caller moves it to the trash) and leaves the list as it is. It is never put on the redo side. */
-export interface UndoEntry { before: string[]; after: string[]; added: string[]; replaced: Replaced[]; copy?: CopyMark }
-export interface Undone { list: string[]; removed: string[]; restored: string[]; copy?: CopyMark }
-export interface Redone { list: string[]; added: string[] }
+/** `snapshot` (2026-11-22-1016): the entry of a script action (Rewrite the list from the script, Discard my script edits, Replace them with the list): the whole note before and after, because the Recipe and the Python are not in the list; undo and redo write these texts back (ONE write). */
+export interface NoteSnapshot { before: string; after: string }
+export interface UndoEntry { before: string[]; after: string[]; added: string[]; replaced: Replaced[]; copy?: CopyMark; snapshot?: NoteSnapshot }
+export interface Undone { list: string[]; removed: string[]; restored: string[]; copy?: CopyMark; snapshot?: NoteSnapshot }
+export interface Redone { list: string[]; added: string[]; snapshot?: NoteSnapshot }
 export interface UndoStack {
   /** An apply made `after` out of `before` (a new sentence: redo is gone). */
   push(entry: UndoEntry): void;
@@ -453,7 +455,7 @@ export function createUndoStack(opts: { protects?: (line: string) => boolean } =
       if (current.length === 0) return null;
       if (top !== undefined && same(top.after, current)) {
         undos = undos.slice(0, -1); redos = [...redos, top];
-        return { list: [...top.before], removed: [...top.added], restored: top.replaced.map((r) => r.sentence) };
+        return { list: [...top.before], removed: [...top.added], restored: top.replaced.map((r) => r.sentence), ...(top.snapshot !== undefined ? { snapshot: top.snapshot } : {}) };
       }
       if (!takes(current)) return null;
       const last = current[current.length - 1], rest = current.slice(0, -1);
@@ -464,7 +466,7 @@ export function createUndoStack(opts: { protects?: (line: string) => boolean } =
       const top = redos[redos.length - 1];
       if (top === undefined || !same(top.before, current)) return null;
       redos = redos.slice(0, -1); undos = [...undos, top].slice(-UNDO_CAP);
-      return { list: [...top.after], added: [...top.added] };
+      return { list: [...top.after], added: [...top.added], ...(top.snapshot !== undefined ? { snapshot: top.snapshot } : {}) };
     },
     clear() { undos = []; redos = []; },
   };

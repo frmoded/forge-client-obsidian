@@ -66,3 +66,17 @@ test('C: the "+" menu has a quiet item that puts "Translate line N." in the comp
   assert.equal(item().getAttribute('aria-disabled'), 'false'); item().click(); await r.press({});
   assert.equal((r.el.querySelector('.forge-prompt-box-text') as HTMLTextAreaElement).value, 'Translate line 2.');
 });
+
+// 2026-11-22-1016 (item 4: the honest gap of 1015): a DROPPED answer is not a verdict on the sentence: it writes no waiting line (`droppedAsk`). Through the real composer: the person types on while the service thinks.
+test('C: a DROPPED service answer (the person typed on in the box while the service thought) writes NO waiting line: the list is as it was, the dialog says the answer was dropped, the box keeps the newer words', async () => {
+  let release: (v: { status: number; json: unknown }) => void = () => {};
+  const gate = new Promise<{ status: number; json: unknown }>((res) => { release = res; });
+  const r = await phraseWithHead(() => gate);
+  r.type('blorp the second bar'); await r.enter();                                  // asked: the answer is pending
+  r.type('blorp the second bar louder');                                            // typed on while the service thinks
+  release({ status: 200, json: { ok: false, error: 'I cannot do that with these bars.' } });
+  for (let i = 0; i < 400; i++) await Promise.resolve();
+  assert.deepEqual(r.list(), [EXTEND], 'no waiting line for a dropped answer');
+  assert.ok(r.texts().some((t) => /^Dropped: /.test(t) || /changed|ask again/i.test(t)), r.texts().join(' | '));
+  assert.equal((r.el.querySelector('.forge-prompt-box-text') as HTMLTextAreaElement).value, 'blorp the second bar louder');
+});

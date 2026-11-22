@@ -36,5 +36,6 @@ export function recipeEdit(text: string, family: Family, vault: GrammarVault): R
 
 export const recipeAppliedLine = (name: string, change: string): string => `[forge-recipe] applied ${name} (${change})`;
 export const recipeRejectedLine = (name: string, e: GrammarError): string => `[forge-recipe] rejected ${name}: line ${e.line} column ${e.column} ${e.message}`;
+export const recipeHeldLine = (name: string): string => `[forge-recipe] held ${name}: the list no longer matches the script`;       // 2026-11-22-1016 (11i)
 export const recipeRevertedLine = (name: string): string => `[forge-recipe] reverted ${name} to the json cache`;
 export const bothEditedLine = (name: string): string => `[forge-recipe] refused ${name}: ${BOTH_EDITED}`;

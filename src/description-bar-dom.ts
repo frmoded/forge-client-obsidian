@@ -11,14 +11,16 @@
 
 /** The banner's class: the Score slot (live-score-dom.ts) knows it, because the banner is the one thing allowed above the Score. */
 export const DESCRIPTION_BAR_CLASS = 'forge-description-bar';
-export type BarAction = 'update' | 'update-recipe' | 'update-python' | 'revert' | 'revert-generated' | 'ask' | 'apply-preview' | 'cancel-preview';
-export const BAR_LABELS: Record<BarAction, string> = { update: 'Update from Description', 'update-recipe': 'Update from Recipe', 'update-python': 'Update from Python', revert: 'Revert', 'revert-generated': 'Revert to generated', ask: 'Ask the sentence service', 'apply-preview': 'Apply', 'cancel-preview': 'Cancel' };
+export type BarAction = 'keep-script' | 'update' | 'update-recipe' | 'update-python' | 'revert' | 'revert-generated' | 'ask' | 'apply-preview' | 'cancel-preview';
+export const BAR_LABELS: Record<BarAction, string> = { update: 'Update from Description', 'keep-script': 'Keep my script edits', 'update-recipe': 'Update from Recipe', 'update-python': 'Update from Python', revert: 'Revert', 'revert-generated': 'Revert to generated', ask: 'Ask the sentence service', 'apply-preview': 'Apply', 'cancel-preview': 'Cancel' };
 
 export interface BarView {
   message: string;
   actions: BarAction[];
   preview?: { description: string; recipe: string };
   busy?: boolean;
+  /** 2026-11-22-1016: words for these buttons in place of the defaults (the actions keep their names). */
+  labels?: Partial<Record<BarAction, string>>;
   /** `custom`: the banner of a custom note (its own look: the controls are off for the note). */
   tone?: 'custom';
 }
@@ -45,7 +47,7 @@ export function mountDescriptionBar(parent: HTMLElement, onAction: (a: BarAction
       }
       const row = doc.createElement('span'); row.className = 'forge-description-buttons';
       for (const a of view.actions) {
-        const b = doc.createElement('button'); b.type = 'button'; b.className = 'forge-description-button'; b.setAttribute('data-action', a); b.textContent = BAR_LABELS[a]; b.disabled = view.busy === true;
+        const b = doc.createElement('button'); b.type = 'button'; b.className = 'forge-description-button'; b.setAttribute('data-action', a); b.textContent = view.labels?.[a] ?? BAR_LABELS[a]; b.disabled = view.busy === true;
         b.addEventListener('click', () => { if (!b.disabled) onAction(a); });
         row.appendChild(b);
       }

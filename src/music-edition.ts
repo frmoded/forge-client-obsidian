@@ -122,6 +122,8 @@ export interface ListModel {
     line: typeof import('./waiting-line-core.ts').waitingLine; words: typeof import('./waiting-line-core.ts').waitingWords; translate: typeof import('./waiting-line-core.ts').translateRequest;
     kept: typeof import('./waiting-line-core.ts').keptMessage; is: typeof import('./waiting-line-core.ts').isWaitingLine;
   };
+  /** 2026-11-22-1016 (11i): the script as the third entry point (script-edit-core.ts). `on` is false in lean: a hand-edited Recipe is applied at once, as before. */
+  script: { on: boolean; stale: typeof import('./script-edit-core.ts').staleMessage; held: typeof import('./script-edit-core.ts').heldMessage; askOnce: string; labels: typeof import('./script-edit-core.ts').SCRIPT_LABELS; rewrite: typeof import('./script-edit-core.ts').rewriteFromScript };
   dialogs: {
     renamed: typeof import('./dialog-follow-core.ts').dialogRenamed; deleted: typeof import('./dialog-follow-core.ts').dialogDeleted; ctime: typeof import('./dialog-follow-core.ts').noteCtimeOf;
     fresh: typeof import('./dialog-follow-core.ts').dialogFresh; stamp: typeof import('./dialog-follow-core.ts').dialogStamp; prune: typeof import('./dialog-follow-core.ts').dialogPrune;

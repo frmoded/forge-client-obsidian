@@ -1,5 +1,5 @@
 ---
-description: "Train your ear to find the second note of a pair, sounding in turn or together, up or down, until you land it in a try or two."
+description: "Find the second note of a pair, heard in turn or together, up or down, until you land it in a try or two."
 ---
 Names from [[interval notation and jargon]], distances from [[what matters is intervals]]: now use your ears.
 

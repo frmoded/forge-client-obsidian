@@ -1,5 +1,5 @@
 ---
-description: "Train your ear to name the scale you hear, starting with telling major from minor."
+description: "Name the scale you hear, starting with telling major from minor."
 ---
 You've met the scales; now make your ears earn their keep.
 

@@ -122,7 +122,7 @@ test('P3: a composition that does NOT loop (song_1 plays song_2, song_2 plays a 
   assert.match(box.strip(), /The grammar read your sentence\. This is what would be written\./); assert.deepEqual(box.buttons(), ['apply-preview', 'cancel-preview']); assert.deepEqual(box.writes, []);
   await box.enter(); assert.deepEqual(sectionsOf(box.own()), ['phrases/phrase_003', 'compositions/song_2'], 'the second Enter writes it (2026-11-19-0970: APPENDED to the list: the note played phrase_003 before)');
   const desc = rig({ extra: fine }); await desc.ready(); desc.store.set(COMP, replaceDescriptionSection(desc.own(), 'Play [[song_2]].')!); desc.ctl.modified(COMP); await desc.runTimers(); assert.deepEqual(sectionsOf(desc.own()), ['compositions/song_2']);
-  const rec = rig({ extra: fine }); await rec.ready(); rec.store.set(COMP, replaceSection(rec.own(), 'Recipe', 'Play [[song_2]].')); rec.ctl.modified(COMP); await rec.runTimers(); assert.deepEqual(sectionsOf(rec.own()), ['compositions/song_2']);
+  const rec = rig({ extra: fine }); await rec.ready(); rec.store.set(COMP, replaceSection(rec.own(), 'Recipe', 'Play [[song_2]].')); rec.ctl.modified(COMP); await rec.runTimers(); await rec.ctl.update(COMP); await rec.flush(); assert.deepEqual(sectionsOf(rec.own()), ['compositions/song_2']);          // 2026-11-22-1016 (deliberate): a Recipe that reads is held until the rewrite is asked for (`update`), the loop check is the same
   const py = rig({ extra: fine }); await py.ready(); py.store.set(COMP, py.own().replace("sections.append({'source': 'phrase_003', 'bars': phrase_003()})", "sections.append({'source': 'song_2', 'bars': song_2()})")); py.ctl.modified(COMP); await py.runTimers(); assert.deepEqual(sectionsOf(py.own()), ['compositions/song_2']);
 });
 
