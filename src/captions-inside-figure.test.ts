@@ -101,6 +101,28 @@ test('an .svg with a unit other than mm, and a wide drawing, keep their size (th
 });
 
 // ---- the vault -----------------------------------------------------------------------------------------------------------------------------------------------------------------
+// ---- 2026-11-23-1021: a figure with its own PANEL (a solid rect at the origin behind everything: the wheel, for Obsidian's dark mode) ------------------------------------------------------------------------------
+const PANELLED = '<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="600" height="600" viewBox="0 0 600 600">\n<rect x="0" y="0" width="600" height="600" rx="10" ry="10" fill="#fdfcfa"/>\n<g><line x1="0" y1="0" x2="1" y2="0"/></g>\n</svg>\n';
+const panelOf = (svg: string): { w: number; h: number } => { const m = /<rect x="0" y="0" width="([\d.]+)" height="([\d.]+)"/.exec(svg)!; return { w: +m[1], h: +m[2] }; };
+test('a figure with a PANEL: the panel grows with the canvas, to the new viewBox (one row or wrapped rows), and strip gives the panel back its size: strip(apply(x)) is x and apply twice is apply once', () => {
+  for (const line of ['Twelve keys, a fifth apart', 'Twelve keys, a fifth apart, closing into a ring that goes round and round and round again until the line has to wrap onto a second row']) {
+    const cap = { title: 'The circle of fifths', line }; const out = C.applySvgCaption(PANELLED, cap);
+    const vb = /viewBox="([^"]+)"/.exec(out)![1].split(' ').map(Number); const p = panelOf(out);
+    assert.equal(p.h, vb[3], 'the panel is as tall as the canvas: no transparent strip under the caption'); assert.equal(p.w, vb[2]);
+    assert.ok(vb[3] > 600, 'the canvas grew'); assert.equal(C.stripSvgCaption(out), PANELLED); assert.equal(C.applySvgCaption(out, cap), out);
+  }
+  assert.ok(C.svgCaptionLayout(PANELLED, { title: 'T', line: 'x '.repeat(80) }).rows.length >= 2, 'the long line wraps');
+  const wrapped = C.applySvgCaption(PANELLED, { title: 'T', line: 'word '.repeat(60) }), one = C.applySvgCaption(PANELLED, { title: 'T', line: 'short' });
+  assert.ok(panelOf(wrapped).h > panelOf(one).h, 'a wrapped caption makes the panel taller than a one-row caption');
+});
+test('a figure with a PANEL gives the caption a left inset of 12 px (the caption would touch the panel\'s edge); a figure without a panel keeps the caption at the drawing\'s left edge, as ever', () => {
+  const cap = { title: 'T', line: 'short' };
+  const withPanel = C.applySvgCaption(PANELLED, cap); const xs = [...withPanel.matchAll(/<text [^>]*x="([\d.]+)"/g)].map((m) => +m[1]);
+  assert.deepEqual(xs, [12, 12], '12 px at 1 unit a pixel: the title and the line');
+  const plain = C.applySvgCaption('<svg width="600" height="600" viewBox="0 0 600 600"><g/></svg>\n', cap); assert.deepEqual([...plain.matchAll(/<text [^>]*x="([\d.]+)"/g)].map((m) => +m[1]), [0, 0]);
+  const mm = C.applySvgCaption(PANELLED.replace('width="600" height="600"', 'width="100mm" height="100mm"'), cap); const k = C.pxPerUnit(PANELLED.replace('width="600" height="600"', 'width="100mm" height="100mm"'));
+  assert.ok(Math.abs(+[...mm.matchAll(/<text [^>]*x="([\d.]+)"/g)][0][1] * k - 12) < 0.01, 'the inset is 12 px in the picture\'s own unit');
+});
 test('captions.json: every key is a file of the vault, a gadget or an image, with a title and a line; sorted keys', () => {
   assert.ok(Object.keys(captions).length >= 19);
   for (const [k, v] of Object.entries(captions)) { assert.ok(fs.existsSync(path.join(VAULT, k)), `${k} exists`); assert.match(k, /\.(html|svg)$/); assert.ok(v.title.trim() && v.line.trim(), k); assert.doesNotMatch(v.line, /\.$/, `${k}: no final full stop (the seed dropped it)`); }

@@ -106,6 +106,11 @@ export function svgCaptionLayout(svg, cap, { minWidthPx = 360 } = {}) {
   const bottom = lineY[lineY.length - 1] + 12 / k;
   return { bare, vb, width, height, k, wUnits, rows, titleY, lineY, newVb: [vb[0], vb[1], wUnits, bottom - vb[1]] };
 }
+// 2026-11-23-1021: a figure may carry its own PANEL, a solid <rect x="0" y="0" width height ...> behind the drawing (the wheel: a light panel so the ink reads in Obsidian's dark mode). The caption makes the canvas bigger, so the panel grows with it
+// (no transparent strip under the caption) and strip gives it its own size back; a caption on a panel is inset 12 px from the panel's edge.
+const PANEL = /<rect x="0" y="0" width="[\d.]+" height="[\d.]+"/;
+const hasPanel = (svg, vb) => vb[0] === 0 && vb[1] === 0 && PANEL.test(svg);
+const sizePanel = (svg, w, h) => svg.replace(PANEL, (m) => m.replace(/width="[\d.]+"/, `width="${num(w)}"`).replace(/height="[\d.]+"/, `height="${num(h)}"`));
 const scaleLen = (len, factor) => { const u = unitOf(len); return u ? `${num(u.n * factor)}${u.u === 'px' ? '' : u.u}` : len; };
 
 export function stripSvgCaption(svg) {
@@ -118,6 +123,7 @@ export function stripSvgCaption(svg) {
     const [vb, w, h] = meta[1].split('|');
     const { head } = parseSvgBox(out);
     let nh = head.replace(/viewBox="[^"]*"/, `viewBox="${vb}"`);
+    const box0 = vb.split(' ').map(Number); if (hasPanel(out, box0)) out = sizePanel(out, box0[2], box0[3]);          // 2026-11-23-1021: the panel gets its own size back
     if (w) nh = nh.replace(/\swidth="[^"]*"/, ` width="${w}"`); if (h) nh = nh.replace(/\sheight="[^"]*"/, ` height="${h}"`);
     out = out.replace(head, () => nh);
   }
@@ -134,7 +140,7 @@ export function applySvgCaption(svg, cap, opts) {
   let nh = head.replace(/viewBox="[^"]*"/, `viewBox="${newVb.map(num).join(' ')}"`);
   if (width) nh = nh.replace(/\swidth="[^"]*"/, ` width="${scaleLen(width, fW)}"`);
   if (height) nh = nh.replace(/\sheight="[^"]*"/, ` height="${scaleLen(height, fH)}"`);
-  const x = num(vb[0]);
+  const x = num(vb[0] + (hasPanel(bare, vb) ? 12 / L.k : 0));          // 2026-11-23-1021: 12 px in from a panel's edge
   const ts = (n) => num(n * 1), sz = (px) => num(px / L.k);
   const lines = [
     `${SVG_BEGIN}`,
@@ -145,7 +151,8 @@ export function applySvgCaption(svg, cap, opts) {
     `</g>`,
     `${SVG_END}`,
   ].join('\n');
-  const out = bare.replace(head, () => nh);
+  let out = bare.replace(head, () => nh);
+  if (hasPanel(bare, vb)) out = sizePanel(out, newVb[2], newVb[3]);          // 2026-11-23-1021: the panel follows the canvas
   const close = out.lastIndexOf('</svg>'); if (close < 0) throw new Error('no </svg>');
   return out.slice(0, close) + lines + '\n' + out.slice(close);
 }
