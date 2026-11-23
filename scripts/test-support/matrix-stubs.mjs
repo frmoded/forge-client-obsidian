@@ -112,7 +112,8 @@ export function matrix(p, args = [], env = {}) {
   if (!fs.existsSync(calm)) fs.writeFileSync(calm, JSON.stringify(CALM_MACHINE));
   const r = spawnSync('bash', [SCRIPT, ...args], {
     encoding: 'utf8', timeout: 240_000,
-    env: { ...process.env, PROJECTS: p.dir, TMPDIR: p.dir, LOGKEEP: p.dir, MARKS: p.marks, FORGE_MACHINE_READ_FILE: calm, ...powerEnv(p.dir), ...env },
+    // 2026-11-23-1022: the driver's own FORGE_MATRIX_FILE_CONC (set to run the REAL matrix lighter) must not reach these stub matrices: it turned the compressor-default test red ("1 test files per leg"). A test that wants one passes it in `env`.
+    env: { ...process.env, FORGE_MATRIX_FILE_CONC: undefined, PROJECTS: p.dir, TMPDIR: p.dir, LOGKEEP: p.dir, MARKS: p.marks, FORGE_MACHINE_READ_FILE: calm, ...powerEnv(p.dir), ...env },
   });
   const strip = (s) => s.replace(/\x1b\[[0-9;]*m/g, '');
   return { status: r.status, out: strip(r.stdout ?? ''), err: strip(r.stderr ?? '') };

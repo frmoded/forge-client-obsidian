@@ -370,11 +370,11 @@ test('a Recipe edited to parse is applied once the person STOPS typing, by one w
   r.ctl.modified(PATH);
   await r.advance(DESCRIPTION_DEBOUNCE_MS);
   assert.deepEqual(r.writes, [], '2026-11-22-1016 (deliberate): a Recipe that reads is no longer applied by itself: the list is marked (11i), the driver chooses');
-  assert.deepEqual(r.lines, ['[forge-recipe] held phrase_001: the list no longer matches the script']);
+  assert.deepEqual(r.lines, ['[forge-recipe] held phrase_001: the Description no longer matches the Recipe']);          // 2026-11-23-1022 (deliberate): the Description and Recipe wording
   await r.ctl.update(PATH);                                                                                  // `Rewrite the description from the recipe`, on request
   assert.deepEqual(r.writes, [PATH]);
   assert.equal(r.store.get(PATH), asRecipeSourced(asListNote(noteContentFor('phrase_001', { ...EXTEND, bars: 6 }), 'phrase_001'))); // 2026-11-19-0980 (deliberate): a phrase's Description is a numbered list now: the note a write leaves is the list note
-  assert.deepEqual(r.lines, ['[forge-recipe] held phrase_001: the list no longer matches the script', '[forge-recipe] applied phrase_001 (8 -> 6 bars)']);
+  assert.deepEqual(r.lines, ['[forge-recipe] held phrase_001: the Description no longer matches the Recipe', '[forge-recipe] applied phrase_001 (8 -> 6 bars)']);          // 2026-11-23-1022 (deliberate): the Description and Recipe wording
   r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS * 3);
   assert.deepEqual(r.writes, [PATH], 'nothing more happens'); assert.equal(r.lines.length, 2);
 });
@@ -397,7 +397,7 @@ test('a Recipe that does not parse: NOTHING is written, the bar says the line an
   assert.equal(r.lines.at(-1), '[forge-recipe] reverted phrase_001 to the json cache');
   // and a Recipe fixed instead of reverted is applied
   r.store.set(PATH, editRecipe(good, '8 bars', '5 bars')); r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
-  assert.equal(r.lines.at(-1), '[forge-recipe] held phrase_001: the list no longer matches the script', '2026-11-22-1016 (deliberate): a fixed Recipe is held, not applied by itself');
+  assert.equal(r.lines.at(-1), '[forge-recipe] held phrase_001: the Description no longer matches the Recipe', '2026-11-22-1016 (deliberate): a fixed Recipe is held, not applied by itself');          // 2026-11-23-1022 (deliberate): the Description and Recipe wording
   await r.ctl.update(PATH);
   assert.equal(r.lines.at(-1), '[forge-recipe] applied phrase_001 (8 -> 5 bars)');
 });
@@ -428,9 +428,9 @@ test('edge: a hand edit of the RECIPE right after the Description was just auto-
   assert.deepEqual(r.lines, ['[forge-description] applied phrase_001 (8 -> 6 bars)']);
   r.store.set(PATH, editRecipe(r.store.get(PATH)!, '6 bars', '4 bars')); r.ctl.modified(PATH);                        // 1 ms after
   await r.advance(DESCRIPTION_DEBOUNCE_MS);
-  assert.deepEqual(r.lines, ['[forge-description] applied phrase_001 (8 -> 6 bars)', '[forge-recipe] held phrase_001: the list no longer matches the script']);          // 2026-11-22-1016 (deliberate): held
+  assert.deepEqual(r.lines, ['[forge-description] applied phrase_001 (8 -> 6 bars)', '[forge-recipe] held phrase_001: the Description no longer matches the Recipe']);          // 2026-11-22-1016 (deliberate): held          // 2026-11-23-1022 (deliberate): the Description and Recipe wording
   await r.ctl.update(PATH);
-  assert.deepEqual(r.lines, ['[forge-description] applied phrase_001 (8 -> 6 bars)', '[forge-recipe] held phrase_001: the list no longer matches the script', '[forge-recipe] applied phrase_001 (6 -> 4 bars)']);
+  assert.deepEqual(r.lines, ['[forge-description] applied phrase_001 (8 -> 6 bars)', '[forge-recipe] held phrase_001: the Description no longer matches the Recipe', '[forge-recipe] applied phrase_001 (6 -> 4 bars)']);          // 2026-11-23-1022 (deliberate): the Description and Recipe wording
   assert.equal(r.store.get(PATH), asRecipeSourced(asListNote(noteContentFor('phrase_001', { ...EXTEND, bars: 4 }), 'phrase_001'))); // 2026-11-19-0980 (deliberate): a phrase's Description is a numbered list now: the note a write leaves is the list note
 });
 
@@ -454,9 +454,9 @@ test('a Recipe typed while the write is in flight is not overwritten: the plan i
   r.ctl.modified(PATH);
   await r.advance(1); assert.deepEqual(r.writes, []);
   await r.advance(DESCRIPTION_DEBOUNCE_MS);
-  assert.deepEqual(r.lines, ['[forge-recipe] held phrase_001: the list no longer matches the script']);                                                                       // 2026-11-22-1016 (deliberate): held; the newer text is the one that is read
+  assert.deepEqual(r.lines, ['[forge-recipe] held phrase_001: the Description no longer matches the Recipe']);                                                                       // 2026-11-22-1016 (deliberate): held; the newer text is the one that is read          // 2026-11-23-1022 (deliberate): the Description and Recipe wording
   await r.ctl.update(PATH);
-  assert.deepEqual(r.lines, ['[forge-recipe] held phrase_001: the list no longer matches the script', '[forge-recipe] applied phrase_001 (8 -> 3 bars)']);
+  assert.deepEqual(r.lines, ['[forge-recipe] held phrase_001: the Description no longer matches the Recipe', '[forge-recipe] applied phrase_001 (8 -> 3 bars)']);          // 2026-11-23-1022 (deliberate): the Description and Recipe wording
 });
 
 test('the "Update from Description" command (canUpdate) is there for a Recipe that parses, too: the note has one thing to apply', async () => {
@@ -478,7 +478,7 @@ test('a Recipe that parses is OFFERED (nothing written) when the note is only lo
   r.store.set(PATH, editRecipe(r.store.get(PATH)!, '8 bars', '6 bars'));
   await r.ctl.inspect(PATH);
   assert.deepEqual(r.writes, []);
-  assert.equal(msg(a), 'The list no longer matches the script (the Recipe changed: 8 -> 6 bars).'); assert.deepEqual(buttons(a), ['update-recipe', 'revert']);          // 2026-11-22-1016 (deliberate): the words of 11i
+  assert.equal(msg(a), 'The Description no longer matches the Recipe (the Recipe changed: 8 -> 6 bars).'); assert.deepEqual(buttons(a), ['update-recipe', 'revert']);          // 2026-11-22-1016 (deliberate): the words of 11i          // 2026-11-23-1022 (deliberate): the Description and Recipe wording
 });
 
 test('a problem is SAID once and said again when it comes back: a Python edit, both facets edited and a rejected Recipe are each reported once however often the note is touched, and the sentence is reported again after the problem was fixed', async () => {
@@ -569,7 +569,7 @@ test('a STALE plan is dropped and the note is read afresh, with no failure sente
   const base = noteContentFor('phrase_001', EXTEND);
   for (const [label, first, second, want] of [
     ['Description', (t: string) => edit(t, '8 bars', '6 bars'), (t: string) => edit(t, '8 bars', '5 bars'), 'The Description changed (8 -> 5 bars); update the note from it.'],
-    ['Recipe', (t: string) => editRecipe(t, '8 bars', '6 bars'), (t: string) => editRecipe(t, '8 bars', '5 bars'), 'The list no longer matches the script (the Recipe changed: 8 -> 6 bars).'],          // 2026-11-22-1016 (deliberate): a Recipe that reads is only held, so there is no plan to be stale; the strip names what the note says now
+    ['Recipe', (t: string) => editRecipe(t, '8 bars', '6 bars'), (t: string) => editRecipe(t, '8 bars', '5 bars'), 'The Description no longer matches the Recipe (the Recipe changed: 8 -> 6 bars).'],          // 2026-11-22-1016 (deliberate): a Recipe that reads is only held, so there is no plan to be stale; the strip names what the note says now          // 2026-11-23-1022 (deliberate): the Description and Recipe wording
   ] as const) {
     let fired = false;
     const r = rig({ beforeProcess: (p) => { if (!fired) { fired = true; r.store.set(p, second(base)); } } });          // typed after the plan, before the write (no event: nobody has heard it yet)

@@ -12,7 +12,7 @@
 /** The banner's class: the Score slot (live-score-dom.ts) knows it, because the banner is the one thing allowed above the Score. */
 export const DESCRIPTION_BAR_CLASS = 'forge-description-bar';
 export type BarAction = 'keep-script' | 'update' | 'update-recipe' | 'update-python' | 'revert' | 'revert-generated' | 'ask' | 'apply-preview' | 'cancel-preview';
-export const BAR_LABELS: Record<BarAction, string> = { update: 'Update from Description', 'keep-script': 'Keep my script edits', 'update-recipe': 'Update from Recipe', 'update-python': 'Update from Python', revert: 'Revert', 'revert-generated': 'Revert to generated', ask: 'Ask the sentence service', 'apply-preview': 'Apply', 'cancel-preview': 'Cancel' };
+export const BAR_LABELS: Record<BarAction, string> = { update: 'Update from Description', 'keep-script': 'Keep my Recipe edits', 'update-recipe': 'Update from Recipe', 'update-python': 'Update from Python', revert: 'Revert', 'revert-generated': 'Revert to generated', ask: 'Ask the sentence service', 'apply-preview': 'Apply', 'cancel-preview': 'Cancel' };
 
 export interface BarView {
   message: string;

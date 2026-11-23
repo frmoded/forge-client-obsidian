@@ -37,7 +37,7 @@ const FAMILIES: Family[] = [
     asked: (w, n) => w.asked.some((a) => a.params.kind === 'arrangement' && (a.data.tracks ?? []).length === n) },
 ];
 
-/** 2026-11-22-1016 (deliberate): a hand-edited Recipe that reads is HELD, not applied by itself (11i): the strip says the list no longer matches the script, and the driver asks for `Rewrite the description from the recipe`. The rest of each test is what it always was. */
+/** 2026-11-22-1016 (deliberate): a hand-edited Recipe that reads is HELD, not applied by itself (11i): the strip says the Description no longer matches the Recipe, and the driver asks for `Rewrite the description from the recipe`. The rest of each test is what it always was. */          // 2026-11-23-1022 (deliberate): the Description and Recipe wording
 async function askRewrite(w: MusicTabsWorld, tab: any): Promise<void> {
   const button = tab.view.contentEl.querySelector('[data-action="update-recipe"]') as HTMLElement | null;
   assert.ok(button, 'the strip offers the rewrite of the list from the script');

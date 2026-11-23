@@ -96,7 +96,7 @@ export interface DescriptionPorts {
   openNote?(id: string): void;
 }
 
-interface Ui { state: DescriptionState; message?: string; /** 2026-11-22-1016: the driver chose `Keep my script edits`: the list edit is held, the question is not asked again for this text */ kept?: boolean; preview?: { params: GrammarParams; description: string; recipe: string; forSentence: string; /** 2026-11-21-1015: `Translate line N`: the plan REPLACES line N (1-based) of the list instead of being appended */ replaceAt?: number; /** the driver's words the line keeps beside it when the plan is applied (a translate: the box holds `Translate line N.`, the words are the waiting line's) */ said?: string; /** 2026-11-19-0970: for an arrangement or composition the sentence service's answer as canonical LINES to append (and the sentence they replace) */ lines?: string[]; replaces?: string }; busy?: boolean; /** the sentence was typed in the prompt box (nothing was written to the note: there is no Revert to offer) */ fromBox?: boolean; /** from the box: the Description ON DISK when the sentence was sent (a preview is applied only over that) */ base?: string }
+interface Ui { state: DescriptionState; message?: string; /** 2026-11-22-1016: the driver chose `Keep my Recipe edits`: the list edit is held, the question is not asked again for this text */ kept?: boolean; preview?: { params: GrammarParams; description: string; recipe: string; forSentence: string; /** 2026-11-21-1015: `Translate line N`: the plan REPLACES line N (1-based) of the list instead of being appended */ replaceAt?: number; /** the driver's words the line keeps beside it when the plan is applied (a translate: the box holds `Translate line N.`, the words are the waiting line's) */ said?: string; /** 2026-11-19-0970: for an arrangement or composition the sentence service's answer as canonical LINES to append (and the sentence they replace) */ lines?: string[]; replaces?: string }; busy?: boolean; /** the sentence was typed in the prompt box (nothing was written to the note: there is no Revert to offer) */ fromBox?: boolean; /** from the box: the Description ON DISK when the sentence was sent (a preview is applied only over that) */ base?: string }
 const basename = (path: string): string => path.replace(/^.*\//, '').replace(/\.md$/, '');
 /** 2026-11-19-0970 and 2026-11-19-0980: the three kinds whose Description is a list of canonical sentences (a phrase, an arrangement, a composition). 2026-11-19-0993 (stage 3): a BAR is a list too (front matter `lines:`), but it is not a `Family` (no grammar of the three, no Recipe, no Python, no stamps): it is routed by its PATH (`isBarPath`) to bar-list-controller.ts, which shares this controller's dialog, tracked write and box. */
 type ListFamily = Family;
@@ -195,7 +195,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   const pbWarn = (line: string): void => { ports.trace(`[forge-promptbox] ${line}`); (ports.warn ?? (() => {}))(`[forge-promptbox] ${line}`); };
 
   const waitsForForge = (): boolean => listModel.script.on && ports.descriptionAtOnce?.() === false;          // 2026-11-23-1018: a hand edit of the Description is applied by the Forge button, not by itself
-  const keptList = new Map<string, string>();                    // 2026-11-22-1016: path -> the list text the driver chose to hold (Keep my script edits): not asked again for that text
+  const keptList = new Map<string, string>();                    // 2026-11-22-1016: path -> the list text the driver chose to hold (Keep my Recipe edits): not asked again for that text
   const scriptAndList = (facets: readonly string[]): boolean => facets.length === 2 && facets.includes('description') && facets.includes('recipe');
   const viewOf = (path: string, u: Ui): BarView => {
     const family = familyOfPath(path);
@@ -504,7 +504,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     else if (a === 'update-recipe') await updateRecipe(path);
     else if (a === 'update-python') await updatePython(path);
     else if (a === 'revert-generated') await revertGenerated(path);
-    else if (a === 'revert') { if (listModel.script.on && ui.get(path)?.state.kind === 'recipe-apply') await discardScript(path); else await revert(path); }          // 2026-11-22-1016: on a held Recipe edit Revert is `Discard my script edits`: the list is replayed over the Recipe and the Python
+    else if (a === 'revert') { if (listModel.script.on && ui.get(path)?.state.kind === 'recipe-apply') await discardScript(path); else await revert(path); }          // 2026-11-22-1016: on a held Recipe edit Revert is `Discard my Recipe edits`: the list is replayed over the Recipe and the Python
     else if (a === 'ask') await ask(path);
     else if (a === 'apply-preview') await applyPreview(path);
     else if (a === 'cancel-preview') { const u = ui.get(path); if (u) { set(path, { state: u.state, ...(u.fromBox ? { fromBox: true, base: u.base } : {}) }); if (u.fromBox) { endSuggestion(path, 'cancelled'); setBoxNote(path, 'Cancelled.'); } } }
@@ -546,16 +546,16 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     stackOf(path).push({ before: listOf(was, family), after: listOf(now, family), added: [], replaced: [], snapshot: { before: was, after: now } });
   }
 
-  /** "Discard my script edits": the LIST as it stands is replayed over the Recipe and the Python (the same replay and writer as every list write); the driver's words and waiting lines stay as they are. ONE write, ONE undo entry. */
+  /** "Discard my Recipe edits": the LIST as it stands is replayed over the Recipe and the Python (the same replay and writer as every list write); the driver's words and waiting lines stay as they are. ONE write, ONE undo entry. */
   async function discardScript(path: string): Promise<void> {
     const family = familyOfPath(path); if (family === null) return;
     let cur = ''; try { cur = await ports.read(path); } catch { return; }
     const rp = await replay(listOf(cur, family), family, ctxFor(path));
     const keep = ui.get(path);
-    if (rp.params === null) { set(path, { state: keep?.state ?? { kind: 'synced' }, message: 'Discard my script edits: no line of the list can be read, so there is nothing to replay. Your script is kept as it is.' }); return; }
+    if (rp.params === null) { set(path, { state: keep?.state ?? { kind: 'synced' }, message: 'Discard my Recipe edits: no line of the Description can be read, so there is nothing to replay. Your Recipe is kept as it is.' }); return; }
     { const loop = await loopRefusalOf(noteId(path), rp.params); if (loop !== null) { ports.trace(`[forge-description] refused ${basename(path)}: ${loop}`); set(path, { state: keep?.state ?? { kind: 'synced' }, message: `Not applied: ${loop}` }); return; } }
     let failure: string | null = null, now = '';
-    try { await proc(path, (c) => { if (c !== cur) { failure = 'The note changed while you were looking; ask again.'; return c; } const w = writeListNote(c, basename(path), family, rp); if (w.ok === false) { failure = w.message; return c; } now = w.text; return w.text; }); } catch (e) { failure = `Discard my script edits: ${(e as Error)?.message ?? e}`; console.error('script: could not write the note', e); }
+    try { await proc(path, (c) => { if (c !== cur) { failure = 'The note changed while you were looking; ask again.'; return c; } const w = writeListNote(c, basename(path), family, rp); if (w.ok === false) { failure = w.message; return c; } now = w.text; return w.text; }); } catch (e) { failure = `Discard my Recipe edits: ${(e as Error)?.message ?? e}`; console.error('script: could not write the note', e); }
     if (failure !== null) { set(path, { state: keep?.state ?? { kind: 'synced' }, message: failure }); return; }
     told.delete(path); ports.trace(recipeRevertedLine(basename(path))); pushScriptUndo(path, family, cur, now); set(path, null);
   }
@@ -602,7 +602,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   /** Write `next` as the note's list in ONE `process`, if the Description on disk is still `expectBase` (what the plan was made against). `record` (an apply) goes on the undo stack once it is written. */
   async function commitList(path: string, family: ListFamily, next: readonly string[], expectBase: string, record?: { before: string[]; added: string[]; replaced: Array<{ index: number; sentence: string }> }, allowNone = false): Promise<{ ok: true; change: string; stop: ListStop | null; applied: number } | { ok: false; message: string }> {
     const rp = await replay(next, family, ctxFor(path));
-    if (rp.params === null && next.length > 0 && !allowNone) return { ok: false, message: rp.stop !== null ? stopNotice(rp.stop, 0) : 'No line of the list can be read.' };          // (allowNone: a list that is only waiting lines is kept as it is)
+    if (rp.params === null && next.length > 0 && !allowNone) return { ok: false, message: rp.stop !== null ? stopNotice(rp.stop, 0) : 'No line of the Description can be read.' };          // (allowNone: a list that is only waiting lines is kept as it is)
     let failure: string | null = null, change = '';
     try {
       await proc(path, (cur) => {
@@ -612,7 +612,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
         change = rp.params === null ? 'now empty' : changeSummary(cacheParams(cur, family), rp.params);
         return w.text;
       });
-    } catch (e) { failure = `Apply: ${(e as Error)?.message ?? e}`; console.error('[forge-promptbox] could not write the list', e); pbWarn(`could not write the note: ${(e as Error)?.message ?? e}`); }
+    } catch (e) { failure = `Apply: ${(e as Error)?.message ?? e}`; console.error('[forge-promptbox] could not write the Description', e); pbWarn(`could not write the note: ${(e as Error)?.message ?? e}`); }
     if (failure !== null) return { ok: false, message: failure };
     if (record) stackOf(path).push({ before: record.before, after: [...rp.list], added: record.added, replaced: record.replaced });
     asked.delete(path); fp?.forget(path);
@@ -885,7 +885,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     undoTrace.record(via, which, path);          // 2026-11-20-1004z (4a): which way in asked (in memory, the note name only)
     if (isBarPath(path)) return bar.stepBar(path, which);
     const family = familyOfPath(path);
-    if (!isList(family)) return { ok: false, message: 'Only an arrangement or a composition keeps a list of sentences.' };
+    if (!isList(family)) return { ok: false, message: 'Only an arrangement or a composition keeps a Description of sentences.' };
     let cur = ''; try { cur = await ports.read(path); } catch (e) { console.error('[forge-promptbox] stepList: could not read the note', e); const message = `Could not read the note: ${(e as Error)?.message ?? e}`; say(path, { type: 'failed', message }); return { ok: false, message }; }
     const before = listOf(cur, family), stack = stackOf(path);
     const r = which === 'undo' ? stack.undo(before) : stack.redo(before);
@@ -907,7 +907,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     let failure: string | null = null;
     try { await proc(path, (c) => { if (c !== from) { failure = 'The note changed while you were looking; ask again.'; return c; } return to; }); } catch (e) { failure = `${which === 'undo' ? 'Undo' : 'Redo'}: ${(e as Error)?.message ?? e}`; }
     if (failure !== null) { stackOf(path).clear(); say(path, { type: 'failed', message: failure }); return { ok: false, message: failure }; }
-    const message = which === 'undo' ? 'Taken back: the note is as it was before the script change.' : 'Done again: the script change is back.';
+    const message = which === 'undo' ? 'Taken back: the note is as it was before the Recipe change.' : 'Done again: the Recipe change is back.';
     told.delete(path); set(path, null); say(path, { type: 'notice', message }); await evaluate(path, false);                // a note with a hand-edited Recipe says so again
     return { ok: true, message };
   }

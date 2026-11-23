@@ -210,13 +210,13 @@ for (const edition of ['lean', 'music'] as const) {
       await w.wait(150);
       if (edition === 'music') {          // 2026-11-22-1016 (deliberate): the music edition HOLDS a Recipe that reads (11i): the list is marked, and the rewrite is asked for; lean applies it by itself, as before
         assert.deepEqual(w.writes, [], 'the list is not rewritten at once');
-        assert.match(tab.contentEl.querySelector('.forge-description-message').textContent, /^The list no longer matches the script/);
+        assert.match(tab.contentEl.querySelector('.forge-description-message').textContent, /^The Description no longer matches the Recipe/);          // 2026-11-23-1022 (deliberate): the Description and Recipe wording
         (tab.contentEl.querySelector('[data-action="update-recipe"]') as HTMLElement).click(); await w.wait(100);
       }
       assert.deepEqual(w.writes, [PATH], 'one write');
       assert.equal(w.store.get(PATH), asRecipeSourced(asListNote(noteContentFor('phrase_001', { ...EXTEND, bars: 6 }), 'phrase_001'))); // 2026-11-19-0980 (deliberate): a phrase's Description is a numbered list now: the note a write leaves is the list note
       assert.equal(tab.contentEl.querySelector('.forge-phrase-bars').value, '6');
-      assert.deepEqual(w.lines, edition === 'music' ? ['[forge-recipe] held phrase_001: the list no longer matches the script', '[forge-recipe] applied phrase_001 (8 -> 6 bars)'] : ['[forge-recipe] applied phrase_001 (8 -> 6 bars)']);
+      assert.deepEqual(w.lines, edition === 'music' ? ['[forge-recipe] held phrase_001: the Description no longer matches the Recipe', '[forge-recipe] applied phrase_001 (8 -> 6 bars)'] : ['[forge-recipe] applied phrase_001 (8 -> 6 bars)']);          // 2026-11-23-1022 (deliberate): the Description and Recipe wording
       await w.wait(3000);
       assert.deepEqual(w.writes, [PATH]);
       assert.equal(tab.contentEl.querySelector('.forge-description-bar'), null);
@@ -255,7 +255,7 @@ for (const edition of ['lean', 'music'] as const) {
       for (const view of [tab, notes]) {
         const bar = view.contentEl.querySelector('.forge-description-bar');
         assert.equal(bar.querySelector('.forge-description-message').textContent, edition === 'music' ? ASK_ONCE : BOTH_EDITED);          // 2026-11-22-1016 (deliberate): the music edition asks ONCE (11i)
-        assert.deepEqual([...bar.querySelectorAll('.forge-description-button')].map((b: any) => [b.getAttribute('data-action'), b.textContent]), edition === 'music' ? [['keep-script', 'Keep my script edits'], ['update', 'Replace them with the list']] : [['update', 'Update from Description'], ['update-recipe', 'Update from Recipe']]);
+        assert.deepEqual([...bar.querySelectorAll('.forge-description-button')].map((b: any) => [b.getAttribute('data-action'), b.textContent]), edition === 'music' ? [['keep-script', 'Keep my Recipe edits'], ['update', 'Replace them with the Description']] : [['update', 'Update from Description'], ['update-recipe', 'Update from Recipe']]);          // 2026-11-23-1022 (deliberate): the Description and Recipe wording
       }
       if (edition === 'music') { (notes.contentEl.querySelector('[data-action="keep-script"]') as any).click(); await w.wait(100); assert.deepEqual(w.writes, [], '2026-11-22-1016 (deliberate): Keep writes nothing'); }
       (notes.contentEl.querySelector('[data-action="update-recipe"]') as any).click(); await w.wait(100);

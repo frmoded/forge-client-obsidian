@@ -19,7 +19,7 @@ test('the bar is the first child of its pane, carries the sentence in a status r
   assert.deepEqual([...bar.el.querySelectorAll('.forge-description-button')].map((b: any) => [b.getAttribute('data-action'), b.textContent]), [['revert', 'Revert'], ['ask', 'Ask the sentence service']]);
   (bar.el.querySelector('[data-action="ask"]') as any).click(); (bar.el.querySelector('[data-action="revert"]') as any).click();
   assert.deepEqual(heard, ['ask', 'revert']);
-  assert.deepEqual(Object.keys(BAR_LABELS).sort(), ['apply-preview', 'ask', 'cancel-preview', 'keep-script', 'revert', 'revert-generated', 'update', 'update-python', 'update-recipe']);          // 2026-11-22-1016 (deliberate): + keep-script (Keep my script edits)
+  assert.deepEqual(Object.keys(BAR_LABELS).sort(), ['apply-preview', 'ask', 'cancel-preview', 'keep-script', 'revert', 'revert-generated', 'update', 'update-python', 'update-recipe']);          // 2026-11-22-1016 (deliberate): + keep-script (Keep my Recipe edits)          // 2026-11-23-1022 (deliberate): the Description and Recipe wording
 });
 
 test('showing again replaces the content (no duplicate message or buttons); a busy bar says so and its buttons do nothing', () => {
@@ -52,7 +52,7 @@ test('the DOM contract the stylesheet and the panes rely on: class names, the po
   const buttons = [...bar.el.querySelectorAll('.forge-description-button')] as any[];
   assert.deepEqual(buttons.map((b) => b.textContent), ['Update from Description', 'Revert', 'Ask the sentence service', 'Apply', 'Cancel']);
   for (const b of buttons) { assert.equal(b.getAttribute('type'), 'button'); assert.equal(b.className, 'forge-description-button'); }
-  assert.deepEqual(BAR_LABELS, { 'keep-script': 'Keep my script edits', update: 'Update from Description', 'update-recipe': 'Update from Recipe', 'update-python': 'Update from Python', revert: 'Revert', 'revert-generated': 'Revert to generated', ask: 'Ask the sentence service', 'apply-preview': 'Apply', 'cancel-preview': 'Cancel' });
+  assert.deepEqual(BAR_LABELS, { 'keep-script': 'Keep my Recipe edits', update: 'Update from Description', 'update-recipe': 'Update from Recipe', 'update-python': 'Update from Python', revert: 'Revert', 'revert-generated': 'Revert to generated', ask: 'Ask the sentence service', 'apply-preview': 'Apply', 'cancel-preview': 'Cancel' });          // 2026-11-23-1022 (deliberate): the Description and Recipe wording
 });
 
 test('a button that is disabled (the bar is busy) does not answer even when a click reaches it by another way than the browser\'s own (a script, an assistive tool): the guard is the bar\'s, not only the browser\'s', () => {

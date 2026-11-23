@@ -86,7 +86,7 @@ test('description-apply 583 and 584: a write that fails is returned, said as a f
   r.state.failProcess = true;
   const { value, errors } = await quietly(() => r.ctl.appendLine(PH, 'Keep bars 1 to 2.'));
   assert.deepEqual(value, { ok: false, message: 'Apply: boom' });
-  assert.equal(r.store.get(PH), before); assert.equal(errors.length, 1); assert.equal(errors[0][0], '[forge-promptbox] could not write the list');
+  assert.equal(r.store.get(PH), before); assert.equal(errors.length, 1); assert.equal(errors[0][0], '[forge-promptbox] could not write the Description');          // 2026-11-23-1022 (deliberate): the Description wording
   assert.equal(r.last().kind, 'failed'); assert.equal(r.last().text, 'Apply failed: Apply: boom');
   assert.ok(r.lines.includes('[forge-promptbox] append failed: Apply: boom'), JSON.stringify(r.lines.filter((l) => l.includes('append'))));
   assert.ok(!r.entries().some((e) => e.kind === 'applied' && e.text.includes('Keep')), 'nothing was said as applied');

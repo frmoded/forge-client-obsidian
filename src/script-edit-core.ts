@@ -1,5 +1,5 @@
 // 2026-11-22-1016 (checklists/music_tabs_chat_ui_design.md 11i) - THE SCRIPT AS THE THIRD ENTRY POINT of a list note (music-composer code, behind the list-model seam; lean never carries it). The driver writes the list, or the composer's sentences, or CHANGES THE SCRIPT (the Recipe;
-// the Python stays as it was). A hand-edited, readable Recipe no longer rewrites the list at once: the list is marked `no longer matches the script` (muted strip text, never red) and the driver chooses, once: `Rewrite the description from the recipe` or `Discard my script edits`. A list save
+// the Python stays as it was). A hand-edited, readable Recipe no longer rewrites the list at once: the list is marked `no longer matches the script` (muted strip text, never red) and the driver chooses, once: `Rewrite the description from the recipe` or `Discard my Recipe edits`. A list save
 // while the Recipe holds edits asks ONCE. Nothing here calls a model. This core holds the words, the choice of what a rewrite keeps, and the rewrite itself (the pure text step; the controller does the write, the undo entry and the strip).
 import { asRecipeSourced } from './phrase-notes-core.ts';
 import { applyRecipeText, descriptionState } from './description-apply-core.ts';
@@ -14,15 +14,15 @@ import type { GrammarParams, GrammarVault } from './phrase-grammar-core.ts';
 export const LIST_MODEL_SENTINEL_SCRIPT_EDIT_CORE = 'forge-list-model-core:script-edit-core';
 
 /** The strip's sentence for a note whose Recipe was edited by hand and reads: the list is NOT rewritten; it is marked. `change` is what the Recipe says differently ("8 -> 6 bars"). */
-export const staleMessage = (change: string): string => `The list no longer matches the script${change === '' ? '' : ` (the Recipe changed: ${change})`}.`;
+export const staleMessage = (change: string): string => `The Description no longer matches the Recipe${change === '' ? '' : ` (the Recipe changed: ${change})`}.`;
 /** The strip's sentence once the driver chose to keep the script while their list edit waits. */
-export const heldMessage = (): string => 'The list no longer matches the script (your list edit is held until you choose).';
+export const heldMessage = (): string => 'The Description no longer matches the Recipe (your Description edit is held until you choose).';
 /** The one question when a list edit meets a Recipe that holds edits of its own. */
-export const ASK_ONCE = 'Your script has edits the list does not have. Keep them or replace them with the list?';
+export const ASK_ONCE = 'Your Recipe has edits the Description does not have. Keep them or replace them with the Description?';
 /** The words on the buttons (the actions keep their old names: `update-recipe`, `revert`, `update`). */
-export const SCRIPT_LABELS = { rewrite: 'Rewrite the description from the recipe', discard: 'Discard my script edits', keep: 'Keep my script edits', replace: 'Replace them with the list' };
+export const SCRIPT_LABELS = { rewrite: 'Rewrite the description from the recipe', discard: 'Discard my Recipe edits', keep: 'Keep my Recipe edits', replace: 'Replace them with the Description' };
 /** A script the list's sentences cannot say: refused in plain words, the Recipe kept as it is. */
-export const UNSAYABLE = 'The list cannot say this script in sentences, so it is not rewritten from it. Your script is kept as it is; change it, or use Discard my script edits.';
+export const UNSAYABLE = 'The Description cannot say this Recipe in sentences, so it is not rewritten from it. Your Recipe is kept as it is; change it, or use Discard my Recipe edits.';
 
 /** Stable text of params (key order does not matter): two readings of the same music are equal. */
 export const canon = (v: unknown): string => JSON.stringify(v, (_k, x) => (x !== null && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.entries(x as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : 1))) : x));

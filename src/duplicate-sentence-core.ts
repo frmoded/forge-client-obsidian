@@ -61,7 +61,7 @@ export function barInsertion(before: string, bar: number): string {
 }
 
 const WHAT = 'Duplicate what? Click a bar on the Score, or write its link, for example: Duplicate [[bar_007]].';
-const ALONE = 'Duplicate is not a step of the list, so it has to be on its own: empty the box, then write Duplicate [[bar_007]]. by itself.';
+const ALONE = 'Duplicate is not a step of the Description, so it has to be on its own: empty the box, then write Duplicate [[bar_007]]. by itself.';
 const ONE_AT_A_TIME = 'Duplicate takes one note at a time: write Duplicate [[bar_007]]. for one link.';
 const NEEDS_LINK = 'Duplicate needs a link to the note: write it like Duplicate [[bar_007]]. (or click a bar on the Score).';
 

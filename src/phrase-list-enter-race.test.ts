@@ -79,6 +79,6 @@ test('an apply that FAILS AFTER the write (the vault stored the note, then proce
   assert.equal(r.writes(), 1, 'the list HAS the line (the note was stored before the throw)');
   assert.equal(r.field().value, 'Take [[phrase_002]].', 'the field still holds the sentence');
   assert.equal(r.kinds('applied'), 0); assert.deepEqual(dialogEntries(r.el).filter((e) => e.kind === 'failed').map((e) => e.text), ['Apply failed: Apply: the Score could not be drawn']);
-  assert.equal(errors.length, 1); assert.equal(errors[0][0], '[forge-promptbox] could not write the list');
+  assert.equal(errors.length, 1); assert.equal(errors[0][0], '[forge-promptbox] could not write the Description');          // 2026-11-23-1022 (deliberate): the Description wording
   assert.ok(r.cls().includes('is-edited'), 'and it is still an unsent sentence');
 });
