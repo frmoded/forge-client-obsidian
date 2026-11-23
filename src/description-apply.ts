@@ -16,7 +16,7 @@ import {
   DESCRIPTION_DEBOUNCE_MS, REVERT_GENERATED_CONFIRM, appliedLine, applyDescriptionText, applyPythonText, applyRecipeText, askedServiceLine, askingServiceLine, cacheParams, changeSummary, descriptionState, familyOfPath, rejectedLine, rejectionMessage, revertDescriptionText, revertToGeneratedText, revertedLine, pythonCustomBarMessage,
   type DescriptionState, type Family,
 } from './description-apply-core.ts';
-import { bothEditedLine, recipeAppliedLine, recipeHeldLine, recipeRejectedLine, recipeRevertedLine } from './recipe-apply-core.ts';
+import { bothEditedLine, descriptionHeldLine, recipeAppliedLine, recipeHeldLine, recipeRejectedLine, recipeRevertedLine } from './recipe-apply-core.ts';
 import { COMMENTS_NOT_KEPT_BAR, bothEditedLineOf, pythonAppliedLine, pythonCustomLine, pythonRevertedLine } from './python-apply-core.ts';
 import { CUSTOM_BANNER } from './phrase-notes-core.ts';
 import type { GrammarParams, GrammarVault } from './phrase-grammar-core.ts';
@@ -82,6 +82,8 @@ export interface DescriptionPorts {
   confirm?(message: string): Promise<boolean>;
   /** 2026-11-17-2001: MUSIC_COMPOSER_AUTO_APPLY (default off): a sentence the grammar reads exactly skips the preview. */
   composerAutoApply?(): boolean;
+  /** 2026-11-23-1018: the setting `Forge Description edits at once`. `false` = a hand-edited Description of a music list note WAITS for the Forge button (the strip says so); `true`, or no port (the unit rigs, lean): applied by itself after the debounce, as before. */
+  descriptionAtOnce?(): boolean;
   /** 2026-11-19-0980: the seed a random line of a phrase draws, ONCE, when the sentence is typed (a whole number; absent = a random one from 0 to 999). Tests give it a fixed one. */
   drawSeed?(): number;
   /** 2026-11-17-2001: the composer's "+" menu (the New actions; `pickNote` gives "Insert a link to a note"); absent = no "+". */
@@ -192,6 +194,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   const pb = (line: string): void => { ports.trace(`[forge-promptbox] ${line}`); };
   const pbWarn = (line: string): void => { ports.trace(`[forge-promptbox] ${line}`); (ports.warn ?? (() => {}))(`[forge-promptbox] ${line}`); };
 
+  const waitsForForge = (): boolean => listModel.script.on && ports.descriptionAtOnce?.() === false;          // 2026-11-23-1018: a hand edit of the Description is applied by the Forge button, not by itself
   const keptList = new Map<string, string>();                    // 2026-11-22-1016: path -> the list text the driver chose to hold (Keep my script edits): not asked again for that text
   const scriptAndList = (facets: readonly string[]): boolean => facets.length === 2 && facets.includes('description') && facets.includes('recipe');
   const viewOf = (path: string, u: Ui): BarView => {
@@ -202,6 +205,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
       const offer = ports.askPlan !== undefined && ports.configured?.() !== false;               // 2026-11-12-1206: a phrase, an arrangement or a composition (forge-transpile 0.2.48 plans all three)
       return { message: u.message ?? st.message, actions: [...(u.fromBox ? [] : ['revert' as const]), ...(offer ? ['ask' as const] : [])], busy: u.busy };
     }
+    if (st.kind === 'apply' && waitsForForge()) return { message: u.message ?? 'The Description was edited. Click Forge to apply it.', actions: ['update', 'revert'], labels: { update: 'Forge' }, busy: u.busy };          // 2026-11-23-1018: pending, muted; the button is `Forge`
     if (st.kind === 'apply') return { message: u.message ?? `The Description changed (${st.change}); update the note from it.`, actions: ['update', 'revert'], busy: u.busy };
     if (st.kind === 'recipe-rejected') return { message: u.message ?? st.message, actions: ['revert'], busy: u.busy };               // no "Ask the sentence service" for a Recipe: no LLM, the person fixes it
     if (st.kind === 'recipe-apply' && listModel.script.on) return { message: u.message ?? listModel.script.stale(st.unchanged ? 'edited, the same music' : st.change), actions: ['update-recipe', 'revert'], labels: { 'update-recipe': listModel.script.labels.rewrite, revert: listModel.script.labels.discard }, busy: u.busy };          // 2026-11-22-1016 (11i): the list is marked, never rewritten at once
@@ -283,6 +287,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
           },
           store,
           ...(ports.openNote ? { openNote: ports.openNote } : {}),
+          ...(listModel.script.on && (barPane || isList(family)) ? { insertLink: (name: string) => { boxes.get(contentEl)?.handle.insertAtCaret((before) => listModel.duplicate.linkInsertion(before, name)); } } : {}),          // 2026-11-23-1018 (Part C): a click on a link of the dialog while the composer is being typed in writes the link there
         }, barPane ? '' : boxDisk(family, note));
         const handle = chat.box;
         boxes.set(contentEl, { path, handle, chat });
@@ -387,7 +392,11 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
       set(path, { state: st, preview: keep?.preview?.forSentence === st.sentence ? keep.preview : undefined, message: keep?.preview?.forSentence === st.sentence ? keep.message : undefined });
       return;
     }
-    if (auto) await doApply(path, family, st); else set(path, { state: st });
+    if (auto && !waitsForForge()) await doApply(path, family, st);
+    else {
+      if (auto && told.get(path) !== `pending:${st.sentence}`) { told.set(path, `pending:${st.sentence}`); ports.trace(descriptionHeldLine(basename(path))); }          // 2026-11-23-1018: said once per edit
+      set(path, { state: st });
+    }
   }
 
   /** The Python was edited: a known shape maps back (the same `process` as for a Description or a Recipe, then the note is Python-sourced); anything else makes the note CUSTOM (its Python is kept as typed). */
@@ -468,15 +477,16 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     let change = '', failure: string | null = null, stale = false;
     const cut = await listCut(path, family, st);                                                            // 2026-11-19-0970: a hand-edited LIST applies the lines before the first one that cannot be read or would loop
     { const loop = cut.refuse; if (loop !== null) { ports.trace(`[forge-description] refused ${basename(path)}: ${loop}`); set(path, { state: st, message: `Not applied: ${loop}` }); return; } }
+    let was = '', now = '';
     try {
       await proc(path, (cur) => {
         const r = applyDescriptionText(cur, basename(path), family, ports.vault(), st.sentence, undefined, cut.limit);
         if (r.ok === false) { failure = r.message; stale = r.stale; return cur; }
-        change = r.change;
+        change = r.change; was = cur; now = r.text;
         return r.text;
       });
     } catch (e) { failure = `Update from Description: ${(e as Error)?.message ?? e}`; console.error('description-apply: could not write the note', e); }
-    if (failure === null) { told.delete(path); ports.trace(appliedLine(basename(path), change)); set(path, null); sayCut(path, cut); return; }
+    if (failure === null) { told.delete(path); ports.trace(appliedLine(basename(path), change)); if (waitsForForge()) pushScriptUndo(path, family, was, now); set(path, null); sayCut(path, cut); return; }          // 2026-11-23-1018: the Forge button's write is ONE undo entry carrying the whole note (what the hand edit was and what the replay made)
     if (stale) { await evaluate(path, false); return; }                                                    // the text moved on: what it says now is read afresh (a newer edit has its own timer)
     set(path, { state: st, message: failure });                                                            // the sentence parsed but the note could not be written: the bar says why and still offers Update and Revert
   }

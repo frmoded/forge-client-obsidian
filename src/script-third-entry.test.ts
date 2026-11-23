@@ -1,5 +1,5 @@
 // 2026-11-22-1016 (checklists/music_tabs_chat_ui_design.md 11i): the script (Recipe and Python) is the THIRD entry point of a list note. A hand-edited, readable Recipe no longer rewrites the list behind the driver's back: the strip says
-// `The list no longer matches the script` and offers `Rewrite the list from the script` and `Discard my script edits`; a list save while the Recipe holds edits asks once; a Python edit stays as it was. No model call. Through the REAL controller.
+// `The list no longer matches the script` and offers `Rewrite the description from the recipe` and `Discard my script edits`; a list save while the Recipe holds edits asks once; a Python edit stays as it was. No model call. Through the REAL controller.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Window } from 'happy-dom';
@@ -55,12 +55,12 @@ test('1 (a) a hand-edited READABLE Recipe does NOT rewrite the list: nothing is 
   assert.deepEqual(r.writes, [], 'the list is not rewritten at once');
   assert.equal(extractDescription(r.store.get(PATH)!), extractDescription(before), 'the list is as the driver left it');
   assert.ok(msg(a).startsWith(STALE), msg(a));
-  assert.deepEqual(labels(a), ['Rewrite the list from the script', 'Discard my script edits']);
+  assert.deepEqual(labels(a), ['Rewrite the description from the recipe', 'Discard my script edits']);
   assert.equal(a.querySelector('.is-error, .is-rejected, .mod-warning'), null, 'muted, never red');
   assert.deepEqual(r.asked, [], 'no model call');
 });
 
-test('1 (b) "Rewrite the list from the script" writes the list from the Recipe on request (today\'s behaviour), as ONE undo entry that gives the hand-edited note back byte for byte; redo does it again', async () => {
+test('1 (b) "Rewrite the description from the recipe" writes the list from the Recipe on request (today\'s behaviour), as ONE undo entry that gives the hand-edited note back byte for byte; redo does it again', async () => {
   const r = rig(); const a = r.pane();
   const edited = editRecipe(r.store.get(PATH)!, '8 bars', '6 bars'); r.store.set(PATH, edited);
   await r.touch();
@@ -128,7 +128,7 @@ test('3 (a) the list was edited, then the Recipe by hand: the later edit is the 
   assert.ok(msg(a).startsWith(STALE));
 });
 
-test('3 (b) two quick Recipe edits: one strip, the later text is what "Rewrite the list from the script" uses', async () => {
+test('3 (b) two quick Recipe edits: one strip, the later text is what "Rewrite the description from the recipe" uses', async () => {
   const r = rig(); const a = r.pane();
   const start = r.store.get(PATH)!;
   r.store.set(PATH, editRecipe(start, '8 bars', '6 bars')); r.ctl.modified(PATH); await r.advance(100);
@@ -147,8 +147,8 @@ test('3 (c) reload: a new controller on the same note finds the Recipe edit stil
   assert.deepEqual(second.writes, []);
 });
 
-// ---- the driver's words and the waiting lines (1015) through "Rewrite the list from the script" ----------------------------------------------------------------------------------------------------------------------------
-test('3 (d) "Rewrite the list from the script" KEEPS what it can: a line the script says unchanged keeps the driver\'s words beside it, and every line from the first WAITING line on stays at the end (never applied, still waiting); a line the script changed loses words that no longer describe it', async () => {
+// ---- the driver's words and the waiting lines (1015) through "Rewrite the description from the recipe" ----------------------------------------------------------------------------------------------------------------------------
+test('3 (d) "Rewrite the description from the recipe" KEEPS what it can: a line the script says unchanged keeps the driver\'s words beside it, and every line from the first WAITING line on stays at the end (never applied, still waiting); a line the script changed loses words that no longer describe it', async () => {
   const note = noteContentFor('phrase_001', { kind: 'mix', a: 'bar_007', b: 'bar_008', weight: 0.35, threshold: 0.5, ghost: false } as PhraseParams);
   const r = rig(asListNote(note, 'phrase_001')); const a = r.pane();
   const list = extractDescription(r.store.get(PATH)!).split('\n').filter((l) => l.trim() !== '').map((l) => l.replace(/^\s*\d+[.)]\s+/, ''));
@@ -195,7 +195,7 @@ test('M1 the held line is said ONCE however often the note is touched, and said 
   assert.equal(r.lines.filter((l) => l === HELD).length, 2, 'it forgot it was told');
 });
 
-test('M2 "Discard my script edits" and "Rewrite the list from the script" that cannot write say why, write nothing, and keep the strip with both buttons (the Recipe is not lost)', async () => {
+test('M2 "Discard my script edits" and "Rewrite the description from the recipe" that cannot write say why, write nothing, and keep the strip with both buttons (the Recipe is not lost)', async () => {
   const r = rig(); const a = r.pane();
   const edited = editRecipe(r.store.get(PATH)!, '8 bars', '6 bars'); r.store.set(PATH, edited); await r.touch();
   r.flags.fail = true;
@@ -258,7 +258,7 @@ test('M5 script-edit-core: a Recipe that changed since it was planned is STALE (
   assert.equal(staleMessage('8 -> 6 bars'), 'The list no longer matches the script (the Recipe changed: 8 -> 6 bars).');
   assert.equal(staleMessage(''), 'The list no longer matches the script.');
   assert.equal(heldMessage(), 'The list no longer matches the script (your list edit is held until you choose).');
-  assert.equal(ASK, ASK_ONCE); assert.deepEqual(Object.values(SCRIPT_LABELS), ['Rewrite the list from the script', 'Discard my script edits', 'Keep my script edits', 'Replace them with the list']);
+  assert.equal(ASK, ASK_ONCE); assert.deepEqual(Object.values(SCRIPT_LABELS), ['Rewrite the description from the recipe', 'Discard my script edits', 'Keep my script edits', 'Replace them with the list']);
 });
 
 const READ_ONLY = (text: string): string => text.replace('content_type: json', 'content_type: json\nread_only: true');

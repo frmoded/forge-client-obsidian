@@ -20,23 +20,31 @@ const ROOT = path.resolve(import.meta.dirname, '..');
 test('the three music-tab switches are OFF by default and the bar numbers (2026-11-16-0902) are ON, in the constants, in the defaults and in the settings object a fresh install has', () => {
   assert.equal(SHOW_LEGACY_CONTROLLERS, false); assert.equal(SHOW_INSPECTOR, false); assert.equal(SHOW_SOURCE_CHIPS, false);
   // 2026-11-20-1002 (deliberate): `composerAutoApply: false` (a sentence needs a second Enter) is now `previewBeforeApplying: false` (the sentence applies at once); MUSIC_COMPOSER_AUTO_APPLY is ON, the new setting `Preview before applying` is OFF
-  assert.deepEqual(DEFAULT_UI_FLAGS, { showLegacyControllers: false, showInspector: false, showSourceChips: false, showBarNumbers: true, previewBeforeApplying: false });
+  assert.deepEqual(DEFAULT_UI_FLAGS, { showLegacyControllers: false, showInspector: false, showSourceChips: false, showBarNumbers: true, previewBeforeApplying: false, forgeDescriptionAtOnce: false });          // 2026-11-23-1018 (deliberate): + `Forge Description edits at once`, OFF
   assert.equal(COMPOSER_AUTO_APPLY, true); assert.equal(PREVIEW_BEFORE_APPLYING, false); assert.equal(composerAutoApplyOf(DEFAULT_UI_FLAGS), true); assert.equal(composerAutoApplyOf({ ...DEFAULT_UI_FLAGS, previewBeforeApplying: true }), false);
   assert.deepEqual(uiFlags(), DEFAULT_UI_FLAGS, 'with no source registered a view gets the defaults');
   const settings = fs.readFileSync(path.join(ROOT, 'src/settings.ts'), 'utf8');
   assert.match(settings, /showLegacyControllers: false,\s*showInspector: false,\s*showSourceChips: false,\s*showBarNumbers: true,/);
+  assert.match(settings, /forgeDescriptionAtOnce: false,/, '2026-11-23-1018 (deliberate): a fresh install waits for the Forge button');
   assert.match(settings, /previewBeforeApplying: false,/, '2026-11-20-1002 (deliberate): a fresh install applies at once (was: composerAutoApply: false = the two Enters)');
   assert.ok(!/composerAutoApply/.test(settings), 'the old key is gone from the settings (a stored one is ignored: the old false would have kept every existing install on two Enters)');
+});
+test('1018 the setting `Forge Description edits at once` is in the settings tab: its name, a description that says what off and on do, and a toggle that saves the value', () => {
+  const settings = fs.readFileSync(path.join(ROOT, 'src/settings.ts'), 'utf8');
+  assert.match(settings, /\.setName\('Forge Description edits at once'\)/);
+  assert.match(settings, /Off \(the default\): when you edit the Description of a phrase, an arrangement or a composition by hand, the note waits for you to click Forge in the strip above it\. On: the edit is applied by itself/);
+  assert.match(settings, /\.setValue\(this\.plugin\.settings\.forgeDescriptionAtOnce\)\s*\.onChange\(async \(value\) => \{\s*this\.plugin\.settings\.forgeDescriptionAtOnce = value;\s*await this\.plugin\.saveSettings\(\);/);
 });
 test('readUiFlags takes only real booleans from the settings object: junk, null and absent are the default (off); a saved true survives data.json', () => {
   assert.deepEqual(readUiFlags(undefined), DEFAULT_UI_FLAGS); assert.deepEqual(readUiFlags(null), DEFAULT_UI_FLAGS);
   assert.deepEqual(readUiFlags({ showLegacyControllers: 'true', showInspector: 1, showSourceChips: 'yes', showBarNumbers: 0 }), DEFAULT_UI_FLAGS);
-  assert.deepEqual(readUiFlags({ showLegacyControllers: true, showInspector: false }), { showLegacyControllers: true, showInspector: false, showSourceChips: false, showBarNumbers: true, previewBeforeApplying: false });
-  assert.deepEqual(readUiFlags(JSON.parse(JSON.stringify({ showLegacyControllers: true, showInspector: true, showSourceChips: true }))), { showLegacyControllers: true, showInspector: true, showSourceChips: true, showBarNumbers: true, previewBeforeApplying: false });
+  assert.deepEqual(readUiFlags({ showLegacyControllers: true, showInspector: false }), { showLegacyControllers: true, showInspector: false, showSourceChips: false, showBarNumbers: true, previewBeforeApplying: false, forgeDescriptionAtOnce: false });
+  assert.deepEqual(readUiFlags(JSON.parse(JSON.stringify({ showLegacyControllers: true, showInspector: true, showSourceChips: true }))), { showLegacyControllers: true, showInspector: true, showSourceChips: true, showBarNumbers: true, previewBeforeApplying: false, forgeDescriptionAtOnce: false });
+  assert.equal(readUiFlags({ forgeDescriptionAtOnce: true }).forgeDescriptionAtOnce, true, '2026-11-23-1018: a saved true survives'); assert.equal(readUiFlags({ forgeDescriptionAtOnce: 'yes' }).forgeDescriptionAtOnce, false);
 });
 test('the source: a registered source is asked at every call (a change takes effect when a tab mounts), a throwing source is the default, and null puts the default back', () => {
   let on = false;
-  registerUiFlagsSource(() => ({ showLegacyControllers: on, showInspector: on, showSourceChips: on, showBarNumbers: true, previewBeforeApplying: false }));
+  registerUiFlagsSource(() => ({ showLegacyControllers: on, showInspector: on, showSourceChips: on, showBarNumbers: true, previewBeforeApplying: false, forgeDescriptionAtOnce: false }));
   assert.equal(uiFlags().showLegacyControllers, false); on = true; assert.equal(uiFlags().showLegacyControllers, true);
   registerUiFlagsSource(() => { throw new Error('boom'); }); assert.deepEqual(uiFlags(), DEFAULT_UI_FLAGS);
   registerUiFlagsSource(null); assert.deepEqual(uiFlags(), DEFAULT_UI_FLAGS);

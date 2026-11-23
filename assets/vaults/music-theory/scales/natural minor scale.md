@@ -5,25 +5,21 @@ Major set the standard; natural minor is what you get when you lower three of it
 
 ## The recipe
 
-Whole, half, whole, whole, half, whole, whole: W-H-W-W-H-W-W. Set it next to major's W-W-H-W-W-W-H and you can see where the changes land. Natural minor lowers the 3rd, 6th and 7th notes of major, a half step each. A half step is the next piano key (black keys count) or the next fret; a whole step is two of them. It tends to sound sadder or darker than major.
+Major: W – W – H – W – W – W – H
+
+Natural minor: W – H – W – W – H – W – W
+
+Natural minor is exactly the same as major, with different gaps. Same whole steps, same half steps, placed differently: it lowers the 3rd, 6th and 7th notes of major by a half step. A half step is the next piano key, black keys count, or the next fret. A whole step is two of them. It tends to sound sadder or darker than major.
 
 ## Build it from A
 
 Start on A and you never touch a black key: W to B, H to C, W to D, and so forth. A B C D E F G A, the white keys.
 
-## Build it from C
-
-Same recipe, different tonic: W to D, H to E♭, W to F, and so forth. That gives C D E♭ F G A♭ B♭ C. Why E♭ and not D♯? A scale uses each letter once, and D is already taken. Same story for A♭ and B♭. [[scales jargon]] has the rule.
-
-## Same notes as major
-
-A minor and C major use exactly the same seven notes. C major sits a minor third, three half steps, above A. Change the tonic and you change the mood without moving a single key.
-
 ## Time to work
 
 Two checks, every time. Count the half steps against the recipe, then read the letters: seven notes, seven different letters, none twice, none skipped. C D E♭ F G A♭ B♭ passes. C D D♯ F G G♯ A♯ sounds identical and fails: two Ds, two Gs, no E, no B.
 
-Don't stop at A and C. Build all twelve natural minor scales in the exercise below, one tonic at a time. Each finished scale stays on a shelf under the exercise.
+Don't stop at A. Build all twelve natural minor scales in the exercise below, one tonic at a time. Each finished scale stays on a shelf under the exercise.
 
 Harmonic and melodic minor change one or two of these notes; they're on [[modes and minor scales]].
 

@@ -568,6 +568,7 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
         ...hooks, showBoxStatus: hooks.showBoxStatus ?? (() => uiFlags().showLegacyControllers),
         // 2026-11-17-2001: the composer's switch and its "+" menu: the same four New actions as the header menu and the ribbon (ONE list, newMenuItems), and a note picker for "Insert a link to a note"
         composerAutoApply: () => composerAutoApplyOf(uiFlags()),
+        descriptionAtOnce: () => uiFlags().forgeDescriptionAtOnce,          // 2026-11-23-1018
         openNote,                                                                                          // 2026-11-19-0992: the links of the dialog ("Created [[bar_010]], a copy of [[bar_007]].") open the note the way a lineage link does (a bar in the Beat Box)
         composerMenu: () => ({
           items: [...newMenuItems().map((item) => ({ id: item.commandId, label: item.title })), ...(hooks.failedPrompts?.menuItem?.() ? [hooks.failedPrompts.menuItem()!] : [])],          // 2026-11-20-1004: `Review unprocessed (N)` when N > 0

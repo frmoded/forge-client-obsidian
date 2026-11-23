@@ -37,6 +37,7 @@ export interface DescriptionHooks {
   showBoxStatus?: () => boolean;
   /** 2026-11-17-2001: the composer's switch (MUSIC_COMPOSER_AUTO_APPLY, default off) and its "+" menu. */
   composerAutoApply?: DescriptionPorts['composerAutoApply'];
+  descriptionAtOnce?: DescriptionPorts['descriptionAtOnce'];          // 2026-11-23-1018
   composerMenu?: DescriptionPorts['composerMenu'];
   /** 2026-11-19-0992: the plugin's opener of a note by lineage id (a bar opens in the Beat Box): the links of the dialog use it. */
   openNote?: DescriptionPorts['openNote'];
@@ -64,6 +65,7 @@ export function descriptionPortsFor(env: DescriptionEnv, hooks: DescriptionHooks
     ...(hooks.noteCtime ? { noteCtime: hooks.noteCtime } : {}),
     ...(hooks.showBoxStatus ? { showBoxStatus: hooks.showBoxStatus } : {}),
     ...(hooks.composerAutoApply ? { composerAutoApply: hooks.composerAutoApply } : {}),
+    ...(hooks.descriptionAtOnce ? { descriptionAtOnce: hooks.descriptionAtOnce } : {}),
     ...(hooks.composerMenu ? { composerMenu: hooks.composerMenu } : {}),
     ...(env.confirm ? { confirm: env.confirm } : {}),
     ...(create && exists && isAlreadyExists ? { duplicate: (of: Parameters<NonNullable<DescriptionPorts['duplicate']>>[0]) => listModel.duplicate.duplicateNote({ read: (p) => env.read(p), listBasenames: (folder) => env.basenamesIn(folder), exists, create, isAlreadyExists, trace: (line) => env.trace(line) }, of, vault()) } : {}),

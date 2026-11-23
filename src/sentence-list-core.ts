@@ -420,7 +420,7 @@ export function listAfterParams(list: SentenceList, params: GrammarParams, kind:
 // ---- undo and redo (in memory, per open note) -------------------------------------------------------------------------------------------------------------------------------------------
 
 /** `copy` (2026-11-19-0992a): the entry of a COPY made by `Duplicate [[bar_007]].`: it changes no line (`before` and `after` are the same list); undoing it hands the copy back (the caller moves it to the trash) and leaves the list as it is. It is never put on the redo side. */
-/** `snapshot` (2026-11-22-1016): the entry of a script action (Rewrite the list from the script, Discard my script edits, Replace them with the list): the whole note before and after, because the Recipe and the Python are not in the list; undo and redo write these texts back (ONE write). */
+/** `snapshot` (2026-11-22-1016): the entry of a script action (Rewrite the description from the recipe, Discard my script edits, Replace them with the list): the whole note before and after, because the Recipe and the Python are not in the list; undo and redo write these texts back (ONE write). */
 export interface NoteSnapshot { before: string; after: string }
 export interface UndoEntry { before: string[]; after: string[]; added: string[]; replaced: Replaced[]; copy?: CopyMark; snapshot?: NoteSnapshot }
 export interface Undone { list: string[]; removed: string[]; restored: string[]; copy?: CopyMark; snapshot?: NoteSnapshot }

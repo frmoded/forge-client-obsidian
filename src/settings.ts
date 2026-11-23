@@ -72,6 +72,8 @@ export interface ForgeSettings {
   dialogRatio: number;
   /** 2026-11-20-1002: `Preview before applying` (default OFF): off = ONE Enter applies a sentence the grammar reads completely; on = the first Enter shows what would be written and the second applies (the old behaviour). Replaces the old auto-apply key (a stored one is ignored). */
   previewBeforeApplying: boolean;
+  /** 2026-11-23-1018: ON = a hand edit of a music list note's Description is applied by itself after you stop typing (the old behaviour); OFF (default) = it waits for the Forge button. */
+  forgeDescriptionAtOnce: boolean;
   /** 2026-11-20-1004: `Keep unprocessed sentences for review` (default OFF): a sentence typed in a composer that neither the grammar nor the sentence service could turn into canonical lines is kept in a local file in this plugin's own folder, for the review tab. Nothing leaves the machine. */
   keepUnprocessedSentences: boolean;
 }
@@ -97,6 +99,7 @@ export const DEFAULT_SETTINGS: ForgeSettings = {
   dialogHeight: 112,
   dialogRatio: 0.4,
   previewBeforeApplying: false,
+  forgeDescriptionAtOnce: false,
   keepUnprocessedSentences: false,
 };
 
@@ -312,6 +315,20 @@ export class ForgeSettingTab extends PluginSettingTab {
           .setValue(this.plugin.settings.showBarNumbers)
           .onChange(async (value) => {
             this.plugin.settings.showBarNumbers = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName('Forge Description edits at once')
+      .setDesc(
+        'Off (the default): when you edit the Description of a phrase, an arrangement or a composition by hand, the note waits for you to click Forge in the strip above it. On: the edit is applied by itself a moment after you stop typing. A sentence typed in the composer always applies at once.'
+      )
+      .addToggle(toggle =>
+        toggle
+          .setValue(this.plugin.settings.forgeDescriptionAtOnce)
+          .onChange(async (value) => {
+            this.plugin.settings.forgeDescriptionAtOnce = value;
             await this.plugin.saveSettings();
           })
       );

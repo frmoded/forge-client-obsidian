@@ -37,6 +37,8 @@ export interface ChatPanelPorts {
   clearTimer?(handle: unknown): void;
   /** 2026-11-19-0992: open a note named by a link in the dialog (a copy that was just made): the plugin's own opener, by lineage id (`bars/bar_010`). Absent = the words are drawn and there are no buttons that would do nothing. */
   openNote?(id: string): void;
+  /** 2026-11-23-1018 (Part C): write a link into the composer at the caret. Present only for a music list note. With it, a click on a link of the dialog while the composer HAD FOCUS AND HOLDS TEXT (at the mouse-down: the click itself takes the focus away) writes `[[name]]` into the composer, keeps the focus there and opens nothing; with an empty composer, or the focus elsewhere, the click opens the note as ever. */
+  insertLink?(name: string): void;
 }
 export interface ChatPanelHandle {
   readonly el: HTMLElement;
@@ -109,7 +111,13 @@ export function mountChatPanel(host: HTMLElement, ports: ChatPanelPorts, initial
       const id = byName.get(part.replace(/^\[\[|\]\]$/g, ''));
       if (id === undefined || part === '') { if (part !== '') out.push(doc.createTextNode(part)); continue; }
       const b = doc.createElement('button'); b.type = 'button'; b.className = 'forge-chat-link'; b.setAttribute('data-note', id); b.textContent = part;
-      b.addEventListener('click', () => { try { opener(id); } catch (err) { console.error('[forge-chat] could not open a note from the dialog', err); } });
+      let typing = false;                                                                                       // 2026-11-23-1018: was the composer being typed in when the button went down?
+      b.addEventListener('mousedown', () => { const t = panel.querySelector('.forge-prompt-box-text'); typing = ports.insertLink !== undefined && t !== null && doc.activeElement === t && box.state().text.trim() !== ''; });
+      b.addEventListener('click', () => {
+        if (typing && ports.insertLink !== undefined) { typing = false; try { ports.insertLink(part.replace(/^\[\[|\]\]$/g, '')); box.focus(); } catch (err) { console.error('[forge-chat] could not write a link into the composer', err); } return; }
+        typing = false;
+        try { opener(id); } catch (err) { console.error('[forge-chat] could not open a note from the dialog', err); }
+      });
       out.push(b);
     }
     return out;

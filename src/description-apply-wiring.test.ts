@@ -118,10 +118,15 @@ for (const edition of ['lean', 'music'] as const) {
       await w.wait(DESCRIPTION_DEBOUNCE_MS - 100);
       assert.deepEqual(w.writes, [], 'the person is still within the wait: nothing written yet');
       await w.wait(150);
+      if (edition === 'music') {          // 2026-11-23-1018 (deliberate): the music edition WAITS for the Forge button (the setting `Forge Description edits at once` is off by default); lean applies it by itself, as before
+        assert.deepEqual(w.writes, [], 'not forged by itself');
+        assert.equal(tab.contentEl.querySelector('.forge-description-message').textContent, 'The Description was edited. Click Forge to apply it.');
+        (tab.contentEl.querySelector('[data-action="update"]') as HTMLElement).click(); await w.wait(100);
+      }
       assert.deepEqual(w.writes, [PATH], 'one write');
       assert.equal(w.store.get(PATH), asListNote(noteContentFor('phrase_001', { ...EXTEND, bars: 6 }), 'phrase_001')); // 2026-11-19-0980 (deliberate): a phrase's Description is a numbered list now: the note a write leaves is the list note
       assert.equal(tab.contentEl.querySelector('.forge-phrase-bars').value, '6', 'the Bars control reads the new value');
-      assert.deepEqual(w.lines, ['[forge-description] applied phrase_001 (8 -> 6 bars)']);
+      assert.deepEqual(w.lines, edition === 'music' ? ['[forge-description] held phrase_001: the Description was edited, Forge applies it', '[forge-description] applied phrase_001 (8 -> 6 bars)'] : ['[forge-description] applied phrase_001 (8 -> 6 bars)']);
       await w.wait(3000);
       assert.deepEqual(w.writes, [PATH]);
       assert.equal(tab.contentEl.querySelector('.forge-description-bar'), null, 'and no bar is left');

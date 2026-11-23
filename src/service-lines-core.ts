@@ -66,14 +66,21 @@ const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object
 const UNSAFE = /[\u0000-\u001f\u007f<>`{}\\]/;
 const UNSAFE_ALL = new RegExp(UNSAFE.source, 'g');          // for SHOWING a dropped line: every such character becomes a space
 
+const REASON_MAX = 240;
+/** 2026-11-23-1018: the service's own words, made safe to show: markup, code and control characters become spaces, one line, capped. */
+const plainReason = (v: unknown): string => (typeof v === 'string' ? v.replace(UNSAFE_ALL, ' ').replace(/\s+/g, ' ').trim().slice(0, REASON_MAX).trim() : '');
+
 export async function readLinesAnswer(res: { status: number; json: unknown }, check: LineCheck): Promise<LinesRead> {
   if (res.status !== 200 || !isObj(res.json)) return { kind: 'legacy' };
   const json = res.json;
   if (!('lines' in json) && !('question' in json)) return { kind: 'legacy' };
+  // 2026-11-23-1018: the service answers EVERY failure as { ok: false, error: <reason>, lines: null, question: null }: its reason is what the driver is told (it used to be read as "lines were not a list")
+  if (json.ok === false) { const why = plainReason(json.error); return { kind: 'refused', message: why !== '' ? why : 'The service refused without saying why. Try saying it differently.' }; }
   const size = ((): number => { try { return JSON.stringify(json).length; } catch { return Number.POSITIVE_INFINITY; } })();
   if (size > ANSWER_MAX) return { kind: 'refused', message: 'The service\'s answer was too long to trust; nothing was used.' };
   const raw = json.lines;
-  if (raw !== undefined && !Array.isArray(raw)) return { kind: 'refused', message: 'The service\'s answer could not be read: its lines were not a list.' };
+  if (raw !== undefined && raw !== null && !Array.isArray(raw)) return { kind: 'refused', message: 'The service\'s answer could not be read: its lines were not a list.' };
+  if (raw === null && (json.question === undefined || json.question === null)) return { kind: 'refused', message: 'The service gave no lines.' };          // 2026-11-23-1018: ok with neither lines nor a question
   const lines: string[] = [], dropped: Array<{ line: string; why: string }> = [];
   for (const item of (raw ?? []) as unknown[]) {
     if (typeof item !== 'string') { dropped.push({ line: String(typeof item === 'object' ? JSON.stringify(item) : item).slice(0, 80), why: 'it was not text' }); continue; }

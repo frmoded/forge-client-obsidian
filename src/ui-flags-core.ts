@@ -10,17 +10,19 @@ export const SHOW_SOURCE_CHIPS = false;
 export const COMPOSER_AUTO_APPLY = true;                 // 2026-11-20-1002 (deliberate): MUSIC_COMPOSER_AUTO_APPLY is ON (was OFF since 2026-11-17-2001): ONE Enter applies a sentence the grammar reads completely
 export const PREVIEW_BEFORE_APPLYING = !COMPOSER_AUTO_APPLY;   // 2026-11-20-1002: the setting `Preview before applying` (default off) is the switch's inverse: ON restores the two Enters
 export const SHOW_BAR_NUMBERS = true;                    // 2026-11-16-0902: the one switch that is ON by default: a bar number at the start of every bar of the Score
-export interface UiFlags { showLegacyControllers: boolean; showInspector: boolean; showSourceChips: boolean; showBarNumbers: boolean; previewBeforeApplying: boolean }
-export const DEFAULT_UI_FLAGS: UiFlags = { showLegacyControllers: SHOW_LEGACY_CONTROLLERS, showInspector: SHOW_INSPECTOR, showSourceChips: SHOW_SOURCE_CHIPS, showBarNumbers: SHOW_BAR_NUMBERS, previewBeforeApplying: PREVIEW_BEFORE_APPLYING };
+export const FORGE_DESCRIPTION_AT_ONCE = false;           // 2026-11-23-1018 (deliberate): a hand edit of a phrase, arrangement or composition Description WAITS for the Forge button; the setting `Forge Description edits at once` ON restores the automatic replay
+export interface UiFlags { showLegacyControllers: boolean; showInspector: boolean; showSourceChips: boolean; showBarNumbers: boolean; previewBeforeApplying: boolean; forgeDescriptionAtOnce: boolean }
+export const DEFAULT_UI_FLAGS: UiFlags = { showLegacyControllers: SHOW_LEGACY_CONTROLLERS, showInspector: SHOW_INSPECTOR, showSourceChips: SHOW_SOURCE_CHIPS, showBarNumbers: SHOW_BAR_NUMBERS, previewBeforeApplying: PREVIEW_BEFORE_APPLYING, forgeDescriptionAtOnce: FORGE_DESCRIPTION_AT_ONCE };
 
 /** The flags a settings object holds: only a real boolean counts, anything else (absent, a string, null) is the default. */
-export function readUiFlags(settings: { showLegacyControllers?: unknown; showInspector?: unknown; showSourceChips?: unknown; showBarNumbers?: unknown; previewBeforeApplying?: unknown } | null | undefined): UiFlags {
+export function readUiFlags(settings: { showLegacyControllers?: unknown; showInspector?: unknown; showSourceChips?: unknown; showBarNumbers?: unknown; previewBeforeApplying?: unknown; forgeDescriptionAtOnce?: unknown } | null | undefined): UiFlags {
   return {
     showLegacyControllers: typeof settings?.showLegacyControllers === 'boolean' ? settings.showLegacyControllers : DEFAULT_UI_FLAGS.showLegacyControllers,
     showInspector: typeof settings?.showInspector === 'boolean' ? settings.showInspector : DEFAULT_UI_FLAGS.showInspector,
     showSourceChips: typeof settings?.showSourceChips === 'boolean' ? settings.showSourceChips : DEFAULT_UI_FLAGS.showSourceChips,
     showBarNumbers: typeof settings?.showBarNumbers === 'boolean' ? settings.showBarNumbers : DEFAULT_UI_FLAGS.showBarNumbers,
     previewBeforeApplying: typeof settings?.previewBeforeApplying === 'boolean' ? settings.previewBeforeApplying : DEFAULT_UI_FLAGS.previewBeforeApplying,
+    forgeDescriptionAtOnce: typeof settings?.forgeDescriptionAtOnce === 'boolean' ? settings.forgeDescriptionAtOnce : DEFAULT_UI_FLAGS.forgeDescriptionAtOnce,
   };
 }
 /** 2026-11-20-1002: what the composer asks at every Enter: does a sentence the grammar reads apply at once? (The setting `Preview before applying` ON says no.) */
