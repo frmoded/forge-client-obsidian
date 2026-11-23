@@ -42,6 +42,7 @@ import { isCompositionPath } from './composition-core.ts';
 import { isKitPath } from './kit-core.ts';
 import { isArrangementPath } from './arrangement-core.ts';
 import { choosePhraseTarget, createPhraseHeaderSync } from './phrase-header-core.ts';
+import { FORGE_ICON, FORGE_TITLE, setForgeRunner, wantsForge } from './forge-button-core.ts';
 import { headerResync } from './header-resync.ts';
 import { createPhraseRouter } from './phrase-default-view-core.ts';
 import { createPaneLinker, openPairAvailable, type PairSource } from './linked-panes-core.ts';
@@ -541,6 +542,7 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
         setTimer: (fn, ms) => window.setTimeout(fn, ms), clearTimer: (h) => window.clearTimeout(h as number),
         trace: (line) => { console.info(line); },
         warn: (line) => { console.warn(line); },
+        redraw: (p) => { app.workspace.iterateAllLeaves((leaf) => { const v = leaf.view as unknown as { file?: TFile | null; reloadAfterRestore?: () => void }; if (v?.file?.path === p && typeof v.reloadAfterRestore === 'function') v.reloadAfterRestore(); }); },          // 2026-11-23-1023: the Forge button redraws the Score of the note even when it writes nothing
         panes: () => {
           const out: Array<{ path: string; contentEl: HTMLElement; tab?: boolean }> = [];
           app.workspace.iterateAllLeaves((leaf) => { const v = leaf.view as unknown as { file?: TFile | null; contentEl?: HTMLElement }; if (v?.file && v.contentEl && (familyOfPath(v.file.path) !== null || isBarPath(v.file.path))) out.push({ path: v.file.path, contentEl: v.contentEl, tab: plan === 'score' && SCORE_VIEW_TYPES.includes(leaf.view.getViewType()) || plan === 'score' && isBarPath(v.file.path) && leaf.view.getViewType() === RHYTHM_EDIT_VIEW_TYPE }); });   // 2026-11-12-1203: the docked prompt box lives on a score tab of the music edition only (the lean edition's tabs are as they were: P3). 2026-11-19-0993: and on a bar's Beat Box tab (its list is the bar grammar's)
@@ -577,6 +579,7 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
         }),
       }));
       // 2026-11-19-0993 (THE LIST MODEL, stage 3: BARS): what a bar's Beat Box tab needs from the plugin: its gestures APPENDED to the bar's list through the controller (one write each, undoable), and the controller's undo and redo. Only a score-first vault gets here (P3).
+      setForgeRunner((p) => { void descriptions.forge(p); }); plugin.register(() => { setForgeRunner(null); });          // 2026-11-23-1023: the Forge buttons of the Score tabs click through the controller
       plugin.register(registerBarListHost({
         appendLine: (path, sentence, opts) => descriptions.appendLine(path, sentence, opts),
         undoLast: (path) => descriptions.undoLast(path),
@@ -852,10 +855,12 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
           if (file instanceof TFile) void openScore(view.leaf, file);
         },
       });
+      // 2026-11-23-1023: the Forge button of the TEXT view of a list note (the same bookkeeping: added while the tab shows such a note, taken away when it shows anything else)
+      const forgeHeaders = createPhraseHeaderSync<MarkdownView>({ isScoreFirst: () => scoreFirst || messageDelivery.hasBeenScoreFirst(), icon: FORGE_ICON, title: FORGE_TITLE, wants: (sf, p) => sf && wantsForge(p), open: (_view, path) => { void descriptions.forge(path); } });
       const syncHeaders = (reason = 'event') => {
         const views: MarkdownView[] = [];
         for (const leaf of app.workspace.getLeavesOfType('markdown')) if (leaf.view instanceof MarkdownView) views.push(leaf.view);
-        headers.sync(views);
+        headers.sync(views); forgeHeaders.sync(views);
         const shown = views.filter((v) => isPhrasePath(v.file?.path)).length;
         if (shown > 0) console.info(`[forge-header] phrase text tabs: ${shown}; header sync (${reason}); score-first now=${scoreFirst} ever=${messageDelivery.hasBeenScoreFirst()}`);
       };

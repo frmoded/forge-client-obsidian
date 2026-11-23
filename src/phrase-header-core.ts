@@ -27,6 +27,8 @@ export interface HeaderView {
 }
 
 export interface PhraseHeaderDeps<V extends HeaderView> {
+  /** 2026-11-23-1023: the same bookkeeping serves the Forge button of the text view: its own icon, title and rule (default: "Open as Score" on a phrase of a score-first vault). */
+  icon?: string; title?: string; wants?: (scoreFirst: boolean, path: string | null | undefined) => boolean;
   /** The vault's profile answer, asked live on every sync. */
   isScoreFirst(): boolean;
   /** The button was clicked on `view`, showing `path`: switch that tab to the phrase's Score. */
@@ -40,10 +42,10 @@ export function createPhraseHeaderSync<V extends HeaderView>(deps: PhraseHeaderD
       const scoreFirst = deps.isScoreFirst();
       for (const view of views) {
         const path = view.file?.path ?? null;
-        const want = wantsPhraseHeader(scoreFirst, path);
+        const want = (deps.wants ?? wantsPhraseHeader)(scoreFirst, path);
         const els = have.get(view);
         if (want && !els) {
-          have.set(view, [addQuietAction(view, PHRASE_HEADER_ICON, PHRASE_HEADER_TITLE, () => { const p = view.file?.path; if (p && wantsPhraseHeader(deps.isScoreFirst(), p)) deps.open(view, p); })]);
+          have.set(view, [addQuietAction(view, deps.icon ?? PHRASE_HEADER_ICON, deps.title ?? PHRASE_HEADER_TITLE, () => { const p = view.file?.path; if (p && (deps.wants ?? wantsPhraseHeader)(deps.isScoreFirst(), p)) deps.open(view, p); })]);
         } else if (!want && els) {
           els.forEach((el) => el.remove());
           have.delete(view);

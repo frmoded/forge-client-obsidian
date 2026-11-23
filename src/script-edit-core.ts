@@ -24,6 +24,17 @@ export const SCRIPT_LABELS = { rewrite: 'Rewrite the description from the recipe
 /** A script the list's sentences cannot say: refused in plain words, the Recipe kept as it is. */
 export const UNSAYABLE = 'The Description cannot say this Recipe in sentences, so it is not rewritten from it. Your Recipe is kept as it is; change it, or use Discard my Recipe edits.';
 
+/** 2026-11-23-1023 (the Forge button, always there): "apply the Description now" on a note with nothing pending: the list replayed through the grammar and the whole note written from it (the same replay and writer as every list write: the Recipe, the Python and the json are made
+ *  again). `same` = the note comes out byte for byte as it is (then nothing is written). Or why not (an empty Description, no readable line, a refusing writer). */
+export function forgeText(text: string, name: string, family: Family, vault: GrammarVault): { ok: true; text: string; same: boolean } | { ok: false; message: string } {
+  const parsed = parseList(extractDescription(text), family, vault);
+  if (parsed.list.length === 0) return { ok: false, message: 'There is nothing to forge: the Description is empty.' };
+  const rp = replayGrammar(parsed.list, family, { vault });
+  if (rp.params === null) return { ok: false, message: 'No line of the Description can be read.' };
+  const w = writeListNote(text, name, family, rp);
+  return w.ok === false ? { ok: false, message: w.message } : { ok: true, text: w.text, same: w.text === text };
+}
+
 /** Stable text of params (key order does not matter): two readings of the same music are equal. */
 export const canon = (v: unknown): string => JSON.stringify(v, (_k, x) => (x !== null && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.entries(x as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : 1))) : x));
 

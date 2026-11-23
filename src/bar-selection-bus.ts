@@ -2,6 +2,8 @@
 // with plain ports; these two live in score-first.ts (the description controller and the new-phrase flow), so score-first registers them HERE once and the tab asks. A tab with no host (a test, a lean edition) simply has no menu
 // actions that need one: the menu says so in its own line. Pure: no obsidian, no DOM.
 import type { NewPhraseResult, TransformPhrase } from './phrase-core.ts';
+import type { InspectorEntry } from './artifact-inspector-core.ts';
+import { pinnedNoteFor } from './linked-panes-core.ts';
 
 export interface BarSelectionHost {
   /** 2026-11-19-0980: APPEND `sentence` as the next line of the note's list at `path` (one write, undoable with Cmd/Ctrl+Z). `message` says what was added, or why not, in words. (It was `previewDescription`: the sentence shown in the prompt box, applied by Apply.) */
@@ -22,3 +24,10 @@ export function registerBarSelectionHost(h: BarSelectionHost): () => void {
   return () => { if (host === h) host = null; };
 }
 export const barSelectionHost = (): BarSelectionHost | null => host;
+
+/** 2026-11-23-1023 (Part B): the LINK CLICK of an arrangement's or a composition's Score. While the composer of this note holds text (asked of the host at the click), the next plain click on a bar does not pin it (and the notes pane does not follow): it writes the
+ *  link of the note the bar comes from at the caret. For a composition that is the note its SECTION plays: the IMMEDIATE child the Description names (a nested composition or arrangement gives itself, never a note deeper down); for an arrangement the phrase of the track. */
+export const linkClickPort = (path: () => string | null | undefined): { armed(): boolean; onBar(entry: InspectorEntry): void } => ({
+  armed: () => { const p = path(); return p !== null && p !== undefined && barSelectionHost()?.duplicateArmed?.(p) === true; },
+  onBar: (e) => { const p = path(); const pin = pinnedNoteFor(e.prov); if (p) void barSelectionHost()?.duplicateClick?.(p, pin ? pin.noteId : null, null); },
+});

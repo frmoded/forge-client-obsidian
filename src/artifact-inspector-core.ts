@@ -271,7 +271,7 @@ export function attachArtifactInspector(opts: ArtifactInspectorOptions): Artifac
     if (opts.keepPinOnControls === true && isPlayerControl(e.target)) { opts.trace?.(`[forge-pin] click ${clickKind(e.target)} -> ignored (a player control, the pin is kept)`); return; }
     const drawn = mappedAncestor(root, map, e.target);
     const el = drawn ?? boxAt(e);                         // the unpainted part of a bar has the svg root as its target: the point decides
-    if (el && opts.copyClick?.armed() === true) {         // 2026-11-19-0992: the composer says "Duplicate": this click names the bar to copy instead of pinning it
+    if (el && opts.copyClick?.armed() === true && !(e as MouseEvent).shiftKey && !(e as MouseEvent).ctrlKey && !(e as MouseEvent).metaKey) {          // 2026-11-23-1023: a modified click is never a copy or link click, whether or not this Score has selection gestures of its own         // 2026-11-19-0992: the composer says "Duplicate": this click names the bar to copy instead of pinning it
       opts.trace?.(`[forge-pin] click ${clickKind(e.target)} -> copy click on ${opts.pinLabel ? opts.pinLabel(el.id) : el.id} (${drawn ? 'on the bar' : "inside the bar's box"}), the pin is kept`);
       opts.copyClick.onBar(entry(el.id));
       return;

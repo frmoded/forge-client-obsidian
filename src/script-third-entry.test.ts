@@ -286,3 +286,60 @@ test('M7 undo of a script action when the note changes between the check and the
   r2.flags.fail = true; const bad = await r2.ctl.redoLast(PATH); r2.flags.fail = false;
   assert.deepEqual([bad.ok, bad.message], [false, 'Redo: disk full']);
 });
+
+// ---- 2026-11-23-1023 (Part A): the Forge button is ALWAYS there: `ctl.forge(path)` = "apply the Description now", whatever the note's state; no model call -----------------------------------------------------------------------------------------
+const withRedraw = (r: ReturnType<typeof rig>): string[] => { const redraws: string[] = []; r.ports.redraw = (p: string) => { redraws.push(p); }; return redraws; };
+
+test('1023 F1 Forge with NOTHING pending replays the Description: if the note comes out byte-identical nothing is written and no undo entry is made, the Score is redrawn anyway, the dialog says `Forged. Nothing changed.`, no model call', async () => {
+  const r = rig(); const a = r.pane(); const redraws = withRedraw(r);
+  const start = r.store.get(PATH)!;
+  const out = await r.ctl.forge(PATH);
+  assert.deepEqual(r.writes, [], 'nothing written'); assert.equal(r.store.get(PATH), start);
+  assert.deepEqual([out.ok, out.wrote, out.message], [true, false, 'Forged. Nothing changed.']);
+  assert.deepEqual(redraws, [PATH], 'the Score is redrawn');
+  assert.match((await r.ctl.undoLast(PATH)).message, /^Removed: /, 'no script entry was pushed: Cmd/Ctrl+Z still just takes the last sentence off the list');
+  assert.equal(a.querySelector('.forge-description-bar'), null, 'no strip');
+  assert.deepEqual(r.asked, [], 'no model call');
+});
+
+test('1023 F2 Forge on a PENDING Description edit is the 1018 button: the Description is applied (Recipe and Python follow), ONE undo entry gives the hand edit back', async () => {
+  const r = rig(); const a = r.pane(); r.ports.descriptionAtOnce = () => false; const redraws = withRedraw(r);
+  const start = r.store.get(PATH)!;
+  const edited = editDesc(start, '8 bars', '5 bars'); r.store.set(PATH, edited); await r.touch();
+  assert.deepEqual(r.writes, [], 'waiting for Forge'); assert.deepEqual(labels(a), ['Forge', 'Revert']);
+  const out = await r.ctl.forge(PATH);
+  assert.equal(out.ok, true); assert.equal(out.wrote, true);
+  assert.equal(r.store.get(PATH), asListNote(noteContentFor('phrase_001', { ...EXTEND, bars: 5 }), 'phrase_001'));
+  assert.equal(r.writes.length, 1, 'one write'); assert.equal(a.querySelector('.forge-description-bar'), null, 'the strip is gone');
+  assert.equal((await r.ctl.undoLast(PATH)).ok, true); assert.equal(r.store.get(PATH), edited, 'one undo gives the hand edit back');
+  assert.deepEqual(r.asked, []); void redraws;
+});
+
+test('1023 F3 Forge while the Recipe holds edits ASKS ONCE (the 1016 rule): Keep my Recipe edits writes nothing and the quiet strip comes back; Replace them with the Description replays the list, ONE undo entry', async () => {
+  const r = rig(); const a = r.pane();
+  const start = r.store.get(PATH)!;
+  const edited = editRecipe(start, '8 bars', '6 bars'); r.store.set(PATH, edited); await r.touch();
+  assert.ok(msg(a).startsWith(STALE), msg(a));
+  const out = await r.ctl.forge(PATH);
+  assert.deepEqual(r.writes, [], 'asking writes nothing'); assert.equal(out.wrote, false);
+  assert.equal(msg(a), ASK_ONCE); assert.deepEqual(buttons(a), ['keep-script', 'update']); assert.deepEqual(labels(a), ['Keep my Recipe edits', 'Replace them with the Description']);
+  await r.click(a, 'keep-script');
+  assert.deepEqual(r.writes, []); assert.equal(r.store.get(PATH), edited); assert.ok(msg(a).startsWith(STALE), `back to the quiet strip: ${msg(a)}`);
+  await r.ctl.forge(PATH); assert.equal(msg(a), ASK_ONCE, 'Forge asks again when pressed again');
+  await r.click(a, 'update');
+  assert.equal(r.store.get(PATH), start, 'the list says 8 bars: the Recipe is made again from it');
+  assert.equal((await r.ctl.undoLast(PATH)).ok, true); assert.equal(r.store.get(PATH), edited, 'one undo gives the hand-edited Recipe back');
+  assert.deepEqual(r.asked, []);
+});
+
+test('1023 F4 Forge on a Description the grammar cannot read, or on a note that is not a list note, writes nothing and says why; the strip stays as it was', async () => {
+  const r = rig(); const a = r.pane(); r.ports.descriptionAtOnce = () => false;
+  const start = r.store.get(PATH)!;
+  const bad = editDesc(start, '8 bars', 'eight lovely bars'); r.store.set(PATH, bad); await r.touch();
+  const before = msg(a); assert.ok(before.length > 0);
+  const out = await r.ctl.forge(PATH);
+  assert.deepEqual(r.writes, []); assert.equal(out.ok, false); assert.equal(out.wrote, false); assert.ok(out.message.length > 0);
+  assert.equal(msg(a), before, 'the strip is as it was');
+  const bar = await r.ctl.forge('bars/bar_001.md'); assert.equal(bar.ok, false); assert.equal(bar.wrote, false);
+  const other = await r.ctl.forge('notes/x.md'); assert.equal(other.ok, false);
+});

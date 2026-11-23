@@ -177,14 +177,14 @@ test('Esc on the preview discards it: nothing is created; a build with no way to
 // ---- the click gesture: the controller's two halves --------------------------------------------------------------------------------------------------------------------------------------------
 // 2026-11-19-0992a (deliberate): 0992 armed the click only for the word Duplicate; now ANY text in a phrase composer arms it (the word still gives the old result: " [[bar_007]]." and the preview; any other text gets the link only).
 // The "no" list of 0992 ('Duplicate [[bar_007]].', 'Duplicates', 'Keep bars 1 to 2.', 'Duplicate it') moved to "yes"; the empty composer and every non-phrase composer stay "no".
-test('duplicateArmed: the next click is a copy click when the composer has ANY text (trimmed), any case; for a PHRASE tab only; the empty composer is never armed', async () => {
+test('duplicateArmed: the next click is a copy click when the composer has ANY text (trimmed), any case; for a PHRASE tab, and (1023) for an arrangement or composition as the link click; the empty composer is never armed', async () => {
   const r = rig(); await r.ready();
   const armed = (t: string) => { r.type(t); return r.ctl.duplicateArmed(r.path); };
   for (const yes of ['Duplicate', 'duplicate', '  DUPLICATE ', 'Keep bars 1 to 2. duplicate', 'Duplicate [[bar_007]].', 'Duplicates', 'Keep bars 1 to 2.', 'Duplicate it']) assert.equal(armed(yes), true, yes);
   for (const no of ['', '  ', '\n']) assert.equal(armed(no), false, JSON.stringify(no));
   r.type('Duplicate'); assert.equal(r.ctl.duplicateArmed('phrases/not_open.md'), false, 'a note with no composer is never armed');
   const arr = rig({ path: 'arrangements/arr_009.md', note: emptyArrangementNote('arr_009') }); await arr.ready(); arr.type('Duplicate');
-  assert.equal(arr.ctl.duplicateArmed(arr.path), false, 'P3: only a phrase tab has the gesture');
+  assert.equal(arr.ctl.duplicateArmed(arr.path), true, 'an arrangement composer holding text arms the LINK click (no bar words there)');          // 2026-11-23-1023 (deliberate): Part B
 });
 
 // 2026-11-19-0996b (deliberate): 0992 pinned "Duplicate" + a click = ` [[bar_007]].` and the preview of the copy; the click after the word Duplicate (or any bar word first) gives the bar's NUMBER now (bar-words-click-wiring.test.ts), and the note copy is the typed

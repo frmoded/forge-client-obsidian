@@ -51,14 +51,14 @@ type Rig = ReturnType<typeof rig>;
 const copyOf = async (r: Rig, link = '[[bar_007]]') => { r.type(`Duplicate ${link}.`); await r.enter(); await r.enter(); };
 
 // ---- R1: the click inserts the link after ANY typed text --------------------------------------------------------------------------------------------------------------------------------------
-test('R1 armed: ANY non-empty text (trimmed) in a PHRASE composer arms the click; the empty composer does not; Duplicate still does; an arrangement\'s and an unknown note\'s never', async () => {
+test('R1 armed: ANY non-empty text (trimmed) in a PHRASE composer arms the click; the empty composer does not; Duplicate still does; an unknown note\'s never (an arrangement\'s arms the link click since 1023)', async () => {
   const r = rig(); await r.ready();
   const armed = (t: string) => { r.type(t); return r.ctl.duplicateArmed(r.path); };
   for (const yes of ['Foo', 'Keep bars 1 to 2.', 'Duplicate', 'Duplicate [[bar_007]].', 'x', 'Duplicate it']) assert.equal(armed(yes), true, yes);
   for (const no of ['', '   ', '\n']) assert.equal(armed(no), false, JSON.stringify(no));
   assert.equal(r.ctl.duplicateArmed('phrases/not_open.md'), false);
   const arr = rig({ path: 'arrangements/arr_009.md', note: emptyArrangementNote('arr_009') }); await arr.ready(); arr.type('Foo');
-  assert.equal(arr.ctl.duplicateArmed(arr.path), false, 'P3: only a phrase composer has the gesture');
+  assert.equal(arr.ctl.duplicateArmed(arr.path), true, 'an arrangement composer holding text arms the LINK click too');          // 2026-11-23-1023 (deliberate): Part B, a click on a bar of an arrangement or composition Score writes the link of the note it comes from
 });
 
 test('R1: a click with "Foo" in the field appends " [[bar_007]]" (one space, NO full stop), focus is back in the field, NO preview is asked, nothing is created, the phrase is not written', async () => {
@@ -108,11 +108,11 @@ test('R1: a note the Score cannot name (null) or a kit: said in words, the text 
   assert.equal(none.ok, false); assert.equal(kit.ok, false); assert.equal(r.field().value, 'Foo');
 });
 
-test('R1 P3: an EMPTY composer: the click is not a copy click (not armed, the controller changes nothing); an arrangement and a bar tab have no such click', async () => {
+test('R1 P3: an EMPTY composer: the click is not a copy click (not armed, the controller changes nothing); an arrangement composer with text takes the link (1023)', async () => {
   const r = rig(); await r.ready(); r.type('');
   const d = await r.ctl.duplicateClick(r.path, 'bars/bar_007'); assert.equal(d.ok, false); assert.equal(r.field().value, '');
   const arr = rig({ path: 'arrangements/arr_009.md', note: emptyArrangementNote('arr_009') }); await arr.ready(); arr.type('Foo');
-  const a = await arr.ctl.duplicateClick(arr.path, 'bars/bar_007'); assert.equal(a.ok, false); assert.equal(arr.field().value, 'Foo');
+  const a = await arr.ctl.duplicateClick(arr.path, 'bars/bar_007'); assert.equal(a.ok, true); assert.match(arr.field().value, /^Foo \[\[bar_007\]\]/);          // 2026-11-23-1023 (deliberate): an arrangement composer with text takes the link of the note a bar comes from (no bar words there)
 });
 
 // ---- R2: Cmd/Ctrl+Z takes a fresh copy back ---------------------------------------------------------------------------------------------------------------------------------------------------

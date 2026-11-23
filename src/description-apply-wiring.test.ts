@@ -408,7 +408,7 @@ for (const edition of ['lean', 'music'] as const) {
       for (const type of [PHRASE_VIEW_TYPE, 'forge-arrangement-view', 'forge-composition-view']) {
         const factory = w.plugin.views.get(type); assert.ok(factory, `${type} is registered in a score-first vault`);
         let view: any; const actions = captureActions(() => { view = factory({ getViewState: () => ({ type, state: {} }), getRoot: () => ({}) }); view.app = w.app; view.file = w.tf(PATH); });
-        assert.deepEqual(actions.map((a) => [a.icon, a.title]), [['file-text', 'Open as Forge note'], ['history', 'Restore to last commit']], `${type}: added right-to-left, so Restore renders to the left`);
+        assert.deepEqual(actions.map((a) => [a.icon, a.title]), [['file-text', 'Open as Forge note'], ['history', 'Restore to last commit'], ...(edition === 'music' ? [['hammer', 'Forge']] : [])], `${type}: added right-to-left, so Restore renders to the left of Open as Forge note and Forge (music only) is the leftmost`);          // 2026-11-23-1023 (deliberate): the Forge button, always there (music edition; lean has none)
         assert.equal(actions.some((a) => /json/i.test(a.title)), false, `${type}: no JSON in the header`);
         actions[1].cb(); await w.wait(20);
         assert.ok(infos.some((l) => /^\[forge-notice\] (Restore is desktop-only\.|No active note\.)/.test(l)), `${type}: Restore reached restoreNoteToLastCommit (it answers in a notice here: no git in a test)`);

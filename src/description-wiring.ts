@@ -12,6 +12,8 @@ export interface DescriptionEnv {
   /** basenames of the files under a vault folder (no README is removed here: the wiring does that, as it always did) */
   basenamesIn(folder: string): string[];
   panes: DescriptionPorts['panes'];
+  /** 2026-11-23-1023: draw a note's Score again (the Forge button) */
+  redraw?: DescriptionPorts['redraw'];
   setTimer: DescriptionPorts['setTimer'];
   clearTimer: DescriptionPorts['clearTimer'];
   trace(line: string): void;
@@ -57,6 +59,7 @@ export function descriptionPortsFor(env: DescriptionEnv, hooks: DescriptionHooks
     setTimer: env.setTimer, clearTimer: env.clearTimer,
     trace: env.trace, warn: env.warn,
     panes: env.panes,
+    ...(env.redraw ? { redraw: env.redraw } : {}),
     askPlan: hooks.askPlan ? (payload) => hooks.askPlan!(payload) : undefined,
     configured: hooks.planConfigured,
     ownKey: () => hooks.ownKey?.(),

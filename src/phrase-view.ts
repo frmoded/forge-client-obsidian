@@ -3,6 +3,7 @@
 //
 // It writes ONE thing: the phrase note's json block, when a person edits a control (`vault.process`, so the rewrite is atomic against the note's current text). It never writes the source bar.
 import { addQuietAction } from './sr-label-core.ts';
+import { addForgeAction } from './forge-button-core.ts';
 import { uiFlags } from './ui-flags-core.ts';
 import { restoreNoteToLastCommit } from './restore-note-to-git.ts';
 import { EditableFileView, MarkdownView, Notice, TFile, type App, type WorkspaceLeaf } from 'obsidian';
@@ -43,6 +44,7 @@ export class PhraseView extends EditableFileView {
     super(leaf);
     addQuietAction(this, 'file-text', 'Open as Forge note', () => { void this.openAsJson(); });        // 2026-11-03-1155-92 (R5): the note's own text, said in the product's words (the id and the marks keep their names)
     addQuietAction(this, 'history', 'Restore to last commit', () => { void restoreNoteToLastCommit(this.app, this.file); });        // 2026-11-03-1155-92 (R4): the same action, icon, title, confirm and hold as the text view and the Beat Box (added after the other: it renders to its left)
+    addForgeAction(this);        // 2026-11-23-1023: the Forge button, always there (music edition)
   }
 
   getViewType(): string { return PHRASE_VIEW_TYPE; }

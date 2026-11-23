@@ -222,7 +222,7 @@ test('a drag across bars selects them too, and tells the (hidden) notebook nothi
 test('MECHANISM PIN 2026-11-16-1000 (if the design moves this SHOULD go red: reassess, do not just rewrite): the selection is the phrase tab\'s (phrase-dom.ts) and the plugin\'s two ports (score-first.ts, through the bus); no other surface names the menu, the core or the bus', () => {
   const dir = import.meta.dirname;
   const users = fs.readdirSync(dir).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts') && /bar-selection-(core|menu-dom|bus)/.test(fs.readFileSync(path.join(dir, f), 'utf8'))).sort();
-  assert.deepEqual(users, ['bar-selection-menu-dom.ts', 'phrase-dom.ts', 'score-first.ts']);       // the core is imported by the menu and the tab; the bus (which names none of the three) by the tab and the plugin
+  assert.deepEqual(users, ['bar-selection-menu-dom.ts', 'compositions.ts', 'kits-arrangements.ts', 'phrase-dom.ts', 'score-first.ts']);          // 2026-11-23-1023 (deliberate): + the composition and arrangement views, which name the bus for the LINK click of their Scores (linkClickPort), never the menu or the core;       // the core is imported by the menu and the tab; the bus (which names none of the three) by the tab and the plugin
   const dom = fs.readFileSync(path.join(dir, 'phrase-dom.ts'), 'utf8');
   assert.equal((dom.match(/selectBars: selectBarsPort\(\),/g) ?? []).length, 3, 'extend (and transform, which shares its inspector), mix and morph');
   assert.match(dom, /const selectBarsPort = \(\): ScoreInspectorPorts\['selectBars'\] => \(\{/, 'every phrase surface has the gesture, with or without a notebook');

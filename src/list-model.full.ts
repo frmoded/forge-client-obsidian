@@ -20,7 +20,7 @@ import { LIST_MODEL_SENTINEL_DID_YOU_MEAN_CORE, offerRepair, placeWordSentence }
 import { LIST_MODEL_SENTINEL_TYPED_STEP_CORE, applyTyped, previewTyped } from './typed-step-core.ts';
 import { LIST_MODEL_SENTINEL_UNDO_TRACE_CORE, createUndoTrace } from './undo-trace-core.ts';
 import { LIST_MODEL_SENTINEL_RENAME_FOLLOW_CORE, followRenamedDescription } from './rename-follow-core.ts';
-import { ASK_ONCE, LIST_MODEL_SENTINEL_SCRIPT_EDIT_CORE, SCRIPT_LABELS, heldMessage, rewriteFromScript, staleMessage } from './script-edit-core.ts';
+import { ASK_ONCE, LIST_MODEL_SENTINEL_SCRIPT_EDIT_CORE, SCRIPT_LABELS, forgeText, heldMessage, rewriteFromScript, staleMessage } from './script-edit-core.ts';
 import { LIST_MODEL_SENTINEL_WAITING_LINE_CORE, isWaitingLine, keptMessage, translateRequest, waitingLine, waitingWords } from './waiting-line-core.ts';
 import { LIST_MODEL_SENTINEL_DIALOG_FOLLOW_CORE, dialogDeleted, dialogFresh, dialogPrune, dialogRenamed, dialogStamp, noteCtimeOf } from './dialog-follow-core.ts';
 import { LIST_MODEL_SENTINEL_RENAME_DESCRIPTION_CORE } from './rename-description-core.ts';
@@ -47,7 +47,7 @@ export const listModel: ListModel = {
   trace: { create: createUndoTrace },          // 2026-11-20-1004z
   renamed: { follow: followRenamedDescription },          // 2026-11-20-1005 (F9)
   waiting: { line: waitingLine, words: waitingWords, translate: translateRequest, kept: keptMessage, is: isWaitingLine },          // 2026-11-21-1015 (Part C)
-  script: { on: true, stale: staleMessage, held: heldMessage, askOnce: ASK_ONCE, labels: SCRIPT_LABELS, rewrite: rewriteFromScript },          // 2026-11-22-1016 (11i)
+  script: { on: true, stale: staleMessage, held: heldMessage, askOnce: ASK_ONCE, labels: SCRIPT_LABELS, rewrite: rewriteFromScript, forge: forgeText },          // 2026-11-22-1016 (11i)
   dialogs: { renamed: dialogRenamed, deleted: dialogDeleted, ctime: noteCtimeOf, fresh: dialogFresh, stamp: dialogStamp, prune: dialogPrune },          // 2026-11-21-1011
   review: { create: createReview, track: createTracker },          // 2026-11-20-1004
   service: { fields: linesRequestFields, read: readLinesAnswer, version: LINES_SERVICE_VERSION, ask: askLinesNote, askBar: askLinesBar },          // 2026-11-20-1003

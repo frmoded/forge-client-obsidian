@@ -84,6 +84,8 @@ export interface DescriptionPorts {
   composerAutoApply?(): boolean;
   /** 2026-11-23-1018: the setting `Forge Description edits at once`. `false` = a hand-edited Description of a music list note WAITS for the Forge button (the strip says so); `true`, or no port (the unit rigs, lean): applied by itself after the debounce, as before. */
   descriptionAtOnce?(): boolean;
+  /** 2026-11-23-1023: draw the Score of this note again (the Forge button redraws even when it writes nothing). Absent = nothing to redraw. */
+  redraw?(path: string): void;
   /** 2026-11-19-0980: the seed a random line of a phrase draws, ONCE, when the sentence is typed (a whole number; absent = a random one from 0 to 999). Tests give it a fixed one. */
   drawSeed?(): number;
   /** 2026-11-17-2001: the composer's "+" menu (the New actions; `pickNote` gives "Insert a link to a note"); absent = no "+". */
@@ -96,7 +98,7 @@ export interface DescriptionPorts {
   openNote?(id: string): void;
 }
 
-interface Ui { state: DescriptionState; message?: string; /** 2026-11-22-1016: the driver chose `Keep my Recipe edits`: the list edit is held, the question is not asked again for this text */ kept?: boolean; preview?: { params: GrammarParams; description: string; recipe: string; forSentence: string; /** 2026-11-21-1015: `Translate line N`: the plan REPLACES line N (1-based) of the list instead of being appended */ replaceAt?: number; /** the driver's words the line keeps beside it when the plan is applied (a translate: the box holds `Translate line N.`, the words are the waiting line's) */ said?: string; /** 2026-11-19-0970: for an arrangement or composition the sentence service's answer as canonical LINES to append (and the sentence they replace) */ lines?: string[]; replaces?: string }; busy?: boolean; /** the sentence was typed in the prompt box (nothing was written to the note: there is no Revert to offer) */ fromBox?: boolean; /** from the box: the Description ON DISK when the sentence was sent (a preview is applied only over that) */ base?: string }
+interface Ui { state: DescriptionState; message?: string; /** 2026-11-22-1016: the driver chose `Keep my Recipe edits`: the list edit is held, the question is not asked again for this text */ kept?: boolean; /** 2026-11-23-1023: Forge was pressed on a held Recipe edit: the ask-once question is showing */ forgeAsked?: boolean; preview?: { params: GrammarParams; description: string; recipe: string; forSentence: string; /** 2026-11-21-1015: `Translate line N`: the plan REPLACES line N (1-based) of the list instead of being appended */ replaceAt?: number; /** the driver's words the line keeps beside it when the plan is applied (a translate: the box holds `Translate line N.`, the words are the waiting line's) */ said?: string; /** 2026-11-19-0970: for an arrangement or composition the sentence service's answer as canonical LINES to append (and the sentence they replace) */ lines?: string[]; replaces?: string }; busy?: boolean; /** the sentence was typed in the prompt box (nothing was written to the note: there is no Revert to offer) */ fromBox?: boolean; /** from the box: the Description ON DISK when the sentence was sent (a preview is applied only over that) */ base?: string }
 const basename = (path: string): string => path.replace(/^.*\//, '').replace(/\.md$/, '');
 /** 2026-11-19-0970 and 2026-11-19-0980: the three kinds whose Description is a list of canonical sentences (a phrase, an arrangement, a composition). 2026-11-19-0993 (stage 3): a BAR is a list too (front matter `lines:`), but it is not a `Family` (no grammar of the three, no Recipe, no Python, no stamps): it is routed by its PATH (`isBarPath`) to bar-list-controller.ts, which shares this controller's dialog, tracked write and box. */
 type ListFamily = Family;
@@ -108,6 +110,8 @@ export interface DescriptionController {
   /** Look at this note now without applying it (a note opened, a pane moved): the bar shows what is wrong, if anything. */
   inspect(path: string): Promise<void>;
   update(path: string): Promise<void>;
+  /** 2026-11-23-1023: the Forge button, always there (see `forge` below the controller's body): "apply the Description now"; `wrote` says whether the note was written. */
+  forge(path: string): Promise<{ ok: boolean; message: string; wrote: boolean }>;
   revert(path: string): Promise<void>;
   ask(path: string): Promise<void>;
   /** Look at every pane that shows one of our notes and has not been looked at yet (a tab opened, a layout restored after a reload): the bar is computed from the note, not only heard from a `modify`. Reads, never writes. */
@@ -208,6 +212,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     if (st.kind === 'apply' && waitsForForge()) return { message: u.message ?? 'The Description was edited. Click Forge to apply it.', actions: ['update', 'revert'], labels: { update: 'Forge' }, busy: u.busy };          // 2026-11-23-1018: pending, muted; the button is `Forge`
     if (st.kind === 'apply') return { message: u.message ?? `The Description changed (${st.change}); update the note from it.`, actions: ['update', 'revert'], busy: u.busy };
     if (st.kind === 'recipe-rejected') return { message: u.message ?? st.message, actions: ['revert'], busy: u.busy };               // no "Ask the sentence service" for a Recipe: no LLM, the person fixes it
+    if (st.kind === 'recipe-apply' && u.forgeAsked) { const L = listModel.script.labels; return { message: listModel.script.askOnce, actions: ['keep-script', 'update'], labels: { 'keep-script': L.keep, update: L.replace }, busy: u.busy }; }          // 2026-11-23-1023: Forge on a held Recipe edit asks once
     if (st.kind === 'recipe-apply' && listModel.script.on) return { message: u.message ?? listModel.script.stale(st.unchanged ? 'edited, the same music' : st.change), actions: ['update-recipe', 'revert'], labels: { 'update-recipe': listModel.script.labels.rewrite, revert: listModel.script.labels.discard }, busy: u.busy };          // 2026-11-22-1016 (11i): the list is marked, never rewritten at once
     if (st.kind === 'recipe-apply') return { message: u.message ?? `The Recipe changed (${st.change}); update the note from it.`, actions: ['update-recipe', 'revert'], busy: u.busy };
     if (st.kind === 'python-apply') return { message: u.message ?? `The Python changed (${st.change}); update the note from it.`, actions: ['update-python', 'revert'], busy: u.busy };
@@ -491,6 +496,25 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     set(path, { state: st, message: failure });                                                            // the sentence parsed but the note could not be written: the bar says why and still offers Update and Revert
   }
 
+  /** 2026-11-23-1023: the Forge button, always there: "apply the Description now", whatever the note's state. A pending Description edit = the 1018 button; a held Recipe edit = the ask-once question (1016); a note with nothing pending = the list replayed, nothing written when it comes out the same
+   *  (`Forged. Nothing changed.`), the Score redrawn either way; anything else (a Description the grammar rejects, a Python edit) = the strip already says it. No model call. */
+  async function forge(path: string): Promise<{ ok: boolean; message: string; wrote: boolean }> {
+    const family = familyOfPath(path); const no = (message: string) => ({ ok: false, message, wrote: false });
+    if (family === null || !listModel.script.on) return no('Forge works on a phrase, an arrangement or a composition.');
+    const u = ui.get(path); const k = u?.state.kind;
+    if (u !== undefined && k === 'recipe-apply') { set(path, { ...u, forgeAsked: true }); return { ok: true, message: listModel.script.askOnce, wrote: false }; }
+    if (u !== undefined && k !== 'apply' && k !== 'synced') return k === 'both-edited' ? { ok: true, message: viewOf(path, u).message, wrote: false } : no(viewOf(path, u).message);
+    let was = ''; try { was = await ports.read(path); } catch { return no('Could not read the note.'); }
+    if (k === 'apply') { await update(path); const fresh = ui.get(path); return fresh === undefined ? { ok: true, message: 'Forged.', wrote: true } : no(fresh.message ?? 'It did not go through.'); }
+    const r = listModel.script.forge(was, basename(path), family, ports.vault());
+    if (r.ok === false) { say(path, { type: 'failed', message: r.message }); return no(r.message); }
+    if (r.same) { ports.redraw?.(path); say(path, { type: 'notice', message: 'Forged. Nothing changed.' }); return { ok: true, message: 'Forged. Nothing changed.', wrote: false }; }
+    let failure: string | null = null;
+    try { await proc(path, (cur) => { if (cur !== was) { failure = 'The note changed while you were looking; ask again.'; return cur; } return r.text; }); } catch (e) { failure = `Forge: ${(e as Error)?.message ?? e}`; }
+    if (failure !== null) { say(path, { type: 'failed', message: failure }); return no(failure); }
+    pushScriptUndo(path, family, was, r.text); say(path, { type: 'notice', message: 'Forged.' }); return { ok: true, message: 'Forged.', wrote: true };
+  }
+
   /** A button inside the dialog's suggestion message: the same two actions the strip's preview had. */
   async function choose(path: string, id: number, choice: 'apply' | 'cancel'): Promise<void> {
     const open = openSuggestion(historyOf(path));
@@ -515,7 +539,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     const u = ui.get(path);
     if (u && u.state.kind === 'apply') { await doApply(path, family, u.state); return; }
     if (u && u.state.kind === 'both-edited') { await doApplyDescriptionOver(path, family); return; }           // the person chose the Description
-    if (u && u.state.kind === 'recipe-apply') { await doApplyRecipe(path, family, u.state); return; }          // "Update from Description" on a note whose Recipe is what changed: the Recipe is what there is to apply
+    if (u && u.state.kind === 'recipe-apply') { if (u.forgeAsked) await discardScript(path); else await doApplyRecipe(path, family, u.state); return; }          // 2026-11-23-1023: answered `Replace them with the Description`: the list is replayed over the Recipe          // "Update from Description" on a note whose Recipe is what changed: the Recipe is what there is to apply
     if (u && (u.state.kind === 'python-apply' || u.state.kind === 'python-custom')) { await doApplyPython(path, family, u.state); return; }
     await evaluate(path, true);
   }
@@ -671,7 +695,8 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     }
     return { ok: true, disk: '' };
   }
-  const duplicateArmed = (path: string): boolean => familyOfPath(path) === 'phrase' && (boxText(path) ?? '').trim() !== '';       // 2026-11-19-0992a: ANY text (it was armsDuplicate: only the word)
+  const linkOnly = (path: string): boolean => { const f = familyOfPath(path); return f === 'arrangement' || f === 'composition'; };          // 2026-11-23-1023 (Part B): their Scores write the link of the note a bar comes from (no bar words: those are a phrase's)
+  const duplicateArmed = (path: string): boolean => (familyOfPath(path) === 'phrase' || linkOnly(path)) && (boxText(path) ?? '').trim() !== '';       // 2026-11-19-0992a: ANY text (it was armsDuplicate: only the word)
   /** 2026-11-19-0999: does the phrase's list (as the note says it now) have a head line (Extend, Mix, Morph or Take)? A note that cannot be read says yes: the click then does what 0996b did. */
   async function phraseHasHead(path: string): Promise<boolean> {
     try { return listOf(await ports.read(path), 'phrase').some(isHeadLine); } catch (e) { console.error('[forge-duplicate] phraseHasHead: could not read the note', e); return true; }
@@ -681,8 +706,8 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     if (box === undefined) return { ok: false, message: 'There is no composer open for this note.' };
     if (!duplicateArmed(path)) return { ok: false, message: 'The composer is empty: a click on a bar pins it.' };
     const typed = box.handle.state().text;
-    const opensHead = listModel.duplicate.barWordVerb(typed) !== null && listModel.duplicate.barWordVerb(typed, false) === null;          // 2026-11-19-0999 (deliberate): Extend, Mix and Morph are a bar step only once the phrase has a head line; the six other verbs never read the note (this click stays synchronous for them)
-    if (listModel.duplicate.barWordVerb(typed, opensHead ? await phraseHasHead(path) : true) !== null) {                          // 2026-11-19-0996b: the text starts with a bar word (Duplicate, Copy, Move, Delete, Remove, Keep, Morph, Mix, Extend): the click says WHICH BAR (its number in the Score now), at the caret, no preview, no pin
+    const opensHead = !linkOnly(path) && listModel.duplicate.barWordVerb(typed) !== null && listModel.duplicate.barWordVerb(typed, false) === null;          // 2026-11-19-0999 (deliberate): Extend, Mix and Morph are a bar step only once the phrase has a head line; the six other verbs never read the note (this click stays synchronous for them)
+    if (!linkOnly(path) && listModel.duplicate.barWordVerb(typed, opensHead ? await phraseHasHead(path) : true) !== null) {                          // 2026-11-19-0996b: the text starts with a bar word (Duplicate, Copy, Move, Delete, Remove, Keep, Morph, Mix, Extend): the click says WHICH BAR (its number in the Score now), at the caret, no preview, no pin
       if (typeof bar !== 'number' || !Number.isInteger(bar) || bar < 1) {
         const message = 'I cannot tell which bar that is, so I cannot write its number.';
         say(path, { type: 'notice', message }); box.handle.focus();
@@ -1149,7 +1174,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     applyFromBox, previewFromBox, applyProposal,
     duplicateArmed, duplicateClick,
     appendLine, undoLast, redoLast, canUndo: (path) => canStep(path, 'undo'), canRedo: (path) => canStep(path, 'redo'),
-    update, revert, ask, syncBars,
+    update, revert, ask, syncBars, forge,
     canUpdate: (path) => { const u = ui.get(path); return u !== undefined && (u.state.kind === 'apply' || u.state.kind === 'recipe-apply' || u.state.kind === 'python-apply' || u.state.kind === 'python-custom'); },
     dispose() { disposed = true; bar.dispose(); notices.clear(); stacks.clear(); previewed.clear(); for (const t of timers.values()) ports.clearTimer(t); timers.clear(); for (const h of bars.values()) h.dispose(); bars.clear(); for (const b of boxes.values()) b.handle.dispose(); boxes.clear(); ui.clear(); },
   };

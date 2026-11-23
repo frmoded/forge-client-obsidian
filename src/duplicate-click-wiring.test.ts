@@ -209,6 +209,7 @@ test('MECHANISM PIN: the plugin registers the two host methods on the descriptio
   const dom = SRC('phrase-dom.ts');
   assert.equal((dom.match(/copyClick: copyClickPort\(\),/g) ?? []).length, 3, 'extend (and transform, which shares its inspector), mix and morph');
   assert.match(dom, /pinnedNoteFor\(e\.prov\)[\s\S]{0,200}duplicateClick|duplicateClick[\s\S]{0,200}pinnedNoteFor/);
-  const offenders = fs.readdirSync(import.meta.dirname).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts') && !['phrase-dom.ts', 'score-inspector.ts', 'artifact-inspector-core.ts', 'bar-selection-bus.ts', 'description-apply.ts', 'prompt-box-dom.ts', 'duplicate-sentence-core.ts', 'duplicate-note-core.ts', 'score-first.ts', 'description-wiring.ts', 'chat-panel-dom.ts', 'dialog-core.ts'].includes(f) && /copyClick|duplicateArmed|duplicateClick/.test(SRC(f)));
-  assert.deepEqual(offenders, [], 'no other surface (a bar\'s Beat Box tab, an arrangement or a composition Score, the rhythm Score) passes the copy click');
+  const offenders = fs.readdirSync(import.meta.dirname).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts') && !['phrase-dom.ts', 'score-inspector.ts', 'artifact-inspector-core.ts', 'bar-selection-bus.ts', 'description-apply.ts', 'prompt-box-dom.ts', 'duplicate-sentence-core.ts', 'duplicate-note-core.ts', 'score-first.ts', 'description-wiring.ts', 'chat-panel-dom.ts', 'dialog-core.ts', 'compositions.ts', 'kits-arrangements.ts'].includes(f) && /copyClick|duplicateArmed|duplicateClick/.test(SRC(f)));
+  assert.deepEqual(offenders, [], 'no other surface (a bar\'s Beat Box tab, the rhythm Score) passes the copy click');          // 2026-11-23-1023 (deliberate): the arrangement and composition Scores pass the LINK click (below)
+  for (const f of ['compositions.ts', 'kits-arrangements.ts']) assert.match(SRC(f), /copyClick: linkClickPort\(/, `${f} passes the link click`);          // 2026-11-23-1023 (deliberate)
 });
