@@ -7,8 +7,11 @@
 //   3. writes it at the same key into every target plugin data file that already has the key (the vaults' plugin folders), keeping every other key, the file's indentation and its mode; a file already holding it is not rewritten;
 //   4. writes it into the forge-mcp launchd file's `FORGE_MCP_BEARER` (the same secret: forge-mcp forwards it to the transpile service), keeping the mode, then restarts the agent (`launchctl kickstart -k`);
 //   4b. (2026-11-22-1017) writes it into the `FORGE_TRANSPILE_SECRET=` line of the forge-transpile `.env` (that line only; every other line, the quotes and the mode are kept; a missing file or a missing line is skipped, never created or added), so `deploy/smoke.sh` reads the secret the service runs;
+//   4c. (2026-11-23-1028) with `opts.claudeConfig` only: the two forge-mcp copies in ~/.claude.json (the wizard's stdio entry and the user-level HTTP entry) are compared and, in a real run, rewritten: see refresh-claude-config-core.mjs;
 //   5. re-runs the status check against what each copy holds NOW.
 // Everything it says is a file name, a length or a status code. Every line goes through `scrub` (any token it ever held is replaced) before it is shown. A step that needs a human choice stops the run and says which.
+
+import { NEXT_STEPS, claudePlan, claudeApply, claudeRecheck } from './refresh-claude-config-core.mjs';   // 2026-11-23-1028: the two copies in ~/.claude.json (only with --claude-config)
 
 export const TOKEN_KEY = 'transpileServiceToken';
 export const BEARER_ENV = 'FORGE_MCP_BEARER';
@@ -140,8 +143,16 @@ export async function refresh(deps, opts) {
     }
   }
 
+  // 2026-11-23-1028: the ~/.claude.json copies (only when asked): read, compared and said first, so that a refusal (a missing field, bad JSON) comes before ANY file is written
+  let claudePlanned = null;
+  if (opts.claudeConfig) {
+    claudePlanned = claudePlan(deps, opts.claudeConfig, token, { say, secrets, dryRun: !!opts.dryRun });
+    if (claudePlanned.stop) return stop(claudePlanned.stop);
+  }
+
   if (opts.dryRun) {
     for (const p of [...plan, ...(envPlan ? [envPlan] : []), ...(plistPlan ? [plistPlan] : [])]) say(`would change: ${p.t.name}`);
+    if (claudePlanned && !claudePlanned.skipped && claudePlanned.dirty.length) say(`would change: ${opts.claudeConfig.name} (${claudePlanned.dirty.length} field${claudePlanned.dirty.length === 1 ? '' : 's'})`);
     say('dry run: nothing written, nothing restarted');
     return { code: 0, changed: [], statuses: {}, lines };
   }
@@ -157,8 +168,18 @@ export async function refresh(deps, opts) {
   if (plistPlan) {
     try { deps.writeFileAtomic(plistPlan.t.path, plistPlan.text); changed.push(plistPlan.t.name); say(`changed: ${plistPlan.t.name} (${BEARER_ENV})`); }
     catch { return stop(`${plistPlan.t.name} could not be written (permission or a protected location?): that is a human choice. Changed so far: ${changed.length ? changed.join(', ') : 'nothing'}.`, { changed }); }
-    if (opts.restart !== false) { const r = await deps.restart(); say(r.ok ? 'forge-mcp restarted (launchctl kickstart -k)' : 'forge-mcp could not be restarted: run  launchctl kickstart -k gui/$(id -u)/com.forge.mcp  yourself'); if (!r.ok) { /* the re-check below says whether it matters */ } }
+    if (opts.restart !== false) {
+      const r = await deps.restart(); const pids = r.pidBefore != null || r.pidAfter != null ? `: pid ${r.pidBefore ?? 'none'} -> ${r.pidAfter ?? 'none'}` : '';       // 2026-11-23-1028: the pid before and after, and launchctl's own error text (a pid is a number; the error line is scrubbed like every line)
+      say(r.ok ? `forge-mcp restarted (launchctl kickstart -k)${pids}` : `forge-mcp could not be restarted${r.error ? ` (launchctl said: ${r.error})` : ''}: run  launchctl kickstart -k gui/$(id -u)/com.forge.mcp  yourself`);       // the re-check below says whether it matters
+    }
     else say('forge-mcp NOT restarted (--no-restart)');
+  }
+  // 2026-11-23-1028: the ~/.claude.json copies, written last (a refusal above has already stopped the run before this point)
+  let claudeChanged = false;
+  if (claudePlanned && !claudePlanned.skipped) {
+    const done = claudeApply(deps, opts.claudeConfig, claudePlanned, token, { say });
+    if (done.stop) return stop(done.stop, { changed });
+    if (done.changed) { changed.push(opts.claudeConfig.name); claudeChanged = true; }
   }
 
   // 5. what each copy holds NOW answers what?
@@ -172,6 +193,8 @@ export async function refresh(deps, opts) {
     say(`${h.name}: the service answers ${s === null ? 'nothing' : s}${s === ACCEPTED ? ' (accepted)' : ''}`);
     if (s !== ACCEPTED) worst = 2;
   }
+  if (claudePlanned && !claudePlanned.skipped) { const w = await claudeRecheck(deps, opts.claudeConfig, { say, secrets, url: opts.url, accepted: ACCEPTED }); if (w !== 0) worst = 2; }
   say(worst === 0 ? `done: ${changed.length} file(s) changed, every copy is accepted` : 'done, but a copy is NOT accepted: see the lines above');
+  if (claudeChanged) say(NEXT_STEPS);
   return { code: worst, changed, statuses, lines };
 }
