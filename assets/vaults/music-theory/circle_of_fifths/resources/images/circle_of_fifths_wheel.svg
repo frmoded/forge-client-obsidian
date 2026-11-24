@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="600" height="657" viewBox="0 0 600 657" role="img" aria-label="The circle of fifths: the twelve major keys on the outer ring and their relative minors on the inner ring, a fifth apart, with F sharp and G flat sharing the bottom position">
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="360" height="417" viewBox="0 0 600 695" role="img" aria-label="The circle of fifths: the twelve major keys on the outer ring and their relative minors on the inner ring, a fifth apart, with F sharp and G flat sharing the bottom position">
 <!-- own background: a solid panel so no ink depends on the page colour (dark mode) -->
-<rect x="0" y="0" width="600" height="657" rx="10" ry="10" fill="#fdfcfa"/>
+<rect x="0" y="0" width="600" height="695" rx="10" ry="10" fill="#fdfcfa"/>
 <g transform="scale(2)" font-family="system-ui, -apple-system, Segoe UI, sans-serif" text-anchor="middle">
 <!-- major keys, outer ring: C at the top, a fifth clockwise to G, D, A, E, B; counter-clockwise F, B flat, E flat, A flat, D flat -->
 <g aria-label="C major, no sharps or flats">
@@ -114,10 +114,10 @@
 </g>
 </g>
 <!-- caption BEGIN -->
-<!-- caption-box 0 0 600 600|600|600 -->
+<!-- caption-box 0 0 600 600|360|360 -->
 <g font-family="system-ui, -apple-system, Segoe UI, sans-serif">
-<text x="12" y="626" font-size="15" fill="#2B2B2B" text-anchor="start" font-weight="600">The circle of fifths</text>
-<text x="12" y="645" font-size="12" fill="#555555" text-anchor="start">Twelve keys, a fifth apart, closing into a ring</text>
+<text x="20" y="643.3333" font-size="25" fill="#2B2B2B" text-anchor="start" font-weight="600">The circle of fifths</text>
+<text x="20" y="675" font-size="20" fill="#555555" text-anchor="start">Twelve keys, a fifth apart, closing into a ring</text>
 </g>
 <!-- caption END -->
 </svg>

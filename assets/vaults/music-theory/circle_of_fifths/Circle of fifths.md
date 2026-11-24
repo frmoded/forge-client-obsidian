@@ -1,7 +1,11 @@
 ---
 description: "Find any key's signature in seconds, name its relative minor and see which keys sit close."
 ---
+<div style="display:flex;justify-content:center">
+
 ![[circle_of_fifths/resources/images/circle_of_fifths_wheel.svg]]
+
+</div>
 
 The wheel looks mystical, like an Aztec sun dial: rings carved around a centre. It is also the compass and the cornerstone of music theory. This chapter shows where it comes from, how it's built and how it's used. By the end you can find the key signature of any key in seconds, name its relative minor and say which keys sit close together. You get the basics here; chords and harmony will lean on it again.
 
