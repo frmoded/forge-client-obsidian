@@ -21,7 +21,12 @@ const OLD_STDIO = 'fake-OLD-stdio-aaaaaaaa1111111111';
 const OLD_HTTP = 'fake-OLD-http-bbbbbbbb2222222222';
 const OTHER_A = 'fake-other-server-key-cccccccc3333';
 const OTHER_B = 'fake-account-token-dddddddd4444';
-const ALL = [NEW, OLD_STDIO, OLD_HTTP, OTHER_A, OTHER_B];
+const OLD_SECOND = 'fake-OLD-second-project-eeeeeeee5555';
+const OTHER_HTTP = 'fake-other-http-server-ffffffff6666';
+const ALL = [NEW, OLD_STDIO, OLD_HTTP, OTHER_A, OTHER_B, OLD_SECOND, OTHER_HTTP];
+const esc = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const PNAME = (home, server = 'forge-mcp', key = `${home}/forge-wizard-work/forge-mcp`) => `project ${key} (server ${server}): env.FORGE_MCP_BEARER`;
+const UNAME = (server = 'forge-mcp') => `user server ${server}: headers.Authorization`;
 const sha8 = (s) => crypto.createHash('sha256').update(s).digest('hex').slice(0, 8);
 
 function service() {
@@ -36,13 +41,13 @@ const exec = (argv, env) => new Promise((resolve) => {
 });
 
 /** The shape the driver's file has (key names only; every value is fake). `stdio` / `http` are the two entry values; null leaves the entry out. */
-const claudeJson = (home, { stdio = OLD_STDIO, http: httpTok = `Bearer ${OLD_HTTP}`, indent = 2, trailing = '' } = {}) => {
-  const project = { allowedTools: [], mcpServers: stdio === null ? {} : { 'forge-mcp': { type: 'stdio', command: 'node', args: ['server.js'], env: { FORGE_MCP_BEARER: stdio, FORGE_TRANSPILE_URL: 'https://example.test', FORGE_VAULT_PATH: '/v' } } } };
+const claudeJson = (home, { stdio = OLD_STDIO, http: httpTok = `Bearer ${OLD_HTTP}`, indent = 2, trailing = '', projectKey = `${home}/forge-wizard-work/forge-mcp`, projectServer = 'forge-mcp', userKey = 'forge-mcp', userUrl = 'http://127.0.0.1:8765/mcp', second = null, stdioValue = undefined } = {}) => {
+  const project = { allowedTools: [], mcpServers: stdio === null ? {} : { [projectServer]: { type: 'stdio', command: 'node', args: ['server.js'], env: { FORGE_MCP_BEARER: stdioValue !== undefined ? stdioValue : stdio, FORGE_TRANSPILE_URL: 'https://example.test', FORGE_VAULT_PATH: '/v' } } } };
   const doc = {
     numStartups: 41, theme: 'dark',
     oauthAccount: { emailAddress: 'fake@example.test', accessToken: OTHER_B },
-    mcpServers: { other: { type: 'stdio', command: 'x', env: { API_KEY: OTHER_A } }, ...(httpTok === null ? {} : { 'forge-mcp': { type: 'http', url: 'http://127.0.0.1:8765/mcp', headers: { Authorization: httpTok } } }) },
-    projects: { [`${home}/forge-wizard-work/forge-mcp`]: project, [`${home}/elsewhere`]: { mcpServers: {}, lastCost: 1.5 } },
+    mcpServers: { other: { type: 'stdio', command: 'x', env: { API_KEY: OTHER_A } }, unrelated: { type: 'http', url: 'https://other.example/mcp', headers: { Authorization: `Bearer ${OTHER_HTTP}` } }, ...(httpTok === null ? {} : { [userKey]: { type: 'http', url: userUrl, headers: { Authorization: httpTok } } }) },
+    projects: { [projectKey]: project, [`${home}/elsewhere`]: { mcpServers: {}, lastCost: 1.5 }, ...(second === null ? {} : { [`${home}/second-project`]: { mcpServers: { 'forge-mcp': { type: 'stdio', command: 'node', env: { FORGE_MCP_BEARER: second } } } } }) },
     tail: 1,
   };
   return JSON.stringify(doc, null, indent) + trailing;
@@ -79,15 +84,24 @@ test('stringSpan / replaceFields: ONLY the two string values change; every other
   assert.equal(replaceFields(text, [{ path: ['nope'], value: 'x' }]).ok, false);
 });
 
-test('claudeEntries finds the two fields by their key names (the project key is built from HOME), with the Bearer prefix of the HTTP one, and says which are missing', () => {
+// 2026-11-23-1022zz (deliberate): the 1028 pin moved: a missing entry is skipped and the project entry is found by structure
+test('claudeEntries finds the entries by STRUCTURE: every projects[*].mcpServers[*].env.FORGE_MCP_BEARER string, and a user-level HTTP entry with headers.Authorization that is recognised as forge-mcp (by its key or its url); it never takes another server\'s header', () => {
   const home = '/Users/x';
-  const both = JSON.parse(claudeJson(home));
-  const e = claudeEntries(both, home);
-  assert.deepEqual(e.map((x) => [x.name, x.found, x.prefix]), [['project forge-wizard-work/forge-mcp: env.FORGE_MCP_BEARER', true, ''], ['user mcpServers.forge-mcp: headers.Authorization', true, 'Bearer ']]);
+  const e = claudeEntries(JSON.parse(claudeJson(home)), home);
+  assert.deepEqual(e.map((x) => [x.name, x.found, x.prefix]), [[PNAME(home), true, ''], [UNAME(), true, 'Bearer ']], 'the unrelated http server (its own Authorization) is not one of them');
   assert.equal(e[0].value, OLD_STDIO); assert.equal(e[1].value, OLD_HTTP, 'the Bearer prefix is not part of the secret');
-  const none = claudeEntries({ mcpServers: {}, projects: {} }, home); assert.deepEqual(none.map((x) => x.found), [false, false]);
-  const bare = claudeEntries({ mcpServers: { 'forge-mcp': { headers: { Authorization: 'no-prefix-here' } } } }, home)[1];
-  assert.equal(bare.found, true); assert.equal(bare.bearer, false, 'a value without the Bearer prefix is flagged');
+  assert.deepEqual(claudeEntries({ mcpServers: {}, projects: {} }, home), [], 'nothing is guessed');
+  const bare = claudeEntries({ mcpServers: { 'forge-mcp': { headers: { Authorization: 'no-prefix-here' } } } }, home);
+  assert.equal(bare.length, 1); assert.equal(bare[0].found, true); assert.equal(bare[0].bearer, false, 'a value without the Bearer prefix is flagged');
+  // another project path and another server key; two projects; a user key with a slash; a url that names the service (a key that does not)
+  const two = claudeEntries(JSON.parse(claudeJson(home, { projectKey: `${home}/somewhere/else`, projectServer: 'wizard', second: OLD_SECOND, userKey: '/forge-mcp' })), home);
+  assert.deepEqual(two.map((x) => x.name), [PNAME(home, 'wizard', `${home}/somewhere/else`), PNAME(home, 'forge-mcp', `${home}/second-project`), UNAME('/forge-mcp')]);
+  const byUrl = claudeEntries(JSON.parse(claudeJson(home, { userKey: 'wizard-http', userUrl: 'http://127.0.0.1:8765/forge-mcp/mcp', stdio: null })), home);
+  assert.deepEqual(byUrl.map((x) => x.name), [UNAME('wizard-http')], 'recognised by its url');
+  const userStdio = claudeEntries({ mcpServers: { anyname: { command: 'node', env: { FORGE_MCP_BEARER: OLD_STDIO } } } }, home);
+  assert.deepEqual(userStdio.map((x) => [x.name, x.value]), [['user server anyname: env.FORGE_MCP_BEARER', OLD_STDIO]], 'a user-level stdio server is found by its env var too');
+  const mal = claudeEntries({ projects: { '/p': { mcpServers: { s: { env: { FORGE_MCP_BEARER: 7 } } } } } }, home);
+  assert.equal(mal.length, 1); assert.equal(mal[0].malformed, true, 'an entry that is there but not a string is malformed (never guessed at)');
 });
 
 test('sameOutside is false when ANY other key differs (the deep compare), true when only the two fields differ, and ignores key order only where JSON does', () => {
@@ -107,8 +121,9 @@ test('--dry-run --claude-config: DIFFERENT for both entries with the first 8 hex
     const before = w.read(w.claude); const m0 = fs.statSync(w.claude).mtimeMs;
     const r = await run(w, svc, ['--dry-run', '--claude-config']);
     assert.equal(r.status, 0, r.stdout + r.stderr); noSecret(r, 'dry run');
-    assert.match(r.stdout, new RegExp(`project forge-wizard-work/forge-mcp: env\\.FORGE_MCP_BEARER: DIFFERENT \\(entry ${sha8(OLD_STDIO)}, source ${sha8(NEW)}\\)`));
-    assert.match(r.stdout, new RegExp(`user mcpServers\\.forge-mcp: headers\\.Authorization: DIFFERENT \\(entry ${sha8(OLD_HTTP)}, source ${sha8(NEW)}\\)`));
+    assert.match(r.stdout, new RegExp(`${esc(PNAME(w.dir))}: DIFFERENT \\(entry ${sha8(OLD_STDIO)}, source ${sha8(NEW)}\\)`));
+    assert.match(r.stdout, new RegExp(`${esc(UNAME())}: DIFFERENT \\(entry ${sha8(OLD_HTTP)}, source ${sha8(NEW)}\\)`));
+    assert.match(r.stdout, /project entries found: 1/); assert.equal(r.stdout.includes(OTHER_HTTP), false, 'the other server\'s header is never read out');
     assert.match(r.stdout, /would change: ~\/\.claude\.json \(2 fields\)/);
     assert.equal(w.read(w.claude), before); assert.equal(fs.statSync(w.claude).mtimeMs, m0); assert.deepEqual(w.backups(), []);
   } finally { await svc.close(); w.clean(); }
@@ -119,17 +134,18 @@ test('the check says `match` for an entry that holds the source token, DIFFERENT
   try {
     const r = await run(w, svc, ['--dry-run', '--claude-config']);
     assert.equal(r.status, 0, r.stdout + r.stderr); noSecret(r, 'mixed');
-    assert.match(r.stdout, new RegExp(`env\\.FORGE_MCP_BEARER: match \\(${sha8(NEW)}\\)`));
+    assert.match(r.stdout, new RegExp(`${esc(PNAME(w.dir))}: match \\(${sha8(NEW)}\\)`));
     assert.match(r.stdout, /headers\.Authorization: DIFFERENT/);
     assert.match(r.stdout, /would change: ~\/\.claude\.json \(1 field\)/);
   } finally { await svc.close(); w.clean(); }
 });
 
-test('a missing entry is `not there, skipped` in the check; a missing file is `not there, skipped` too; neither is an error', async () => {
+// 2026-11-23-1022zz (deliberate): the 1028 pin moved: a missing entry is skipped and the project entry is found by structure
+test('a missing entry is said in words in the check (`project entries found: 0` / `no project entry holds a forge-mcp bearer`); a missing file is `not there, skipped`; neither is an error', async () => {
   const svc = await service();
   try {
     const w1 = world({ stdio: null }); const r1 = await run(w1, svc, ['--dry-run', '--claude-config']);
-    assert.equal(r1.status, 0, r1.stdout + r1.stderr); assert.match(r1.stdout, /project forge-wizard-work\/forge-mcp: env\.FORGE_MCP_BEARER: not there, skipped/); assert.match(r1.stdout, /headers\.Authorization: DIFFERENT/); w1.clean();
+    assert.equal(r1.status, 0, r1.stdout + r1.stderr); assert.match(r1.stdout, /project entries found: 0/); assert.match(r1.stdout, /no project entry holds a forge-mcp bearer/); assert.match(r1.stdout, /headers\.Authorization: DIFFERENT/); assert.match(r1.stdout, /would change: ~\/\.claude\.json \(1 field\)/); w1.clean();
     const w2 = world({ noFile: true }); const r2 = await run(w2, svc, ['--dry-run', '--claude-config']);
     assert.equal(r2.status, 0, r2.stdout + r2.stderr); assert.match(r2.stdout, /~\/\.claude\.json: not there, skipped/); assert.equal(fs.existsSync(w2.claude), false, 'never created'); w2.clean();
   } finally { await svc.close(); }
@@ -164,16 +180,57 @@ test('a file with no trailing newline and four-space indentation keeps both; run
   } finally { await svc.close(); w.clean(); }
 });
 
-test('the fix refuses and writes nothing (no backup either) when a field is missing, naming which; and when the JSON does not parse (without quoting the text)', async () => {
+// 2026-11-23-1022zz (deliberate): the 1028 pin moved: a missing entry is skipped and the project entry is found by structure
+test('the fix refuses and writes nothing (no backup either) when there is NOTHING to change, when the JSON does not parse (without quoting the text), when an entry is malformed or an HTTP header has no Bearer', async () => {
   const svc = await service();
   try {
-    const w1 = world({ http: null }); const b1 = w1.read(w1.claude); const r1 = await run(w1, svc, ['--claude-config']);
-    assert.equal(r1.status, 1, r1.stdout + r1.stderr); assert.match(r1.stdout, /STOP: .*user mcpServers\.forge-mcp: headers\.Authorization.*missing/s); assert.equal(w1.read(w1.claude), b1); assert.deepEqual(w1.backups(), []); noSecret(r1, 'missing'); w1.clean();
+    const w1 = world({ http: null, stdio: null }); const b1 = w1.read(w1.claude); const r1 = await run(w1, svc, ['--claude-config']);
+    assert.equal(r1.status, 1, r1.stdout + r1.stderr); assert.match(r1.stdout, /STOP: .*nothing to change/i); assert.match(r1.stdout, /no project entry holds a forge-mcp bearer/); assert.equal(w1.read(w1.claude), b1); assert.deepEqual(w1.backups(), []); noSecret(r1, 'nothing'); w1.clean();
     const w2 = world({ text: `{ "mcpServers": { "x": "${OTHER_A}" ` }); const b2 = w2.read(w2.claude); const r2 = await run(w2, svc, ['--claude-config']);
     assert.equal(r2.status, 1, r2.stdout + r2.stderr); assert.match(r2.stdout, /STOP: .*not valid JSON/); assert.equal(w2.read(w2.claude), b2); assert.deepEqual(w2.backups(), []); noSecret(r2, 'bad json'); w2.clean();
-    const w3 = world({ http: 'no-bearer-prefix-here' }); const r3 = await run(w3, svc, ['--claude-config']);
-    assert.equal(r3.status, 1, r3.stdout + r3.stderr); assert.match(r3.stdout, /STOP: .*Bearer/); assert.deepEqual(w3.backups(), []); w3.clean();
+    const w3 = world({ http: 'no-bearer-prefix-here' }); const b3 = w3.read(w3.claude); const r3 = await run(w3, svc, ['--claude-config']);
+    assert.equal(r3.status, 1, r3.stdout + r3.stderr); assert.match(r3.stdout, /STOP: .*Bearer/); assert.deepEqual(w3.backups(), []); assert.equal(w3.read(w3.claude), b3, 'the good entry is not changed either: a malformed one stops the whole fix'); w3.clean();
+    const w4 = world({ stdioValue: 7 }); const b4 = w4.read(w4.claude); const r4 = await run(w4, svc, ['--claude-config']);
+    assert.equal(r4.status, 1, r4.stdout + r4.stderr); assert.match(r4.stdout, /STOP: .*malformed/i); assert.equal(w4.read(w4.claude), b4); assert.deepEqual(w4.backups(), []); noSecret(r4, 'malformed'); w4.clean();
   } finally { await svc.close(); }
+});
+
+// ---- 2026-11-23-1022zz: the fix changes what is THERE (a missing entry is skipped), and the project entry is found by structure ------------------------------------------------------------------------------
+test('1022zz only the USER entry is present and DIFFERENT (the driver\'s real file): the fix changes it, one backup, `(1 field)`, the other server\'s header and every other byte untouched, and the words say no project entry was found', async () => {
+  const svc = await service(); const w = world({ stdio: null });
+  try {
+    const before = w.read(w.claude);
+    const r = await run(w, svc, ['--claude-config']);
+    assert.equal(r.status, 0, r.stdout + r.stderr); noSecret(r, 'user only');
+    assert.equal(w.read(w.claude), before.replace(`Bearer ${OLD_HTTP}`, `Bearer ${NEW}`)); assert.equal(w.backups().length, 1);
+    assert.match(r.stdout, /changed: ~\/\.claude\.json \(1 field\)/); assert.match(r.stdout, /project entries found: 0/); assert.match(r.stdout, /no project entry holds a forge-mcp bearer/);
+  } finally { await svc.close(); w.clean(); }
+});
+
+test('1022zz only a PROJECT entry is present: it is fixed (the user-level one is said to be absent in words)', async () => {
+  const svc = await service(); const w = world({ http: null });
+  try {
+    const before = w.read(w.claude); const r = await run(w, svc, ['--claude-config']);
+    assert.equal(r.status, 0, r.stdout + r.stderr); noSecret(r, 'project only');
+    assert.equal(w.read(w.claude), before.replace(OLD_STDIO, NEW)); assert.match(r.stdout, /changed: ~\/\.claude\.json \(1 field\)/); assert.match(r.stdout, /no user-level forge-mcp entry holds a token/);
+  } finally { await svc.close(); w.clean(); }
+});
+
+test('1022zz the project entry is found by STRUCTURE: another folder, another server key; TWO projects each with an entry are both checked and fixed (the project KEYS are printed, the values never); an unrelated server\'s header is never touched', async () => {
+  const svc = await service(); const w = world({ projectKey: '__DIR__/somewhere/else', projectServer: 'wizard-stdio', second: OLD_SECOND, userKey: '/forge-mcp' });
+  try {
+    const text = w.read(w.claude).replace('__DIR__', w.dir); fs.writeFileSync(w.claude, text);
+    const d = await run(w, svc, ['--dry-run', '--claude-config']);
+    assert.equal(d.status, 0, d.stdout + d.stderr); noSecret(d, 'check');
+    assert.match(d.stdout, /project entries found: 2/);
+    assert.ok(d.stdout.includes(`${PNAME(w.dir, 'wizard-stdio', `${w.dir}/somewhere/else`)}: DIFFERENT (entry ${sha8(OLD_STDIO)}, source ${sha8(NEW)})`), d.stdout);
+    assert.ok(d.stdout.includes(`${PNAME(w.dir, 'forge-mcp', `${w.dir}/second-project`)}: DIFFERENT (entry ${sha8(OLD_SECOND)}, source ${sha8(NEW)})`), d.stdout);
+    assert.ok(d.stdout.includes(`${UNAME('/forge-mcp')}: DIFFERENT`), 'the user entry under the key /forge-mcp'); assert.match(d.stdout, /would change: ~\/\.claude\.json \(3 fields\)/);
+    const r = await run(w, svc, ['--claude-config']);
+    assert.equal(r.status, 0, r.stdout + r.stderr); noSecret(r, 'fix'); assert.match(r.stdout, /changed: ~\/\.claude\.json \(3 fields\)/);
+    const after = w.read(w.claude); assert.equal(after, text.replace(OLD_STDIO, NEW).replace(OLD_SECOND, NEW).replace(`Bearer ${OLD_HTTP}`, `Bearer ${NEW}`), 'exactly the three spans'); assert.ok(after.includes(OTHER_HTTP), 'the unrelated server keeps its header');
+    const again = await run(w, svc, ['--dry-run', '--claude-config']); assert.equal((again.stdout.match(/: match \(/g) ?? []).length, 3);
+  } finally { await svc.close(); w.clean(); }
 });
 
 test('the DEFAULT real run (no --claude-config) never touches ~/.claude.json: byte-identical, same mtime, no backup, and it does not even mention it', async () => {

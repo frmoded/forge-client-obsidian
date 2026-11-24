@@ -9,9 +9,7 @@
 import crypto from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 
-export const SERVER = 'forge-mcp';
 export const BEARER_ENV_KEY = 'FORGE_MCP_BEARER';
-export const PROJECT_DIR = 'forge-wizard-work/forge-mcp';   // the wizard's project, under HOME
 const PREFIX = 'Bearer ';
 
 /** The first 8 hex of a SHA-256 (the only thing of a secret that is ever shown). */
@@ -20,18 +18,46 @@ export const sha8 = (s) => crypto.createHash('sha256').update(String(s)).digest(
 const getPath = (obj, keys) => { let cur = obj; for (const k of keys) { if (cur === null || typeof cur !== 'object' || !Object.prototype.hasOwnProperty.call(cur, k)) return undefined; cur = cur[k]; } return cur; };
 const parse = (text) => { try { const v = JSON.parse(text); return v !== null && typeof v === 'object' && !Array.isArray(v) ? v : null; } catch { return null; } };
 
-/** The two fields, found by their key names: { name, path, found, value (the secret, without any prefix), prefix, bearer }. The project key is built from HOME. */
-export function claudeEntries(settings, home) {
-  const defs = [
-    { name: `project ${PROJECT_DIR}: env.${BEARER_ENV_KEY}`, path: ['projects', `${home}/${PROJECT_DIR}`, 'mcpServers', SERVER, 'env', BEARER_ENV_KEY], prefix: '' },
-    { name: `user mcpServers.${SERVER}: headers.Authorization`, path: ['mcpServers', SERVER, 'headers', 'Authorization'], prefix: PREFIX },
-  ];
-  return defs.map((d) => {
-    const raw = getPath(settings, d.path);
-    if (typeof raw !== 'string') return { ...d, found: false, value: '', bearer: false };
-    const bearer = d.prefix === '' || raw.startsWith(d.prefix);
-    return { ...d, found: true, value: d.prefix !== '' && bearer ? raw.slice(d.prefix.length) : raw, bearer };
-  });
+const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+/** An HTTP server of the user is the forge-mcp service when its KEY or its URL names it (`forge-mcp`, any case: `forge-mcp`, `/forge-mcp`, a url ending `/forge-mcp/mcp`); another server's Authorization header is never taken. */
+const isForgeHttp = (key, srv) => /forge-mcp/i.test(key) || (typeof srv.url === 'string' && /forge-mcp/i.test(srv.url));
+
+/**
+ * 2026-11-23-1022zz: the entries that hold a forge-mcp token, found by STRUCTURE (not by a guessed path): every `projects[<any key>].mcpServers[<any key>].env.FORGE_MCP_BEARER` string (the wizard's stdio server, whatever the folder and the server are called),
+ * every `mcpServers[<any key>].env.FORGE_MCP_BEARER` (a stdio server at user level), and every `headers.Authorization` of an HTTP server (user level or in a project) that is recognised as forge-mcp by its key or its url. Each: { name, path, found, value (the secret,
+ * without any prefix), prefix, bearer, malformed }. An entry that is there but not a string is `malformed` (never guessed at). Nothing there = an empty list.
+ */
+export function claudeEntries(settings, _home) {
+  const out = [];
+  const env = (name, path, e) => {
+    if (!isObj(e) || !has(e, BEARER_ENV_KEY)) return;
+    const raw = e[BEARER_ENV_KEY];
+    out.push(typeof raw === 'string' ? { name, path, found: true, value: raw, prefix: '', bearer: true, malformed: false } : { name, path, found: true, value: '', prefix: '', bearer: true, malformed: true });
+  };
+  const http = (name, path, key, srv) => {
+    if (!isObj(srv.headers) || !has(srv.headers, 'Authorization') || !isForgeHttp(key, srv)) return;
+    const raw = srv.headers.Authorization;
+    if (typeof raw !== 'string') { out.push({ name, path, found: true, value: '', prefix: PREFIX, bearer: true, malformed: true }); return; }
+    const bearer = raw.startsWith(PREFIX);
+    out.push({ name, path, found: true, value: bearer ? raw.slice(PREFIX.length) : raw, prefix: PREFIX, bearer, malformed: false });
+  };
+  const projects = isObj(settings.projects) ? settings.projects : {};
+  for (const [pk, proj] of Object.entries(projects)) {
+    if (!isObj(proj) || !isObj(proj.mcpServers)) continue;
+    for (const [k, srv] of Object.entries(proj.mcpServers)) {
+      if (!isObj(srv)) continue;
+      env(`project ${pk} (server ${k}): env.${BEARER_ENV_KEY}`, ['projects', pk, 'mcpServers', k, 'env', BEARER_ENV_KEY], srv.env);
+      http(`project ${pk} (server ${k}): headers.Authorization`, ['projects', pk, 'mcpServers', k, 'headers', 'Authorization'], k, srv);
+    }
+  }
+  const user = isObj(settings.mcpServers) ? settings.mcpServers : {};
+  for (const [k, srv] of Object.entries(user)) {
+    if (!isObj(srv)) continue;
+    env(`user server ${k}: env.${BEARER_ENV_KEY}`, ['mcpServers', k, 'env', BEARER_ENV_KEY], srv.env);
+    http(`user server ${k}: headers.Authorization`, ['mcpServers', k, 'headers', 'Authorization'], k, srv);
+  }
+  return out;
 }
 
 // ---- the text of a JSON file: the span of one string value, found by its key path (no re-serialising of anything) ----------------------------------------------------------------------------
@@ -91,7 +117,8 @@ export function sameOutside(before, after, entries) {
 
 // ---- the steps ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 /**
- * Read, check, say: for each field `match` or `DIFFERENT` (first 8 hex of both SHA-256), or `not there, skipped`. In a real run it also REFUSES what must not be written (a missing field, a Bearer-less header, bad JSON).
+ * Read, check, say: for each entry FOUND `match` or `DIFFERENT` (first 8 hex of both SHA-256) and how many project and user-level entries there are (1022zz: a missing entry is said in words, never an error). In a real run it REFUSES only what must not be written: bad JSON,
+ * a malformed entry, a Bearer-less header, or nothing at all to change; it changes every entry that is there and DIFFERENT.
  * `cfg`: { name, path, home }. Returns { skipped } | { stop } | { file, settings, entries, dirty }.
  */
 export function claudePlan(deps, cfg, token, ctx) {
@@ -101,20 +128,24 @@ export function claudePlan(deps, cfg, token, ctx) {
   const settings = parse(file.text);
   if (settings === null) return { stop: `${cfg.name} is not valid JSON: it is left alone. Nothing was changed.` };
   const entries = claudeEntries(settings, cfg.home);
-  for (const e of entries) if (e.found) secrets.push(e.value);
+  for (const e of entries) if (!e.malformed) secrets.push(e.value);
   const want = sha8(token);
   for (const e of entries) {
-    if (!e.found) { say(`${cfg.name} ${e.name}: not there, skipped`); continue; }
+    if (e.malformed) { say(`${cfg.name} ${e.name}: MALFORMED (it is there but is not a string)`); continue; }
     const have = sha8(e.value);
     say(e.value === token && e.bearer ? `${cfg.name} ${e.name}: match (${have})` : `${cfg.name} ${e.name}: DIFFERENT (entry ${have}, source ${want})`);
   }
+  const projectN = entries.filter((e) => e.name.startsWith('project ')).length, userN = entries.length - projectN;
+  say(`project entries found: ${projectN}`); if (projectN === 0) say('no project entry holds a forge-mcp bearer');
+  say(`user-level entries found: ${userN}`); if (userN === 0) say('no user-level forge-mcp entry holds a token');
   if (!dryRun) {
-    const missing = entries.filter((e) => !e.found);
-    if (missing.length) return { stop: `${cfg.name}: ${missing.map((e) => e.name).join(' and ')} is missing, so nothing is rewritten (use --dry-run to see what is there). Nothing was changed.` };
+    const mal = entries.filter((e) => e.malformed);
+    if (mal.length) return { stop: `${cfg.name}: ${mal.map((e) => e.name).join(' and ')} is malformed, so nothing is rewritten. Nothing was changed.` };
+    if (entries.length === 0) return { stop: `${cfg.name}: nothing to change: no entry in it holds a forge-mcp token (searched: every project's mcpServers env.${BEARER_ENV_KEY}, every user-level mcpServers env.${BEARER_ENV_KEY}, and the Authorization header of an HTTP server named or addressed forge-mcp). Nothing was changed.` };
     const bare = entries.filter((e) => !e.bearer);
-    if (bare.length) return { stop: `${cfg.name}: ${bare.map((e) => e.name).join(' and ')} does not start with Bearer, so it is not rewritten. Nothing was changed.` };
+    if (bare.length) return { stop: `${cfg.name}: ${bare.map((e) => e.name).join(' and ')} does not start with Bearer, so nothing is rewritten. Nothing was changed.` };
   }
-  const dirty = entries.filter((e) => e.found && !(e.value === token && e.bearer));
+  const dirty = entries.filter((e) => !e.malformed && !(e.value === token && e.bearer));
   return { file, settings, entries, dirty };
 }
 
