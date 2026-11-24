@@ -8,6 +8,7 @@ import { VERBS } from './phrase-grammar-core.ts';
 import { STRUCTURE_WORDS } from './bar-structure-core.ts';
 import { BAR_FORMS } from './bar-grammar-core.ts';
 import { BAR_WORD_VERBS } from './duplicate-sentence-core.ts';
+import { BAR_NOTE_ATTR } from './selection-tint-dom.ts';
 
 /** 2026-11-19-0997: this core is the LIST MODEL's (music-composer code, reached only through src/list-model-selected.ts); the music edition's list-model.full.ts lists this string in `cores`, scripts/build-main.test.mjs greps the lean bundle for it. */
 export const LIST_MODEL_SENTINEL_DID_YOU_MEAN_CORE = 'forge-list-model-core:did-you-mean-core';
@@ -102,8 +103,39 @@ export function placeWordSentence(text: string, family: RepairFamily): boolean {
   return family === 'phrase' && /^\s*(?:move|copy)\s+bars?\s+\d+(?:\s*(?:to|and|,)\s*\d+)*\s+(?:before|after)\s+bars?\s+\d+\s*\.?\s*$/i.test(String(text ?? ''));
 }
 
+/** 2026-11-24-1033: the note name each DRAWN bar was made from, in the order of the Score (the phrase tab writes it on each measure: selection-tint-dom `paintBarNotes`); null = the Score does not say (no Score host, no bar, or a bar with no name: a transform's, a mix's, a morph's; or a Score that is behind the list: the stale class): never "none". */
+export function drawnBarNames(pane: ParentNode | null | undefined): string[] | null {
+  const host = pane?.querySelector('.forge-rhythm-score-host:not(.forge-rhythm-score-host-pending)');          // the Score on screen, not one still being drawn
+  if (host === null || host === undefined || host.classList.contains('forge-rhythm-score-host-stale')) return null;          // a Score that is behind the list (a recompute is pending) says nothing: its positions may not be the list's
+  const bars = Array.from(host.querySelectorAll('g.measure')), names = bars.map((g) => g.getAttribute(BAR_NOTE_ATTR) ?? '');
+  return bars.length === 0 || names.some((n) => n === '') ? null : names;
+}
+
+/** 2026-11-24-1033: the answer to a sentence that says a bar by its LINK and asks for a copy of it: `copy` (the one position it holds: the grammar's own `Copy bar K.`), `which` (it holds several: ask, in words, never guess), `absent` (it is not in the phrase). */
+/** `message`: what the dialog says (for `copy`, what it would write: said when a waiting line stops the sentence from being added). */
+export type DuplicateByLink = { kind: 'copy'; sentence: string; hint: string; message: string } | { kind: 'which'; message: string } | { kind: 'absent'; message: string };
+const LINK_COPY = /^\s*(?:please\b[\s,]*)?(?:duplicate|copy)\s+\[\[([^\[\]|]*)(?:\|[^\[\]]*)?\]\]\s*(?:please\b)?\s*[.!]?\s*$/i;
+const and = (n: number[]): string => (n.length === 1 ? `${n[0]}` : `${n.slice(0, -1).join(', ')} and ${n[n.length - 1]}`);
+/** `please duplicate [[bar_007]]`, `Copy [[bar_007]].`, `duplicate [[bar_007]] please` (ONE sentence, a link of a bar, no number): which position of the drawn Score (`names`: one note name per bar) holds that bar. null = not this shape, or the Score does not say (`names` null or empty): the sentence goes the way it always went. */
+export function duplicateByLink(text: string, names: readonly string[] | null): DuplicateByLink | null {
+  const m = LINK_COPY.exec(String(text ?? ''));
+  if (m === null || names === null || names.length === 0) return null;
+  let name = m[1].trim().replace(/\.md$/i, '');
+  const folder = /^([^/]+)\/(.+)$/.exec(name);
+  if (folder !== null) { if (folder[1] !== 'bars') return null; name = folder[2]; }
+  if (name === '' || name.includes('/')) return null;
+  const at = names.flatMap((n, i) => (n === name ? [i + 1] : []));
+  const number = /^bar_(.+)$/.exec(name), label = number === null ? `[[${name}]]` : `Bar ${number[1]}`;
+  if (at.length === 0) return { kind: 'absent', message: `${label} is not in this phrase.` };
+  if (at.length === 1) return { kind: 'copy', sentence: `Copy bar ${at[0]}.`, hint: `${name} is bar ${at[0]} of this phrase.`, message: `${name} is bar ${at[0]} of this phrase, so it would write: Copy bar ${at[0]}.` };
+  const list = at.map((k) => `Copy bar ${k}.`);
+  return { kind: 'which', message: `${label} is bars ${and(at)} of this phrase: which one? Say ${at.length > 4 ? 'Copy bar N. for the one you mean.' : `${list.slice(0, -1).join(', ')} or ${list[list.length - 1]}`}` };
+}
+
 /** The repaired text, or null when no repair applies: each sentence on its own (a Move with place words; else its links closed and a typo of its first word mended), every sentence with its full stop. The FIRST hint is kept. */
-export function repairCandidate(text: string, family: RepairFamily): Repair | null {
+export function repairCandidate(text: string, family: RepairFamily, names?: readonly string[] | null): Repair | null {
+  const copy = family === 'phrase' ? duplicateByLink(text, names ?? null) : null;          // 2026-11-24-1033: a copy said by its link is the grammar's `Copy bar K.` for the position the drawn Score gives it
+  if (copy !== null) return copy.kind === 'copy' ? { sentence: copy.sentence, hint: copy.hint } : null;
   const sentences = String(text ?? '').trim().split(/(?<=[.!?])\s+|\n+/).map((x) => x.trim()).filter((x) => x !== '');
   if (sentences.length === 0) return null;
   const verbs = verbsOf(family); let changed = false, hint: string | undefined;
@@ -123,10 +155,10 @@ export function repairCandidate(text: string, family: RepairFamily): Repair | nu
 }
 
 /** The repair, if there is one AND `reads` says the grammar reads the repaired text; a reader that throws is a no. */
-export async function suggestRepair(text: string, family: RepairFamily, reads: (repaired: string) => boolean | Promise<boolean>, known?: (text: string) => string[] | null): Promise<Repair | null> {
+export async function suggestRepair(text: string, family: RepairFamily, reads: (repaired: string) => boolean | Promise<boolean>, known?: (text: string) => string[] | null, names?: readonly string[] | null): Promise<Repair | null> {
   // 2026-11-20-1004: a sentence the person (or the driver) RESOLVED in the review queue is offered first, in its own lines, if the grammar still reads them
   try { const k = known?.(text); if (k !== undefined && k !== null && k.length > 0) { const joined = k.join(' '); if (await reads(joined)) return { sentence: joined, hint: 'You taught this sentence earlier.' }; } } catch { /* a table that cannot answer offers nothing */ }
-  const c = repairCandidate(text, family);
+  const c = repairCandidate(text, family, names);
   if (c === null) return null;
   try { return (await reads(c.sentence)) ? c : null; } catch { return null; }
 }
@@ -135,8 +167,8 @@ export async function suggestRepair(text: string, family: RepairFamily, reads: (
 export const didYouMeanQuestion = (r: Repair): string => `Did you mean: ${r.sentence.replace(/\.\s*$/, '')}?${r.hint !== undefined ? ` ${r.hint}` : ''}`;
 
 /** The repair, if the grammar reads it, SAID in the dialog by `say` (the question with its button) and handed back as the composer's proposal (the sentence to apply INSTEAD of the typed text, only when the person presses Enter or the button); null = no repair, today's message stays. */
-export async function offerRepair(text: string, family: RepairFamily, reads: (repaired: string) => boolean | Promise<boolean>, say: (ev: { type: 'suggestion'; description: string; recipe: ''; via: 'repair'; question: string }) => void, known?: (text: string) => string[] | null): Promise<{ ok: true; proposal: { description: string; via: 'grammar'; instead: string } } | null> {
-  const fix = await suggestRepair(text, family, reads, known);
+export async function offerRepair(text: string, family: RepairFamily, reads: (repaired: string) => boolean | Promise<boolean>, say: (ev: { type: 'suggestion'; description: string; recipe: ''; via: 'repair'; question: string }) => void, known?: (text: string) => string[] | null, names?: readonly string[] | null): Promise<{ ok: true; proposal: { description: string; via: 'grammar'; instead: string } } | null> {
+  const fix = await suggestRepair(text, family, reads, known, names);
   if (fix === null) return null;
   say({ type: 'suggestion', description: fix.sentence, recipe: '', via: 'repair', question: didYouMeanQuestion(fix) });
   return { ok: true, proposal: { description: fix.sentence, via: 'grammar', instead: fix.sentence } };

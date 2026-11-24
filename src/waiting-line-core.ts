@@ -31,6 +31,7 @@ export const keptMessage = (n: number, reason: string): string => `Kept as line 
 export const alreadyWaiting = (n: number): string => `Line ${n} is already waiting; say "Translate line ${n}."`;
 export const blockedMessage = (n: number, typed: string, tail: string): string => `Line ${n} is waiting for a translation, so "${typed}" was not added. ${tail} Say "Translate line ${n}." first (with the box empty, Cmd/Ctrl+Z takes line ${n} back), then say it again.`;
 /** The tail: why the service was not asked, or what it answered (a question, a refusal, the lines it would write). */
-export const blockedTail = (a: { kind: 'not-asked'; why: string } | { kind: 'question'; question: string } | { kind: 'refused'; message: string } | { kind: 'lines'; lines: readonly string[] }): string => (
-  a.kind === 'not-asked' ? `The sentence service was not asked: ${a.why}` : a.kind === 'question' ? `The service asks: ${a.question}` : a.kind === 'refused' ? `The service refused: ${a.message}`
+/** 2026-11-24-1033: `local` = the plugin read the sentence itself (a copy said by the bar's link) and `words` says what it would write, or why it cannot */
+export const blockedTail = (a: { kind: 'not-asked'; why: string } | { kind: 'local'; words: string } | { kind: 'question'; question: string } | { kind: 'refused'; message: string } | { kind: 'lines'; lines: readonly string[] }): string => (
+  a.kind === 'not-asked' ? `The sentence service was not asked: ${a.why}` : a.kind === 'local' ? a.words : a.kind === 'question' ? `The service asks: ${a.question}` : a.kind === 'refused' ? `The service refused: ${a.message}`
     : a.lines.length === 0 ? 'The service gave no sentence for it.' : `The service would write it as: ${a.lines.join(' ')}`);

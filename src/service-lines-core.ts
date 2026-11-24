@@ -9,6 +9,7 @@ import { BAR_FORMS } from './bar-grammar-core.ts';
 import { buildPlanRequest, planTransportRefusal } from './sentence-plan-core.ts';
 import { drawSeeds, planAppend, type ReplayCtx } from './sentence-list-core.ts';
 import { listOfNote } from './sentence-list-note-core.ts';
+import { drawnBarNames } from './did-you-mean-core.ts';
 import type { GrammarParams, GrammarVault } from './phrase-grammar-core.ts';
 
 export type LinesFamily = 'phrase' | 'arrangement' | 'composition' | 'bar';
@@ -36,14 +37,18 @@ export function grammarTable(family: LinesFamily): string[] {
 
 export interface LinesFields {
   mode: 'lines'; note_kind: LinesFamily; grammar: string[]; list: string[]; bar_count: number | null; bar_numbers: number[]; instruction: string;
+  /** 2026-11-24-1033: the note each drawn bar was made from (`bar_007`), one per `bar_numbers`; ABSENT when the Score does not say (an older service ignores it) */
+  bar_names?: string[];
   previous?: { sentence: string; question: string };
 }
 /** The fields ADDED to a plan request. `barCount` null = the Score is not drawn (no numbers). */
-export function linesRequestFields(input: { family: LinesFamily; list: readonly string[]; barCount: number | null; previous?: { sentence: string; question: string } }): LinesFields {
+export function linesRequestFields(input: { family: LinesFamily; list: readonly string[]; barCount: number | null; previous?: { sentence: string; question: string }; barNames?: readonly string[] | null }): LinesFields {
   const list = input.list.slice(0, REQUEST_LINES_MAX).map((l) => l.slice(0, LINE_MAX));
   const n = input.barCount !== null && Number.isFinite(input.barCount) ? Math.max(0, Math.floor(input.barCount)) : 0;
+  const numbers = Array.from({ length: Math.min(n, REQUEST_BARS_MAX) }, (_, i) => i + 1), names = input.barNames;
   return {
-    mode: 'lines', note_kind: input.family, grammar: grammarTable(input.family), list, bar_count: input.barCount, bar_numbers: Array.from({ length: Math.min(n, REQUEST_BARS_MAX) }, (_, i) => i + 1), instruction: LINES_INSTRUCTION,
+    mode: 'lines', note_kind: input.family, grammar: grammarTable(input.family), list, bar_count: input.barCount, bar_numbers: numbers, instruction: LINES_INSTRUCTION,
+    ...(input.family === 'phrase' && names !== undefined && names !== null && names.length > 0 && names.length === numbers.length ? { bar_names: [...names] } : {}),          // 2026-11-24-1033: only when the Score names EVERY drawn bar (same length as bar_numbers); never a guess
     ...(input.previous !== undefined ? { previous: { sentence: input.previous.sentence, question: input.previous.question } } : {}),
   };
 }
@@ -129,7 +134,7 @@ export async function askLinesNote<T>(io: AskLinesIo<T>): Promise<T | LinesOutco
   const base = listOfNote(await io.readNote().catch(() => ''), family, io.vault).list;
   const host = io.pane?.querySelector('.forge-rhythm-score-host');
   const drawn = host === null || host === undefined ? 0 : host.querySelectorAll('g.measure').length;
-  const res = await io.askPlan({ ...(io.payload as object), ...linesRequestFields({ family, list: base, barCount: drawn > 0 ? drawn : null, ...(io.previous !== undefined ? { previous: io.previous } : {}) }) });
+  const res = await io.askPlan({ ...(io.payload as object), ...linesRequestFields({ family, list: base, barCount: drawn > 0 ? drawn : null, barNames: drawnBarNames(io.pane), ...(io.previous !== undefined ? { previous: io.previous } : {}) }) });
   const planOf = async (acc: readonly string[], draw: () => number) => { const seeded = drawSeeds([...acc], family, draw); return { seeded, plan: await planAppend(base, family, seeded, io.ctx) }; };
   const lr = await readLinesAnswer(res, async (acc, line) => { const p = (await planOf([...acc, line], io.draw)).plan; return p.ok === false ? p.message : null; });
   if (lr.kind === 'legacy') return io.legacy(res);

@@ -623,6 +623,8 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   const listOf = (cur: string, family: ListFamily): string[] => listOfNote(cur, family, ports.vault()).list;
   /** 2026-11-20-1003: the open pane of this note (the seam counts the bars its Score DRAWS: only a count is sent to the service, never the music). */
   const paneOf = (path: string): HTMLElement | undefined => ports.panes().find((p) => p.path === path)?.contentEl;
+  /** 2026-11-24-1033: the note each drawn bar of this note's Score was made from (the phrase tab writes it on the measures); null = the Score does not say (or lean) */
+  const barNamesOf = (path: string): string[] | null => (familyOfPath(path) === 'phrase' ? listModel.repair.names(paneOf(path)) : null);
 
   /** Write `next` as the note's list in ONE `process`, if the Description on disk is still `expectBase` (what the plan was made against). `record` (an apply) goes on the undo stack once it is written. */
   async function commitList(path: string, family: ListFamily, next: readonly string[], expectBase: string, record?: { before: string[]; added: string[]; replaced: Array<{ index: number; sentence: string }> }, allowNone = false): Promise<{ ok: true; change: string; stop: ListStop | null; applied: number } | { ok: false; message: string }> {
@@ -751,6 +753,8 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     if (stop === null || stop.waiting !== true) return null;
     const n = stop.index + 1, typed = text.trim(), key = `${n}|${list[stop.index]}|${typed}`, W = listModel.waiting;
     const fin = (message: string): PreviewResult => { say(path, { type: 'notice', message }); setBoxNote(path, message); return { ok: false, message }; };
+    const dup = listModel.repair.duplicate(typed, barNamesOf(path));          // 2026-11-24-1033: `please duplicate [[bar_007]]` is read HERE (the drawn Score says which bar it is): not added, the service not asked, the dialog says what it WOULD write
+    if (dup !== null) return fin(W.blocked(n, typed, W.tail({ kind: 'local', words: dup.message })));
     if (blockedSaid.get(path) === key) { pb(`service not asked: line ${n} is already waiting and this sentence was asked about`); return fin(W.already(n)); }
     blockedSaid.set(path, key);
     const notAsked = (why: string): PreviewResult => { pb(`service not asked: ${why}`); return fin(W.blocked(n, typed, W.tail({ kind: 'not-asked', why }))); };
@@ -838,12 +842,14 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     const serviceUp = ports.askPlan !== undefined && ports.configured?.() !== false;
     const shaped = listModel.repair.placeWords(text, family), nowhere = shaped ? listModel.repair.placeRefusal(text) : null;
     if (nowhere !== null) { pb('service not asked: the move goes nowhere'); say(path, { type: 'notice', message: nowhere }); setBoxNote(path, nowhere); return { ok: false, message: nowhere }; }          // 2026-11-23-1027: `Move bar 2 before bar 3.`: a plain refusal in words, never a question
+    const dr = listModel.repair.duplicate(text, barNamesOf(path));                  // 2026-11-24-1033: a copy said by the bar's LINK: its position in the drawn Score decides, never the service
+    if (dr !== null && dr.kind !== 'copy') { pb('service not asked: read locally'); say(path, { type: 'notice', message: dr.message }); setBoxNote(path, dr.message); return { ok: false, message: dr.message }; }          // nothing written, no waiting line
     const placeWords = serviceUp && shaped;                                                                 // 2026-11-21-1015 (service first, driver "[7]"): place words the grammar cannot read go to the service FIRST; its answer is a plan; the repair below is the fallback
     if (shaped && !serviceUp) pb(`service not asked: ${ports.askPlan === undefined ? 'not available in this build' : 'not set up in this vault'}`);
     if (shaped && !serviceUp) say(path, { type: 'notice', message: listModel.repair.notAsked(ports.askPlan === undefined) });          // 2026-11-23-1027: the repair that follows is not the service's answer: say the service was not asked
     let viaService: PreviewResult | null = null;
     if (placeWords) { fpHold++; try { viaService = await askTail(path, text, saidRejected(path, text, cur, plan)); } finally { fpHold--; } if (viaService.ok) return viaService; }
-    const offered = await listModel.repair.offer(text, family, async (repaired) => (await planAppend(listOf(cur, family), family, sentencesOfText(repaired, family), ctxFor(path))).ok, (ev) => say(path, ev), (t) => fp?.known(t) ?? null);          // 2026-11-20-1002 (DID YOU MEAN): a deterministic repair the grammar reads is offered BEFORE the service is asked; Enter or its button applies the SUGGESTION
+    const offered = await listModel.repair.offer(text, family, async (repaired) => (await planAppend(listOf(cur, family), family, sentencesOfText(repaired, family), ctxFor(path))).ok, (ev) => say(path, ev), (t) => fp?.known(t) ?? null, barNamesOf(path));          // 2026-11-20-1002 (DID YOU MEAN): a deterministic repair the grammar reads is offered BEFORE the service is asked; Enter or its button applies the SUGGESTION
     if (offered !== null) { if (viaService === null) pb('service not asked: a repair mends the sentence'); return offered; }
     if (viaService !== null) fp?.ended(path, text);                                                         // the service refused and no repair mended it: NOW it is a failure (one record)
     const result = viaService ?? await askTail(path, text, saidRejected(path, text, cur, plan));

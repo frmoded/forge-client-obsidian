@@ -715,10 +715,11 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
   let tintRole = PHRASE_BAR_ROLE;
   let tintMap: ProvenanceMap | null = null;
   const tintedIds = (map: ProvenanceMap): string[] => Object.keys(map).filter((id) => (map[id].role === tintRole || map[id].role === PHRASE_BAR_ROLE) && typeof map[id].params.bar === 'number' && selectedBars.has(map[id].params.bar as number));
-  const tintAttached = (host: HTMLElement, map: ProvenanceMap): void => { tintHost = host; tintMap = map; paintSelectionTint(host, tintedIds(map)); paintSelectionMenu(); };
+  const tintAttached = (host: HTMLElement, map: ProvenanceMap): void => { tintHost = host; tintMap = map; listModel.repair.paintNames(host, map); paintSelectionTint(host, tintedIds(map)); paintSelectionMenu(); };          // 2026-11-24-1033: paintNames (the list model's paintBarNotes): the note each bar was made from, on the measure, for the composer (`please duplicate [[bar_007]]`)
   const withTint = (inner?: (host: HTMLElement, map: ProvenanceMap, pinnedId: string | null) => void) => (host: HTMLElement, map: ProvenanceMap, pinnedId: string | null): void => {
     tintHost = host; tintMap = map;
     inner?.(host, map, pinnedId);
+    listModel.repair.paintNames(host, map);
     paintSelectionTint(host, tintedIds(map));
     paintSelectionMenu();
   };

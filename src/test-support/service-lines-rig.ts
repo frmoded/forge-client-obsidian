@@ -19,7 +19,7 @@ export const OWN_KEY = 'sk-ant-OWNKEY-0123456789abcdef0123456789abcdef';
 
 export type Req = Record<string, unknown>;
 export type Svc = (req: Req) => { status: number; json: unknown } | Promise<{ status: number; json: unknown }>;
-export function rig(opts: { path?: string; note?: string; service: Svc; drawn?: number; configured?: boolean }) {
+export function rig(opts: { path?: string; note?: string; service: Svc; drawn?: number; configured?: boolean; names?: Array<string | null> }) {          // 2026-11-24-1033: `names` = the note name the Score gives each drawn bar (the phrase tab paints it on the measure); null = that bar has none; absent = the Score gives none (as before)
   const path = opts.path ?? PH;
   const store = new Map<string, string>();
   for (const b of PHRASE_VAULT.bars) store.set(`bars/${b}.md`, PLAYGROUND_BARS[b] ?? PLAYGROUND_BARS['bar_001']);
@@ -44,7 +44,7 @@ export function rig(opts: { path?: string; note?: string; service: Svc; drawn?: 
   };
   const ctl = createDescriptionController(ports as never);
   const el = win.document.createElement('div'); win.document.body.appendChild(el);
-  if (opts.drawn !== undefined) { const host = win.document.createElement('div'); host.className = 'forge-rhythm-score-host'; host.innerHTML = `<svg>${'<g class="measure"></g>'.repeat(opts.drawn)}</svg>`; el.appendChild(host); }
+  if (opts.drawn !== undefined) { const host = win.document.createElement('div'); host.className = 'forge-rhythm-score-host'; host.innerHTML = `<svg>${Array.from({ length: opts.drawn }, (_, i) => { const n = opts.names?.[i]; return `<g class="measure"${n !== undefined && n !== null ? ` data-forge-bar-note="${n}"` : ''}></g>`; }).join('')}</svg>`; el.appendChild(host); }
   panes.push({ path, contentEl: el, tab: true });
   const flush = async () => { for (let i = 0; i < 400; i++) await Promise.resolve(); };
   const field = () => el.querySelector('.forge-prompt-box-text') as HTMLTextAreaElement;
