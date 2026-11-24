@@ -1,4 +1,8 @@
 {
+  "circle_of_fifths/resources/html/circle_exercise_inner_ring.html": {
+    "title": "Exercise: build the inner ring",
+    "line": "Tap the relative minor of each major key to fill the inner ring"
+  },
   "circle_of_fifths/resources/html/circle_exercise_key_to_signature.html": {
     "title": "Exercise: key to signature",
     "line": "Given a key, tap how many sharps or flats it has, then tap its notes on the staff"
@@ -6,6 +10,14 @@
   "circle_of_fifths/resources/html/circle_exercise_neighbours.html": {
     "title": "Exercise: neighbours",
     "line": "Given a key, tap its two neighbours and its opposite key on the wheel"
+  },
+  "circle_of_fifths/resources/html/circle_exercise_outer_ring.html": {
+    "title": "Exercise: build the outer ring",
+    "line": "Tap the keys a fifth apart, clockwise from the given key, to fill the outer ring"
+  },
+  "circle_of_fifths/resources/html/circle_exercise_signature_counts.html": {
+    "title": "Exercise: add the sharps and flats",
+    "line": "Tap or type how many sharps or flats each key has, going round the wheel"
   },
   "circle_of_fifths/resources/html/circle_exercise_signature_to_key.html": {
     "title": "Exercise: signature to key",

@@ -17,6 +17,33 @@ circle_of_fifths/resources/html/circle_of_fifths.html
 692
 ```
 
+## Build the outer ring
+
+You know the rule now, so build the ring yourself. Start from the given key and tap each key a fifth apart, going clockwise.
+
+```html-embed
+circle_of_fifths/resources/html/circle_exercise_outer_ring.html
+684
+```
+
+## Build the inner ring
+
+Every major key on the outer ring has a relative minor tucked inside it, three half steps down, wearing the same key signature. Fill the inner ring.
+
+```html-embed
+circle_of_fifths/resources/html/circle_exercise_inner_ring.html
+684
+```
+
+## Count the sharps and flats
+
+Go clockwise from C and each key picks up a sharp. Go counter-clockwise and it picks up a flat. Say how many each key carries.
+
+```html-embed
+circle_of_fifths/resources/html/circle_exercise_signature_counts.html
+786
+```
+
 <div style="
   display:flex;
   justify-content:space-between;
