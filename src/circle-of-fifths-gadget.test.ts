@@ -20,7 +20,18 @@ const DIR = path.join(VAULT, 'circle_of_fifths/resources/html');
 const EXPLORER = 'circle_of_fifths.html', EX1 = 'circle_exercise_key_to_signature.html', EX2 = 'circle_exercise_signature_to_key.html', EX3 = 'circle_exercise_neighbours.html';
 const FILES = [EXPLORER, EX1, EX2, EX3], EXERCISES = [EX1, EX2, EX3];
 const same = (a: unknown, b: unknown, m?: string): void => assert.equal(JSON.stringify(a), JSON.stringify(b), m);
-const read = (f: string): string => fs.readFileSync(path.join(DIR, f), 'utf8');
+// 2026-11-23-1025 - the three RING exercises (circle_exercise_outer_ring, _inner_ring, _signature_counts) are tested from what the generator writes into a scratch vault (the Scales player and the vault's captions.json copied in): they exist in the live vault first and reach the plugin's bundle with the
+// wizard's sync, and a test that needs them must not wait for that. The last tests of this file pin that any copy of them in the bundle or in the live vault equals the generator's output.
+const OUTER = 'circle_exercise_outer_ring.html', INNER = 'circle_exercise_inner_ring.html', COUNTS = 'circle_exercise_signature_counts.html', RING_FILES = [OUTER, INNER, COUNTS];
+let generated: string | null = null;
+function generatedDir(): string {
+  if (generated) return generated;
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'circle-ring-gen-')); process.on('exit', () => { try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* the system cleans the temp dir */ } });
+  fs.mkdirSync(path.join(tmp, 'scales/resources/html'), { recursive: true }); fs.copyFileSync(path.join(VAULT, 'scales/resources/html/scale_player.html'), path.join(tmp, 'scales/resources/html/scale_player.html')); fs.copyFileSync(path.join(VAULT, 'captions.json'), path.join(tmp, 'captions.json'));
+  const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts/dev/make-circle-gadgets.mjs'), '--vault', tmp], { encoding: 'utf8' }); assert.equal(r.status, 0, r.stderr);
+  generated = path.join(tmp, 'circle_of_fifths/resources/html'); return generated;
+}
+const read = (f: string): string => fs.readFileSync(path.join(RING_FILES.includes(f) ? generatedDir() : DIR, f), 'utf8');
 const scriptOf = (h: string): string => /<script>([\s\S]*?)<\/script>/.exec(h)![1];
 const block = (h: string, name: string): string => { const a = h.indexOf(`  // ==== ${name} BEGIN`), e = h.indexOf(`  // ==== ${name} END`); assert.ok(a > 0 && e > a, `no "${name}" block`); return h.slice(a, h.indexOf('\n', e) + 1); };
 const player = fs.readFileSync(path.join(VAULT, 'scales/resources/html/scale_player.html'), 'utf8');
@@ -235,4 +246,227 @@ test('neighbours in a page: the key is marked, the two neighbours and the opposi
   p.click(p.seg('major', 0)); assert.equal(p.count('.seg.wrong'), 0, 'the marked key is not a tap'); p.click(p.seg('major', 4)); assert.equal(p.count('.seg.wrong'), 2, 'a wrong sector shows on both rings');
   for (const k of [11, 1]) p.click(p.seg('major', k)); assert.match(p.text('hint'), /^1 to find, 4 wrong taps left$/); p.click(p.seg('minor', 6)); assert.match(p.text('prompt'), /^Exercise done\. The neighbours of C major are F major/); assert.match(p.text('board'), /Easy 1\/1/);
   assert.equal(p.count('.seg.found'), 6, 'three sectors found, each on both rings');
+});
+
+// =====================================================================================================================================================================================================
+// 2026-11-23-1025 - THREE MORE exercises for "building the circle of fifths": build the OUTER ring, build the INNER ring, add the NUMBER of sharps or flats. Same rules and look as the three above (levels easy / medium / hard with 5 / 3 / 1 wrong taps, score and Reset,
+// the answer said in words at the end, no hover, the word is "exercise"), the same shared blocks byte for byte, plus two new blocks that only these three carry (the ring core: the pure helpers they share; the ring page: the controls and wheel labels they share).
+// How tall each is (no vertical scroll at 800 and 360 px in every state), and that the pointer resting changes nothing, is measured in real Chrome: scripts/dev/measure-circle-gadgets.mjs.
+// =====================================================================================================================================================================================================
+const ALL7 = [...FILES, ...RING_FILES];
+test('the three ring exercises exist, with their titles', () => {
+  const titles: Record<string, string> = { [OUTER]: 'Exercise: build the outer ring', [INNER]: 'Exercise: build the inner ring', [COUNTS]: 'Exercise: add the sharps and flats' };
+  for (const f of RING_FILES) assert.match(read(f), new RegExp(`<title>${titles[f]}</title>`), f);
+});
+
+test('the shared blocks of all seven circle files are byte-identical wherever a file uses them (the Scales player\'s scale core and scale view, the circle core, the exercise core, the wheel, the staff), and the ring core and ring page are the same in the three ring exercises and in no other file; none of them plays a sound (no piano voice)', () => {
+  const users: Record<string, string[]> = { 'scale core': ALL7, 'piano voice': [EXPLORER], 'scale view': [EXPLORER, EX1, EX2, COUNTS], 'circle core': ALL7, 'circle exercise core': [...EXERCISES, ...RING_FILES], 'circle wheel': [EXPLORER, EX2, EX3, ...RING_FILES], 'circle staff': [EXPLORER, EX1, EX2, COUNTS], 'circle ring core': RING_FILES, 'circle ring page': RING_FILES };
+  for (const [name, files] of Object.entries(users)) {
+    for (const f of files) { const b = block(read(f), name); if (['scale core', 'piano voice', 'scale view'].includes(name)) assert.equal(b, block(player, name), `${f}: ${name} differs from the Scales player`); else assert.equal(b, block(read(files[0]), name), `${f}: ${name} differs`); assert.ok(b.length > 600, `${name}: non-vacuity`); }
+    for (const f of ALL7.filter((x) => !files.includes(x))) assert.equal(read(f).includes(`// ==== ${name} BEGIN`), false, `${f} should not carry ${name}`);
+  }
+  for (const f of RING_FILES) assert.doesNotMatch(read(f), /AudioContext|createOscillator/, `${f}: a ring exercise makes no sound`);
+});
+
+test('the generator writes the three ring files exactly as the four others (its output is the source of truth) and does not touch the four', () => {
+  for (const f of RING_FILES) { const h = read(f); assert.ok(h.startsWith('<!DOCTYPE html>') && h.endsWith('</html>\n'), f); assert.doesNotMatch(h, /@@\w+@@/, `${f}: a placeholder is left`); }
+  const copies: Array<[string, string]> = [['the bundle', DIR], ['the live vault', path.join(os.homedir(), 'projects/music-theory/circle_of_fifths/resources/html')]];
+  for (const [what, dir] of copies) for (const f of RING_FILES) if (fs.existsSync(path.join(dir, f))) assert.equal(fs.readFileSync(path.join(dir, f), 'utf8'), read(f), `${what}: ${f} differs from the generator's output`);
+  for (const f of FILES) assert.equal(fs.readFileSync(path.join(generatedDir(), f), 'utf8'), fs.readFileSync(path.join(DIR, f), 'utf8'), `${f}: the four first files are what they were`);
+});
+
+// ---- the ring core: the pure helpers the three share ------------------------------------------------------------------------------------------------------------------------------------------------------
+const ring = () => pureOf(scriptOf(read(OUTER)));
+test('ring core: the climbing order, the shuffle, the random start (never the one on screen, never the hand-off sector in hard), the words for an interval going up', () => {
+  const x = ring();
+  same(x.rgOrder(0), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]); same(x.rgOrder(9), [9, 10, 11, 0, 1, 2, 3, 4, 5, 6, 7, 8]); for (let s = 0; s < 12; s++) { const o = x.rgOrder(s); assert.equal(o[0], s); assert.equal(new Set(o).size, 12); for (let k = 1; k < 12; k++) assert.equal(x.rgUp(o[k - 1], o[k]), 7, 'each key is a fifth above the one before'); }
+  const rng = seeded(11), list = [...Array(13).keys()]; const sh = x.rgShuffle(list, rng); same([...sh].sort((a: number, b: number) => a - b), list, 'a permutation'); assert.notDeepEqual(sh, list, 'shuffled'); same(list, [...Array(13).keys()], 'the input is untouched');
+  const seen = new Set<number>(), seenHard = new Set<number>(); const r2 = seeded(5);
+  for (let k = 0; k < 400; k++) { const a = x.rgPickStart(r2, false, 4); assert.notEqual(a, 4); seen.add(a); const b = x.rgPickStart(r2, true, 4); assert.notEqual(b, 4); assert.notEqual(b, 6, 'the hand-off sector is never the start in hard'); seenHard.add(b); }
+  assert.equal(seen.size, 11); assert.equal(seenHard.size, 10); assert.ok(x.rgPickStart(() => 0.999999, false, null) <= 11); assert.equal(x.rgPickStart(() => 0, false, null), 0);
+  same([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map(x.rgIntervalWords), ['a half step', 'a whole step', 'a minor third', 'a major third', 'a fourth', 'a tritone', 'a fifth', 'a minor sixth', 'a major sixth', 'a minor seventh', 'a major seventh']);
+  assert.equal(x.rgUp(1, 0), 5, 'C is a fourth above G (a fifth below)'); assert.equal(x.rgUp(5, 6), 7);
+  same([0, 6, 11].map(x.rgSlotName), ['C', 'F♯/G♭', 'F']); same([0, 3, 6, 7].map(x.rgMinorSlotName), ['Am', 'F♯m', 'D♯m/E♭m', 'B♭m']);
+});
+
+// ---- outer ring: the state machine ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+const NAME_OF_TILE = (t: number): string => (t === 12 ? 'G♭' : NAMES[t]);
+test('outer ring: the answer of every sector against the wheel model and the Scales spelling core: each key is a fifth above the one before it, spelled with one letter per note, F♯ then G♭ at six o\'clock', () => {
+  const x = ring(); const wheel = core();
+  for (let s = 0; s < 12; s++) {
+    const st = x.o1Start(s, 'medium', seeded(1)); assert.equal(st.start, s); same(st.seq, x.rgOrder(s)); assert.equal(st.placed.filter(Boolean).length, 1, 'only the given key is placed'); assert.equal(st.placed[s], true); assert.equal(st.left, 3);
+    for (let k = 0; k < 12; k++) if (k !== 6) { const viaScales = wheel.spellScale(wheel.ciPc(k), 'major', 'up')[0]; assert.equal(x.noteName(viaScales), x.o1TileName(st, k), `sector ${k}: the tile is named as the Scales core names the tonic`); assert.equal(x.o1TileName(st, k), NAMES[k]); }
+    assert.equal(x.o1TileName(st, 6), 'F♯/G♭', 'the tile at six o\'clock shows both names (easy and medium)');
+    let t = st; for (let i = 1; i < 12; i++) { assert.equal(x.o1Next(t), st.seq[i], `start ${s}: after ${i} keys the next one is the next fifth up`); const r = x.o1Tap(t, st.seq[i]); assert.equal(r.event, i === 11 ? 'built' : 'right'); t = r.state; assert.equal(t.left, 3, 'right taps are free'); }
+    assert.equal(t.phase, 'done'); assert.equal(t.outcome, 'built'); assert.equal(x.o1Next(t), -1);
+  }
+});
+test('outer ring: the levels (easy: ordered bank and the key at six o\'clock shown; medium: shuffled bank; hard: shuffled bank, a random start, the hand-off named), the tries 5 / 3 / 1, a wrong tap costs one and says in words why, a repeat is not charged', () => {
+  const x = ring();
+  const easy = x.o1Start(0, 'easy', seeded(2)); same(easy.bank, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], 'the bank of easy is in order'); assert.equal(easy.left, 5); assert.equal(easy.hinted, 6); assert.equal(easy.placed[6], true, 'one slot is shown'); assert.equal(easy.placed.filter(Boolean).length, 2); assert.equal(easy.hand, 'done');
+  const med = x.o1Start(0, 'medium', seeded(2)); assert.equal(med.left, 3); assert.equal(med.hinted, -1); assert.equal(med.placed.filter(Boolean).length, 1); same([...med.bank].sort((a: number, b: number) => a - b), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]); assert.notDeepEqual(med.bank, easy.bank, 'shuffled'); assert.equal(med.hand, 'none');
+  const hard = x.o1Start(3, 'hard', seeded(2)); assert.equal(hard.left, 1); assert.equal(hard.bank.length, 13, 'F♯ and G♭ are two tiles'); assert.ok(hard.bank.includes(12)); assert.equal(x.o1TileName(hard, 6), 'F♯'); assert.equal(x.o1TileName(hard, 12), 'G♭');
+  assert.equal(x.o1Used(med, 0), true, 'the given key is used'); assert.equal(x.o1Used(med, 1), false);
+  let r = x.o1Tap(med, 5); assert.equal(r.event, 'wrong'); assert.equal(r.first, true); assert.equal(r.state.left, 2); assert.equal(r.state.phase, 'playing'); assert.equal(r.state.note, 'B is a major seventh above C, not a fifth.');
+  assert.equal(x.o1Tap(r.state, 5).event, 'ignored', 'the same wrong tile twice is one tap'); assert.equal(x.o1Tap(r.state, 0).event, 'ignored', 'a used tile');
+  assert.equal(x.o1Tap(med, 11).state.note, 'F is a fourth above C, not a fifth.'); assert.equal(x.o1Tap(med, 2).state.note, 'D is a whole step above C, not a fifth.');
+  r = x.o1Tap(r.state, 1); assert.equal(r.event, 'right'); assert.equal(r.first, false); assert.equal(r.state.note, ''); same(r.state.wrong, [], 'the wrong marks go with the slot'); assert.equal(r.state.left, 2, 'the tries stay spent');
+  r = x.o1Tap(r.state, 5); assert.equal(r.state.note, 'B is a major third above G, not a fifth.', 'compared with the last key placed (G), not with C');
+  const t = x.o1Start(3, 'hard', seeded(2)); const g = x.o1Tap(t, 7); assert.equal(g.event, 'gaveup'); assert.equal(g.state.outcome, 'gaveup'); assert.equal(g.state.phase, 'done'); assert.equal(g.state.left, 0); assert.equal(x.o1Tap(g.state, 4).event, 'ignored', 'nothing after the end');
+  let m = med; for (const tile of [5, 11, 2]) { m = x.o1Tap(m, tile).state; } assert.equal(m.outcome, 'gaveup', 'three wrong taps end a medium exercise'); let e = easy; for (const tile of [5, 11, 2, 3, 4]) { const q = x.o1Tap(e, tile); e = q.state; } assert.equal(e.outcome, 'gaveup', 'five end an easy one'); assert.equal(x.o1Tap(easy, 11).state.left, 4);
+});
+test('outer ring, easy: the shown key at six o\'clock is jumped over; hard: the hand-off at six o\'clock is two taps (F♯, then its other name G♭), D♭ before G♭ and G♭ before F♯ are wrong, and the exercise ends when the last key and the hand-off are in', () => {
+  const x = ring(); let s = x.o1Start(0, 'easy', seeded(2));
+  for (const t of [1, 2, 3, 4, 5]) s = x.o1Tap(s, t).state; assert.equal(x.o1Next(s), 7, 'six o\'clock was shown: the climb goes on at D♭'); assert.match(x.o1Prompt(s), /Tap the key a fifth above F♯\/G♭\./);
+  for (const t of [7, 8, 9, 10]) s = x.o1Tap(s, t).state; const last = x.o1Tap(s, 11); assert.equal(last.event, 'built');
+  let h = x.o1Start(0, 'hard', seeded(4)); assert.equal(h.left, 1);
+  // a hard exercise from C needs a left of 1: use the wrong-tap-free path
+  for (const t of [1, 2, 3, 4, 5]) h = x.o1Tap(h, t).state;
+  const bad = x.o1Tap(h, 12); assert.equal(bad.event, 'gaveup'); assert.match(bad.state.note, /^G♭ is the same key as F♯: going clockwise from B you reach it by its sharp name, F♯\. Tap F♯ first\.$/);
+  const six = x.o1Tap(h, 6); assert.equal(six.event, 'handoff'); assert.equal(six.state.hand, 'pending'); assert.equal(x.o1Next(six.state), 6, 'six o\'clock is still the slot'); assert.equal(six.state.phase, 'playing'); assert.equal(x.o1Used(six.state, 6), true); assert.equal(x.o1Used(six.state, 12), false);
+  assert.match(x.o1Prompt(six.state), /^Exercise: F♯ is in\. At six o'clock the same key has a second name: tap it\.$/);
+  const early = x.o1Tap(six.state, 7); assert.equal(early.event, 'gaveup'); assert.match(early.state.note, /^D♭ comes after G♭: F♯ and G♭ are the same key, so name G♭ first\.$/);
+  const other = x.o1Tap(six.state, 8); assert.match(other.state.note, /^At six o'clock the key has two names: tap G♭, the flat name of F♯\.$/);
+  const done = x.o1Tap(six.state, 12); assert.equal(done.event, 'right'); assert.equal(done.state.hand, 'done'); assert.equal(x.o1Next(done.state), 7);
+  let t = done.state; for (const k of [7, 8, 9, 10]) t = x.o1Tap(t, k).state; const end = x.o1Tap(t, 11); assert.equal(end.event, 'built'); assert.equal(end.state.outcome, 'built');
+  // a hard start next to the end: D♭ given, F♯ comes last and the hand-off closes the circle
+  let d = x.o1Start(7, 'hard', seeded(4)); for (const k of [8, 9, 10, 11, 0, 1, 2, 3, 4, 5]) d = x.o1Tap(d, k).state; assert.equal(x.o1Next(d), 6); const f = x.o1Tap(d, 6); assert.equal(f.event, 'handoff'); assert.equal(x.o1Tap(f.state, 12).event, 'built');
+  assert.match(x.o1Answer(h), /^The outer ring, clockwise from C: C, G, D, A, E, B, F♯\/G♭, D♭, A♭, E♭, B♭, F\. Each key is a fifth above the one before it, and F♯ and G♭ are one key under two names\.$/);
+  assert.match(x.o1Prompt(end.state), /^Exercise done\. The outer ring, clockwise from C:/); assert.match(x.o1Prompt(bad.state), /^Exercise over: out of wrong taps\. The outer ring/);
+  assert.match(x.o1Prompt(x.o1Start(0, 'medium', seeded(1))), /^Exercise: build the outer ring\. C is given at the top\. Tap the key a fifth above C\.$/); assert.match(x.o1Prompt(x.o1Start(4, 'medium', seeded(1))), /^Exercise: build the outer ring\. E is given\. Tap the key a fifth above E\.$/);
+  assert.equal(x.o1Hint(x.o1Start(0, 'medium', seeded(1))), '3 wrong taps left'); assert.equal(x.o1Hint(end.state), 'Press New exercise for another start.');
+});
+
+// ---- inner ring ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+const inner = () => pureOf(scriptOf(read(INNER)));
+test('inner ring: the right minor under every major is the one three half steps below (the wheel model and the Scales spelling core), a wrong one says so in words with its distance', () => {
+  const x = inner(); const wheel = core();
+  for (let s = 0; s < 12; s++) {
+    const st = x.i2Start(s, 'medium', seeded(1)); assert.equal(st.left, 3); same(st.seq, x.rgOrder(s)); assert.equal(st.filled.filter(Boolean).length, 0, 'every inner slot is empty'); assert.equal(x.i2Next(st), s, 'the exercise begins at the start sector');
+    let t = st; for (let i = 0; i < 12; i++) { const c = st.seq[i]; assert.equal(x.i2Next(t), c); const r = x.i2Tap(t, c); assert.equal(r.event, i === 11 ? 'built' : 'right', `start ${s}, slot ${i}`); assert.equal(r.first, i === 0); t = r.state; }
+    assert.equal(t.outcome, 'built');
+  }
+  for (let k = 0; k < 12; k++) {
+    assert.equal(wheel.ciMinorPc(k), (wheel.ciPc(k) + 9) % 12, 'three half steps below'); const minor = wheel.spellScale(wheel.ciMinorPc(k), 'natural_minor', 'up')[0]; if (k !== 6) assert.equal(x.noteName(minor) + 'm', MINORS[k] + 'm', `sector ${k}: the Scales core spells the minor`);
+  }
+  let s = x.i2Start(0, 'medium', seeded(1)); let r = x.i2Tap(s, 1); assert.equal(r.event, 'wrong'); assert.equal(r.state.left, 2); assert.equal(r.state.note, 'E minor is eight half steps below C major, not three: a relative minor is three half steps below its major.');
+  assert.equal(x.i2Tap(r.state, 1).event, 'ignored'); assert.equal(x.i2Tap(s, 4).state.note, 'C♯ minor is eleven half steps below C major, not three: a relative minor is three half steps below its major.');
+  assert.equal(x.i2Tap(s, 11).state.note, 'D minor is ten half steps below C major, not three: a relative minor is three half steps below its major.'); assert.equal(x.i2Tap(s, 9).state.note, 'C minor starts on the same note as C major, not three half steps below it: a relative minor is three half steps below its major.');
+  assert.match(x.i2Tap(x.i2Start(8, 'medium', seeded(1)), 6).state.note, /^D♯\/E♭ minor is /); assert.match(x.i2Tap(x.i2Start(6, 'medium', seeded(1)), 0).state.note, /^A minor is nine half steps below F♯\/G♭ major, not three: /);
+  r = x.i2Tap(s, 0); assert.equal(r.event, 'right'); assert.equal(r.state.note, ''); assert.equal(x.i2Used(r.state, 0), true); assert.equal(x.i2Tap(r.state, 0).event, 'ignored');
+  assert.equal(x.i2Tap(x.i2Start(0, 'hard', seeded(1)), 3).event, 'gaveup');
+});
+test('inner ring: the levels (easy: ordered bank and the first slot filled for you, A minor under C; medium: shuffled; hard: shuffled, a random start) and the words', () => {
+  const x = inner();
+  const e = x.i2Start(0, 'easy', seeded(1)); same(e.bank, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]); assert.equal(e.left, 5); assert.equal(e.hinted, 0); assert.equal(e.filled[0], true); assert.equal(x.i2Next(e), 1, 'the shown slot is skipped'); assert.equal(x.i2Used(e, 0), true);
+  const m = x.i2Start(0, 'medium', seeded(1)); assert.notDeepEqual(m.bank, e.bank); assert.equal(m.hinted, -1); assert.equal(m.left, 3); const h = x.i2Start(5, 'hard', seeded(1)); assert.equal(h.left, 1); assert.equal(h.bank.length, 12); assert.equal(x.i2Next(h), 5, 'hard starts from its own sector');
+  let t = e; for (let k = 1; k < 12; k++) t = x.i2Tap(t, k).state; assert.equal(t.outcome, 'built');
+  assert.match(x.i2Prompt(m), /^Exercise: build the inner ring\. Tap the relative minor of C major: it goes under C\.$/); assert.match(x.i2Prompt(x.i2Start(6, 'medium', seeded(1))), /relative minor of F♯\/G♭ major: it goes under F♯\/G♭\.$/);
+  assert.equal(x.i2Answer(m), 'Each relative minor is three half steps below its major: Am under C, Em under G, Bm under D, F♯m under A, C♯m under E, G♯m under B, D♯m/E♭m under F♯/G♭, B♭m under D♭, Fm under A♭, Cm under E♭, Gm under B♭, Dm under F.');
+  assert.match(x.i2Prompt(t), /^Exercise done\. Each relative minor is three half steps below its major: Am under C/); assert.match(x.i2Prompt(x.i2Tap(h, 0).state), /^Exercise over: out of wrong taps\. Each relative minor/); assert.equal(x.i2Hint(h), '1 wrong tap left'); assert.equal(x.i2Hint(t), 'Press New exercise for another start.');
+});
+
+// ---- the counts ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+const counts = () => pureOf(scriptOf(read(COUNTS)));
+test('signature counts: every sector\'s count against the wheel model and the Scales spelling core (0 at C, one more sharp per step clockwise to 6 at F♯, one more flat per step counter-clockwise to 6 at G♭; 5 flats at D♭); a typed count is read; hard shows no staff', () => {
+  const x = counts(); const wheel = core(); const WANT = [0, 1, 2, 3, 4, 5, 6, -5, -4, -3, -2, -1].map((n, i) => (i < 7 ? i : i - 12));
+  for (let k = 0; k < 12; k++) {
+    assert.equal(wheel.ciSigned(k, false), WANT[k], `sector ${k}`); const acc = wheel.ciScale(k, false).filter((n: any) => n.a !== 0); assert.equal(acc.length, Math.abs(WANT[k]), `sector ${k}: the Scales core\'s major scale has that many accidentals`); assert.ok(acc.every((n: any) => n.a === (WANT[k] > 0 ? 1 : -1)), 'all sharps or all flats');
+    const st = x.c3Start(k, 'medium'); assert.equal(st.left, 3); assert.equal(st.counts.filter((c: unknown) => c !== null).length, 0); assert.equal(x.c3Next(st), k); const r = x.c3Tap(st, WANT[k]); assert.equal(r.event, 'right'); assert.equal(r.first, true); assert.equal(r.state.counts[k], WANT[k]);
+  }
+  for (let s = 0; s < 12; s++) { let t = x.c3Start(s, 'medium'); for (let i = 0; i < 12; i++) { const k = (s + i) % 12; assert.equal(x.c3Next(t), k); const r = x.c3Tap(t, k === 6 ? 6 : WANT[k]); assert.equal(r.event, i === 11 ? 'built' : 'right', `start ${s} slot ${i}`); t = r.state; } assert.equal(t.outcome, 'built'); assert.equal(t.phase, 'done'); }
+  same(x.C3_COUNTS, [0, 1, 2, 3, 4, 5, 6, -1, -2, -3, -4, -5, -6]); same(['easy', 'medium', 'hard'].map(x.c3ShowsStaff), [true, true, false]);
+  same(['0', '3 sharps', '3 sharp', '3#', '3♯', ' 2 flats ', '2b', '2♭', '5 FLATS', 'none', 'no sharps or flats', 'three sharps', 'four flats', 'zero', '1 sharp', '6 f', '6 s'].map(x.c3Parse), [0, 3, 3, 3, 3, -2, -2, -2, -5, 0, 0, 3, -4, 0, 1, -6, 6]);
+  same(['', 'x', '3', 'sharps', '9 sharps 3', '#3x'].map(x.c3Parse), [null, null, null, null, null, null], 'what is not a count is not read');
+  assert.equal(x.c3Parse('7 sharps'), 7, 'a count past six is a count (and a wrong one): it is not refused');
+});
+test('signature counts: the states (tries 5 / 3 / 1, a wrong count says in words which note changed or which way the wheel goes, six o\'clock takes either 6 sharps or 6 flats, the shown slot of easy)', () => {
+  const x = counts();
+  const easy = x.c3Start(0, 'easy'), med = x.c3Start(0, 'medium'), hard = x.c3Start(4, 'hard'); same([easy.left, med.left, hard.left], [5, 3, 1]); assert.equal(easy.hinted, 0); assert.equal(easy.counts[0], 0, 'the first slot is filled for you: 0 at C'); assert.equal(x.c3Next(easy), 1); assert.equal(med.hinted, -1);
+  const chk = (s: any, g: number, want: string) => { const r = x.c3Tap(s, g); assert.equal(r.event, 'wrong'); assert.equal(r.state.note, want); return r; };
+  chk(x.c3Start(3, 'medium'), 2, 'A major has one more sharp than D major: G becomes G♯. From C it is 3 steps clockwise, and each step clockwise adds one sharp.');
+  chk(x.c3Start(1, 'medium'), 2, 'G major has one more sharp than C major: F becomes F♯. From C it is 1 step clockwise, and each step clockwise adds one sharp.');
+  chk(x.c3Start(3, 'medium'), -3, 'A is 3 steps clockwise from C: clockwise the keys add sharps, counter-clockwise they add flats.');
+  chk(x.c3Start(1, 'medium'), 0, 'G is 1 step clockwise from C: clockwise the keys add sharps, counter-clockwise they add flats.');
+  chk(x.c3Start(9, 'medium'), -2, 'E♭ major has one more flat than B♭ major: A becomes A♭. From C it is 3 steps counter-clockwise, and each step counter-clockwise adds one flat.');
+  chk(x.c3Start(9, 'medium'), 3, 'E♭ is 3 steps counter-clockwise from C: counter-clockwise the keys add flats, clockwise they add sharps.');
+  chk(x.c3Start(0, 'medium'), 1, 'C is at the top of the wheel, where the sharps and the flats start: it has none.');
+  chk(x.c3Start(6, 'medium'), 5, 'F♯/G♭ is 6 steps from C either way round: 6 sharps clockwise (F♯), or 6 flats counter-clockwise (G♭).'); chk(x.c3Start(6, 'medium'), -5, 'F♯/G♭ is 6 steps from C either way round: 6 sharps clockwise (F♯), or 6 flats counter-clockwise (G♭).');
+  assert.equal(x.c3Tap(x.c3Start(6, 'medium'), 6).event, 'right'); assert.equal(x.c3Tap(x.c3Start(6, 'medium'), -6).event, 'right'); assert.match(x.c3Tap(x.c3Start(6, 'medium'), -6).state.say, /^G♭ major has 6 flats; F♯ major, the same key, has 6 sharps\.$/); assert.match(x.c3Tap(x.c3Start(6, 'medium'), 6).state.say, /^F♯ major has 6 sharps; G♭ major, the same key, has 6 flats\.$/);
+  let s = x.c3Start(2, 'medium'); const w = x.c3Tap(s, 5); assert.equal(w.first, true); assert.equal(x.c3Tap(w.state, 5).event, 'ignored', 'the same wrong count twice is one tap'); assert.equal(w.state.left, 2); const ok = x.c3Tap(w.state, 2); assert.equal(ok.event, 'right'); assert.equal(ok.first, false); same(ok.state.wrong, []);
+  assert.equal(x.c3Tap(hard, 0).event, 'gaveup'); assert.equal(x.c3Tap(x.c3Tap(hard, 0).state, 4).event, 'ignored');
+  assert.match(x.c3Prompt(x.c3Start(3, 'medium')), /^Exercise: add the number of sharps or flats\. A major is lit: tap or type its count\.$/); assert.match(x.c3Prompt(x.c3Start(6, 'medium')), /^Exercise: add the number of sharps or flats\. F♯\/G♭ major is lit: tap or type its count\.$/);
+  assert.equal(x.c3Answer(), 'C has no sharps or flats. Clockwise each step adds a sharp: G 1, D 2, A 3, E 4, B 5, F♯ 6. Counter-clockwise each step adds a flat: F 1, B♭ 2, E♭ 3, A♭ 4, D♭ 5, G♭ 6. F♯ and G♭ are the same key.');
+  assert.match(x.c3Prompt(x.c3Tap(hard, 0).state), /^Exercise over: out of wrong taps\. C has no sharps or flats\./); assert.equal(x.c3Hint(med), '3 wrong taps left'); assert.match(x.c3Announce(med, 'start'), /^New exercise: add the number of sharps or flats\. /);
+});
+
+// ---- the words, the hover rule and the published-gadget lint, over the three ring files ---------------------------------------------------------------------------------------------------------------------
+test('ring exercises, the words: an exercise, never a test, quiz, game or question, in the code, the markup, the labels and every state\'s text; no plugin word', () => {
+  for (const f of RING_FILES) {
+    const h = read(f); const code = scriptOf(h).split('\n').filter((l) => !/^\s*\/\//.test(l)).map((l) => l.replace(/\s\/\/.*$/, '')).join('\n');
+    assert.doesNotMatch(code, FORBIDDEN, `${f}: a forbidden word in the code`); assert.doesNotMatch(h.replace(/<script>[\s\S]*?<\/script>/, ''), FORBIDDEN, `${f}: in the markup`); assert.doesNotMatch(h, /style_guide|\bforge\b|forge[-_]/i, `${f}: a plugin word`);
+    assert.match(h, /Exercise/, `${f}: the word is exercise`);
+  }
+  for (const f of RING_FILES) { const p = open(f); const texts = [p.doc.body.textContent, ...[...p.doc.querySelectorAll('[aria-label]')].map((e: any) => e.getAttribute('aria-label'))].join(' | '); assert.doesNotMatch(texts, FORBIDDEN, `${f}: in the page`); }
+});
+test('ring exercises, no hover: no pointer-rest handler, no :hover rule, no native tooltip (the scan of src/no-hover-behavior.test.ts, applied to what the generator writes); and as published gadgets: no storage, no talking to the page, no network', () => {
+  const REST = /['"`](?:mouseover|mouseenter|mouseleave|mouseout|pointerenter|pointerleave|pointerover|pointerout|mousemove|pointermove)['"`]/, ON = /\bon(?:mouseover|mouseenter|mouseleave|mouseout|pointerenter|pointerleave|pointerover|pointerout)\s*=/i, HOVER = /:hover\b/;
+  const TITLE = [/setAttribute\(\s*['"`]title['"`]/, /setAttr\(\s*['"`]title['"`]/, /\.title\s*=[^=]/, /(?<![\w-])title\s*=\s*["'\\]/, /\bsetTooltip\(/, /\bdata-tooltip\b/];
+  for (const f of RING_FILES) {
+    const code = read(f).replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^\s*\/\/.*$/gm, ' ').replace(/<!--[\s\S]*?-->/g, ' ');
+    for (const line of code.split('\n')) { assert.doesNotMatch(line, REST, `${f}: ${line.trim().slice(0, 100)}`); assert.doesNotMatch(line, ON, f); assert.doesNotMatch(line, HOVER, f); for (const t of TITLE) assert.doesNotMatch(line, t, `${f}: a tooltip: ${line.trim().slice(0, 100)}`); }
+    assert.doesNotMatch(code, /\blocalStorage\b|\bsessionStorage\b|\bfetch\s*\(|XMLHttpRequest|\bimport\s*\(|\b(?:window|self)\s*\.\s*(?:parent|top)\b|\bparent\s*\.\s*(?:postMessage|document|location|window)\b|https?:\/\/(?!www\.w3\.org)/, `${f}: storage, page or network`);
+  }
+});
+
+// ---- the three pages: real DOM, real clicks -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+const tile = (p: any, id: number) => p.doc.getElementById(`tile-${id}`);
+const names = (p: any, ring: string) => [...p.doc.querySelectorAll(`.seg.${ring} text.name`)].map((t: any) => t.textContent.replace(/\s+/g, ''));
+const startOf = (p: any): number => Number(p.doc.querySelector('.seg.major.tonic').getAttribute('data-sector'));
+const setStart = (p: any, k: number) => { const sel = p.doc.getElementById('start'); sel.value = String(k); sel.dispatchEvent(new p.win.Event('change', { bubbles: true })); };
+test('outer ring in a page: an empty wheel and a bank of the twelve key names, C given at the top, the next slot lit; a wrong tile says why and costs a try; the right ones fill the slots clockwise; the answer is said in words at the end', () => {
+  const p = open(OUTER); same(p.errors, []);
+  assert.equal(p.count('#bank button'), 12); assert.equal(p.count('.seg.major'), 12); assert.equal(p.count('.seg.minor'), 12); same(names(p, 'major').filter((n: string) => n !== ''), ['C'], 'only the given key is on the wheel'); same(names(p, 'minor').filter((n: string) => n !== ''), [], 'the inner ring is empty');
+  assert.equal(p.count('.seg.major.tonic'), 1); assert.equal(p.count('.seg.lit'), 1); assert.match(p.seg('major', 1).getAttribute('class'), /\blit\b/); assert.match(p.seg('major', 5).getAttribute('class'), /\bempty\b/); assert.equal(p.count('.seg .count'), 0);
+  assert.equal((tile(p, 0) as any).disabled, true, 'the given key is used'); assert.equal(tile(p, 6).textContent, 'F♯/G♭', 'one tile with both names at six o\'clock'); same([...p.doc.querySelectorAll('#bank button')].map((b: any) => b.textContent).sort(), [...NAMES.slice(0, 6), 'F♯/G♭', ...NAMES.slice(7)].sort(), 'the twelve key names');
+  assert.match(p.text('prompt'), /^Exercise: build the outer ring\. C is given at the top\. Tap the key a fifth above C\.$/); assert.equal(p.text('hint'), '3 wrong taps left');
+  p.click(tile(p, 11)); assert.match(p.text('prompt'), /F is a fourth above C, not a fifth\.$/); assert.equal(p.text('hint'), '2 wrong taps left'); assert.match(tile(p, 11).getAttribute('class'), /wrongbtn/); assert.equal(p.count('.seg.found'), 1, 'only the given key is on the wheel');
+  p.click(tile(p, 1)); assert.deepEqual(names(p, 'major').filter((n: string) => n !== ''), ['C', 'G']); assert.match(p.seg('major', 1).getAttribute('class'), /\bfound\b/); assert.match(p.seg('major', 2).getAttribute('class'), /\blit\b/); assert.match(p.text('prompt'), /^Exercise: build the outer ring\. Tap the key a fifth above G\.$/); assert.equal(p.count('#bank button.wrongbtn'), 0);
+  for (const k of [2, 3, 4, 5, 6, 7, 8, 9, 10]) p.click(tile(p, k)); assert.equal(p.count('.seg.major.found'), 11); p.click(tile(p, 11));
+  assert.match(p.text('prompt'), /^Exercise done\. The outer ring, clockwise from C: C, G, D, A, E, B, F♯\/G♭, D♭, A♭, E♭, B♭, F\./); assert.match(p.text('board'), /Medium 1\/1/); assert.equal(p.doc.querySelector('.seg.major[data-sector="6"] text.name')!.textContent!.replace(/\s+/g, ''), 'F♯G♭'); assert.equal(p.count('.seg.lit'), 0); assert.equal(p.count('#bank button:disabled'), 12);
+  p.click(p.doc.getElementById('reset')); assert.match(p.text('board'), /Medium 0\/0/);
+});
+test('outer ring in a page: choose the start key or Random; easy shows the key at six o\'clock; hard: shuffled bank of thirteen, a random start, and the hand-off at six o\'clock is named; the exercise can be given up by wrong taps', () => {
+  const p = open(OUTER); setStart(p, 4); assert.equal(startOf(p), 4); assert.match(p.text('prompt'), /^Exercise: build the outer ring\. E is given\. Tap the key a fifth above E\.$/); assert.equal((p.doc.getElementById('start') as any).value, '4');
+  p.win.__earRandom = () => 0; p.click(p.doc.getElementById('random')); assert.equal(startOf(p), 0, 'Random: never the one on screen'); p.click(p.doc.getElementById('random')); assert.equal(startOf(p), 1);
+  p.click(p.doc.getElementById('level-easy')); setStart(p, 0); assert.equal(p.text('hint'), '5 wrong taps left'); assert.equal(p.count('.seg.major.hint'), 1); assert.match(p.seg('major', 6).getAttribute('class'), /\bhint\b/); assert.equal(names(p, 'major')[6], 'F♯G♭', 'the shown slot says both names'); assert.equal(p.count('#bank button:disabled'), 2);
+  p.click(p.doc.getElementById('level-hard')); assert.equal(p.count('#bank button'), 13); assert.equal((p.doc.getElementById('start') as any).disabled, true, 'a random start in hard'); assert.equal(p.text('hint'), '1 wrong tap left'); const s0 = startOf(p); assert.notEqual(s0, 6);
+  const hardTiles = [...p.doc.querySelectorAll('#bank button')].map((b: any) => b.textContent); assert.ok(hardTiles.includes('F♯') && hardTiles.includes('G♭') && !hardTiles.includes('F♯/G♭'), 'F♯ and G♭ are two tiles');
+  for (let i = 1; i < 12; i++) { const k = (s0 + i) % 12; p.click(tile(p, k)); if (k === 6) { assert.equal(names(p, 'major')[6], 'F♯', 'first the sharp name'); assert.match(p.text('prompt'), /At six o'clock the same key has a second name: tap it\./); p.click(tile(p, 12)); assert.equal(names(p, 'major')[6], 'F♯G♭'); } }
+  assert.match(p.text('prompt'), /^Exercise done\./); assert.match(p.text('board'), /Hard 1\/1/);
+  p.click(p.doc.getElementById('again')); const s1 = startOf(p); const wrong = (s1 + 2) % 12; p.click(tile(p, wrong === 6 ? (s1 + 3) % 12 : wrong)); assert.match(p.text('prompt'), /^Exercise over: out of wrong taps\. The outer ring/); assert.equal(p.count('.seg.reveal') > 0, true, 'the slots you missed are shown'); assert.match(p.text('board'), /Hard 1\/2/);
+  p.click(p.doc.getElementById('level-medium')); assert.equal((p.doc.getElementById('start') as any).disabled, false); assert.equal(p.count('#bank button'), 12); same(p.errors, []);
+});
+test('inner ring in a page: the outer ring is complete, the inner slots are empty; each tile is a relative minor; a wrong one says it is three half steps below; the answer at the end names the twelve pairs', () => {
+  const p = open(INNER); same(p.errors, []);
+  assert.deepEqual(names(p, 'major'), [...NAMES.slice(0, 6), 'F♯G♭', ...NAMES.slice(7)], 'the outer ring is complete'); same(names(p, 'minor').filter((n: string) => n !== ''), []); assert.equal(p.count('#bank button'), 12); assert.equal(tile(p, 0).textContent, 'Am'); assert.equal(tile(p, 6).textContent, 'D♯m/E♭m'); assert.equal(p.count('.seg.minor.lit'), 1); assert.match(p.seg('minor', 0).getAttribute('class'), /\blit\b/); assert.match(p.seg('major', 0).getAttribute('class'), /\btonic\b/, 'the major above the lit slot is marked');
+  assert.match(p.text('prompt'), /^Exercise: build the inner ring\. Tap the relative minor of C major: it goes under C\.$/);
+  p.click(tile(p, 1)); assert.match(p.text('prompt'), /E minor is eight half steps below C major, not three: a relative minor is three half steps below its major\.$/); assert.equal(p.text('hint'), '2 wrong taps left');
+  p.click(tile(p, 0)); assert.equal(names(p, 'minor')[0], 'Am'); assert.match(p.seg('minor', 1).getAttribute('class'), /\blit\b/); assert.match(p.text('prompt'), /Tap the relative minor of G major: it goes under G\.$/);
+  for (let k = 1; k < 12; k++) p.click(tile(p, k)); assert.match(p.text('prompt'), /^Exercise done\. Each relative minor is three half steps below its major: Am under C, Em under G/); assert.equal(names(p, 'minor')[6], 'D♯mE♭m'); assert.match(p.text('board'), /Medium 1\/1/);
+  p.click(p.doc.getElementById('level-easy')); assert.equal(p.count('#bank button:disabled'), 1, 'the first slot is shown'); assert.equal(names(p, 'minor')[0], 'Am'); assert.match(p.seg('minor', 1).getAttribute('class'), /\blit\b/);
+  p.click(p.doc.getElementById('level-hard')); const lit = Number(p.doc.querySelector('.seg.minor.lit')!.getAttribute('data-sector')); assert.equal(p.count('#bank button'), 12); p.click(tile(p, (lit + 1) % 12)); assert.match(p.text('prompt'), /^Exercise over: out of wrong taps\./); assert.equal(p.count('.seg.minor.reveal') >= 1, true); same(p.errors, []);
+});
+test('signature counts in a page: both rings complete, an empty count in each sector, the lit sector\'s signature on the staff (not in hard); tap or type the count; a wrong count says in words which note changed or which way the wheel goes', () => {
+  const p = open(COUNTS); same(p.errors, []);
+  assert.deepEqual(names(p, 'major'), [...NAMES.slice(0, 6), 'F♯G♭', ...NAMES.slice(7)]); assert.equal(names(p, 'minor').filter((n: string) => n === '').length, 0, 'the inner ring is complete'); assert.equal(p.count('.seg .count'), 12); assert.equal(p.count('.seg .count') - [...p.doc.querySelectorAll('.seg .count')].filter((c: any) => c.textContent === '').length, 0, 'every count slot is empty'); assert.equal(p.count('#counts button'), 13);
+  assert.equal(p.count('.seg.lit'), 2, 'the lit sector on both rings'); assert.equal(p.count('.acc.sig'), 0, 'C has an empty signature'); assert.match(p.text('prompt'), /^Exercise: add the number of sharps or flats\. C major is lit: tap or type its count\.$/);
+  p.click(p.doc.getElementById('count-s1')); assert.match(p.text('prompt'), /C is at the top of the wheel, where the sharps and the flats start: it has none\.$/); assert.equal(p.text('hint'), '2 wrong taps left'); assert.match(p.doc.getElementById('count-s1')!.getAttribute('class'), /wrongbtn/);
+  p.click(p.doc.getElementById('count-0')); assert.equal(p.doc.querySelector('.seg.major[data-sector="0"] .count')!.textContent, '0'); assert.equal(p.count('.acc.sig'), 1, 'now G is lit: its signature is on the staff'); assert.match(p.text('prompt'), /^Exercise: add the number of sharps or flats\. G major is lit: tap or type its count\. C major has no sharps or flats\.$/, 'the right count is said in words');
+  const typed = p.doc.getElementById('typed') as any; typed.value = 'x'; p.click(p.doc.getElementById('typedgo')); assert.match(p.text('prompt'), /Type a number and sharps or flats, for example 3 sharps\.$/); assert.equal(p.text('hint'), '2 wrong taps left', 'an unreadable entry costs nothing');
+  typed.value = '1 sharp'; p.click(p.doc.getElementById('typedgo')); assert.equal(p.doc.querySelector('.seg.major[data-sector="1"] .count')!.textContent, '1♯'); typed.value = '2'; p.keydown(typed, 'Enter'); assert.match(p.text('prompt'), /Type a number and sharps or flats/, 'Enter reads the typed count'); typed.value = '2 sharps'; p.keydown(typed, 'Enter'); assert.equal(p.doc.querySelector('.seg.major[data-sector="2"] .count')!.textContent, '2♯'); assert.equal(typed.value, '', 'the field clears');
+  for (const id of ['count-s3', 'count-s4', 'count-s5']) p.click(p.doc.getElementById(id)); p.click(p.doc.getElementById('count-s6')); assert.equal(p.doc.querySelector('.seg.major[data-sector="6"] .count')!.textContent!.replace(/\s+/g, ''), '6♯6♭'); assert.match(p.text('prompt'), /F♯ major has 6 sharps; G♭ major, the same key, has 6 flats\.$/);
+  for (const id of ['count-f5', 'count-f4', 'count-f3', 'count-f2', 'count-f1']) p.click(p.doc.getElementById(id)); assert.match(p.text('prompt'), /^Exercise done\. C has no sharps or flats\. Clockwise each step adds a sharp/); assert.match(p.text('board'), /Medium 1\/1/); assert.equal(p.count('#counts button:disabled'), 13);
+  p.click(p.doc.getElementById('level-hard')); const staff = p.doc.getElementById('staff') as any; assert.equal(p.count('.acc.sig'), 0); assert.match(staff.getAttribute('style') ?? '', /display:\s*none/); assert.doesNotMatch((p.doc.getElementById('nostaff') as any).getAttribute('style') ?? '', /display:\s*none/); const hs = Number(p.doc.querySelector('.seg.major.lit')!.getAttribute('data-sector')); assert.equal(p.count('.seg.lit'), 2); assert.ok(hs >= 0);
+  p.click(p.doc.getElementById('level-easy')); assert.equal(p.doc.querySelector('.seg.major[data-sector="0"] .count')!.textContent, '0', 'easy: the first count is shown'); assert.match(p.text('prompt'), /G major is lit/); assert.equal(p.count('.acc.sig'), 1); assert.doesNotMatch((staff.getAttribute('style') ?? ''), /display:\s*none/); same(p.errors, []);
 });

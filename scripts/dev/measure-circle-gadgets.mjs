@@ -1,8 +1,10 @@
-// 2026-11-19-0900 - the four CIRCLE OF FIFTHS gadgets (circle_of_fifths, circle_exercise_key_to_signature, _signature_to_key, _neighbours) in real headless Chrome, in the SHIPPED mount: a blob: URL inside <iframe sandbox="allow-scripts"> at 800 and at 360 px wide.
+// 2026-11-19-0900 - the four CIRCLE OF FIFTHS gadgets (circle_of_fifths, circle_exercise_key_to_signature, _signature_to_key, _neighbours) and, from 2026-11-23-1025, the three RING exercises (circle_exercise_outer_ring, _inner_ring, _signature_counts) in real headless Chrome, in the SHIPPED mount: a blob: URL inside <iframe sandbox="allow-scripts"> at 800 and at 360 px wide.
 // Measured: the CONTENT HEIGHT of each file in every state (the explorer on all twelve sectors and both spellings of the sixth; each exercise on every key in its states), that it is ONE height, that the page does not scroll vertically when the iframe is exactly that tall, and not horizontally;
 // one full flow per file with REAL mouse clicks (DevTools Input.dispatchMouseEvent at the real box of each sector, key or button); the explorer's staff, strip and Play (the real Web Audio graph, the pitches heard); and that moving the real pointer over the wheel, the buttons, the staff and the
 // strip changes NOTHING (a screenshot and the DOM compared before and after). Light shots.
-//   node scripts/dev/measure-circle-gadgets.mjs [--vault ~/projects/music-theory] [--out <dir>] [--only <file fragment>]        exit 0 = every verdict true
+//   node scripts/dev/measure-circle-gadgets.mjs [--vault ~/projects/music-theory] [--out <dir>] [--only <file fragment>[,<another>]]        exit 0 = every verdict true
+// A heavy run: start it as `bash scripts/heavy-guard.sh --what "<label>" -- node scripts/dev/measure-circle-gadgets.mjs ...`, one at a time. The three ring exercises are measured in every state of every level (the start key, a wrong tap, every right tap, the hand-off at six o'clock, built, gave up)
+// and with real clicks; --vault may be a scratch vault holding the generated files WITH their captions (what the embed height has to include).
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -52,15 +54,23 @@ const SIGNED = (i, alt) => i === 6 ? (alt ? -6 : 6) : i < 6 ? i : i - 12;
 const SECTOR_OF = (name) => NAMES.indexOf(name) >= 0 ? NAMES.indexOf(name) : name === 'G♭' ? 6 : -1;
 const verdict = {}, numbers = { heights: {} };
 const keyRandom = (i, alt) => i === 6 ? [(6.5) / 12, alt ? 0.25 : 0.75] : [(i + 0.5) / 12];
-for (const f of ['circle_of_fifths', 'circle_exercise_key_to_signature', 'circle_exercise_signature_to_key', 'circle_exercise_neighbours'].filter((x) => !only || x.includes(only))) {
+for (const f of ['circle_of_fifths', 'circle_exercise_key_to_signature', 'circle_exercise_signature_to_key', 'circle_exercise_neighbours', 'circle_exercise_outer_ring', 'circle_exercise_inner_ring', 'circle_exercise_signature_counts'].filter((x) => !only || only.split(',').some((o) => x.includes(o)))) {
   numbers.heights[f] = {};
   for (const width of [800, 360]) {
     const g = await mount(DIR + f + '.html', width); const hs = new Set(); const tag = `${f}${width}`;
     const click = (sel) => g.probe(`(function(){ var e = document.querySelector(${JSON.stringify(sel)}); e.dispatchEvent(new MouseEvent('click', { bubbles: true })); return 1; })()`);
-    const sample = async (label) => { const h = await g.height(); hs.add(h); if ((await g.hOverflow()) > 0) verdict[`${tag}_${label}_horizontalScroll`] = false; return h; };
+    let nSamples = 0; const sample = async (label) => { const h = await g.height(); hs.add(h); nSamples++; if ((await g.hOverflow()) > 0) verdict[`${tag}_${label}_horizontalScroll`] = false; return h; };
     const text = (sel) => g.probe(`(function(){ var e = document.querySelector(${JSON.stringify(sel)}); return e ? e.textContent : null; })()`);
     const count = (sel) => g.probe(`document.querySelectorAll(${JSON.stringify(sel)}).length`);
     const seed = (i, alt) => g.probe(`(window.__rnd = ${JSON.stringify(keyRandom(i, alt))}, 1)`);
+    // the ring exercises: choose the start (easy, medium) or draw a random one (hard: the start is never the one on screen and never six o'clock), read the lit sector, play the right answer, play a wrong one
+    const setStart = (k) => g.probe(`(function(){ var s = document.getElementById('start'); s.value = '${k}'; s.dispatchEvent(new Event('change', { bubbles: true })); return 1; })()`);
+    const drawStart = async (j) => { await g.probe(`(window.__rnd = [${(j + 0.5) / 11}], 1)`); await click('#again'); };
+    const lit = async (ring) => Number(await g.probe(`(function(){ var e = document.querySelector('.seg.${ring}.lit'); return e ? e.getAttribute('data-sector') : '-1'; })()`));
+    const finished = async () => /^Exercise (done|over)/.test(await text('#prompt'));
+    const wrongTile = async (litSector) => g.probe(`(function(){ var b = Array.prototype.filter.call(document.querySelectorAll('#bank button'), function (x) { return !x.disabled && x.id !== 'tile-${litSector}' && x.id !== 'tile-12'; })[0]; return b ? b.id : null; })()`);
+    const startFor = async (lv, k, j) => { await click(`#level-${lv}`); if (lv === 'hard') await drawStart(j); else await setStart(k); };
+    const countId = (n) => (n === 0 ? 'count-0' : n > 0 ? `count-s${n}` : `count-f${-n}`);
     verdict[`${tag}_loadsWithoutErrors`] = (await g.errs()).length === 0;
     const h0 = await sample('fresh');
     await g.setHeight(h0); const vs = await g.vScroll(); numbers[`${tag}_vScrollAtItsOwnHeight`] = vs; verdict[`${tag}_noVerticalScrollAtItsOwnHeight`] = vs <= 0; await g.setHeight(900);
@@ -84,6 +94,35 @@ for (const f of ['circle_of_fifths', 'circle_exercise_key_to_signature', 'circle
         await click(`.seg.major[data-sector="${k}"]`); await sample(`k${k}${alt ? 'alt' : ''}_oneRight`);
         await click(`.seg.minor[data-sector="${(k + 5) % 12}"]`); await sample(`k${k}${alt ? 'alt' : ''}_gaveup`);
       }
+    } else if (f === 'circle_exercise_outer_ring') {
+      for (const lv of ['easy', 'medium', 'hard']) for (let k = 0; k < 12; k++) {
+        await startFor(lv, k, k); const sec = await lit('major'); await sample(`${lv}${k}_fresh`);
+        const w = await wrongTile(sec); if (w) { await click(`#${w}`); await sample(`${lv}${k}_wrongOrGaveUp`); }
+        if (lv === 'hard') { await drawStart(k + 3); }                   // a fresh hard exercise after the one given up
+        else await click('#again');
+        for (let guard = 0; guard < 40 && !(await finished()); guard++) {
+          if (/second name/.test(await text('#prompt'))) { await sample(`${lv}${k}_handoffPending`); await click('#tile-12'); await sample(`${lv}${k}_handoffDone`); continue; }
+          await click(`#tile-${await lit('major')}`); await sample(`${lv}${k}_step${guard}`);
+        }
+        await sample(`${lv}${k}_built`);
+      }
+    } else if (f === 'circle_exercise_inner_ring') {
+      for (const lv of ['easy', 'medium', 'hard']) for (let k = 0; k < 12; k++) {
+        await startFor(lv, k, k); const sec = await lit('minor'); await sample(`${lv}${k}_fresh`);
+        const w = await wrongTile(sec); if (w) { await click(`#${w}`); await sample(`${lv}${k}_wrongOrGaveUp`); }
+        if (lv === 'hard') { await drawStart(k + 3); } else await click('#again');
+        for (let guard = 0; guard < 40 && !(await finished()); guard++) { await click(`#tile-${await lit('minor')}`); await sample(`${lv}${k}_step${guard}`); }
+        await sample(`${lv}${k}_built`);
+      }
+    } else if (f === 'circle_exercise_signature_counts') {
+      for (const lv of ['easy', 'medium', 'hard']) for (let k = 0; k < 12; k++) {
+        await startFor(lv, k, k); const sec = await lit('major'); await sample(`${lv}${k}_fresh`);
+        await click(`#${countId(sec === 0 ? 1 : 0)}`); await sample(`${lv}${k}_wrongOrGaveUp`);
+        await g.probe(`(function(){ var t = document.getElementById('typed'); t.value = 'x'; document.getElementById('typedgo').dispatchEvent(new MouseEvent('click', { bubbles: true })); return 1; })()`); await sample(`${lv}${k}_unreadable`);
+        if (lv === 'hard') { await drawStart(k + 3); } else await click('#again');
+        for (let guard = 0; guard < 40 && !(await finished()); guard++) { const c = await lit('major'); await click(`#${countId(SIGNED(c, false))}`); await sample(`${lv}${k}_step${guard}`); }
+        await sample(`${lv}${k}_built`);
+      }
     } else {
       for (let k = 0; k < 12; k++) {
         await click('#level-hard'); await seed(k, false); await click('#again'); await sample(`k${k}_fresh`);
@@ -91,7 +130,7 @@ for (const f of ['circle_of_fifths', 'circle_exercise_key_to_signature', 'circle
         await click(`.seg.major[data-sector="${(k + 3) % 12}"]`); await sample(`k${k}_gaveup`);
       }
     }
-    numbers.heights[f][width] = [...hs]; verdict[`${tag}_oneHeightInEveryState`] = hs.size === 1;
+    numbers.heights[f][width] = [...hs]; numbers[`${tag}_statesSampled`] = nSamples; verdict[`${tag}_oneHeightInEveryState`] = hs.size === 1;
     if (f !== 'circle_of_fifths') { await click('#level-medium'); await click('#reset'); }
     // ---- real mouse flows -----------------------------------------------------------------------------------------------------------------------------
     await g.setHeight([...hs][0] ?? 600);
@@ -112,6 +151,26 @@ for (const f of ['circle_of_fifths', 'circle_exercise_key_to_signature', 'circle
       await g.press('#level-easy'); await seed(9, false); await g.press('#again');
       await g.press('.seg.major[data-sector="9"]'); await g.press('.seg.minor[data-sector="9"]');
       verdict[`${tag}_realFlowNamesKeyAndRelativeMinor`] = /^Exercise done\. This signature has 3 flats .*it is E♭ major, and its relative minor is Cm|its relative minor is C minor/.test(await text('#prompt')) && /1\/1/.test(await text('#board'));
+    } else if (f === 'circle_exercise_outer_ring') {
+      await g.press('#level-easy'); await setStart(0);
+      for (const k of [1, 2, 3, 4, 5, 7, 8, 9, 10, 11]) await g.press(`#tile-${k}`);
+      verdict[`${tag}_realFlowBuildsTheOuterRing`] = /^Exercise done\. The outer ring, clockwise from C: C, G, D, A, E, B, F♯\/G♭, D♭, A♭, E♭, B♭, F\./.test(await text('#prompt')) && /1\/1/.test(await text('#board')) && (await count('.seg.major.found')) === 12;
+      await g.press('#level-hard'); const s0 = Number(await g.probe(`document.querySelector('.seg.major.tonic').getAttribute('data-sector')`));
+      for (let i = 1; i < 12; i++) { const k = (s0 + i) % 12; await g.press(`#tile-${k}`); if (k === 6) await g.press('#tile-12'); }
+      verdict[`${tag}_realFlowHardNamesTheHandOff`] = /^Exercise done\./.test(await text('#prompt')) && /Hard 1\/1/.test(await text('#board'));
+    } else if (f === 'circle_exercise_inner_ring') {
+      await g.press('#level-medium'); await setStart(0);
+      await g.press('#tile-1'); verdict[`${tag}_realWrongSaysThreeHalfSteps`] = /three half steps below its major\.$/.test(await text('#prompt'));
+      for (let k = 0; k < 12; k++) await g.press(`#tile-${k}`);
+      verdict[`${tag}_realFlowBuildsTheInnerRing`] = /^Exercise done\. Each relative minor is three half steps below its major: Am under C/.test(await text('#prompt')) && /Medium 1\/1/.test(await text('#board')) && (await count('.seg.minor.found')) === 12;
+    } else if (f === 'circle_exercise_signature_counts') {
+      await g.press('#level-medium'); await setStart(0);
+      await g.press('#count-s1'); verdict[`${tag}_realWrongSaysWhichWay`] = /where the sharps and the flats start/.test(await text('#prompt'));
+      for (let k = 0; k < 12; k++) await g.press(`#${countId(SIGNED(k, false))}`);
+      verdict[`${tag}_realFlowAddsEveryCount`] = /^Exercise done\. C has no sharps or flats\./.test(await text('#prompt')) && /Medium 1\/1/.test(await text('#board')) && (await count('.seg.major.found')) === 12;
+      await g.press('#again'); await g.probe(`(function(){ var t = document.getElementById('typed'); t.value = '0'; return 1; })()`); await g.press('#typedgo');
+      verdict[`${tag}_realTypedCountIsRead`] = (await text('.seg.major[data-sector="0"] .count')) === '0';
+      await g.press('#level-hard'); verdict[`${tag}_hardShowsNoStaff`] = (await g.probe(`getComputedStyle(document.getElementById('staff')).display`)) === 'none' && (await g.probe(`getComputedStyle(document.getElementById('nostaff')).display`)) !== 'none';
     } else {
       await g.press('#level-easy'); await seed(0, false); await g.press('#again');
       for (const k of [11, 1, 6]) await g.press(`.seg.major[data-sector="${k}"]`);

@@ -1,0 +1,125 @@
+@@HEAD@@
+@@RING_CSS@@
+  #bank { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; margin: 3px 0 0; min-height: 64px; align-content: start; }
+  #bank button { padding: 4px 0; min-width: 0; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="row" id="levels" role="group" aria-label="Choose a level"></div>
+<div class="row" id="choose"><label for="start">Start at</label><select id="start" aria-label="The sector to start from"></select><button type="button" id="random">Random</button></div>
+<div id="prompt" aria-live="off"></div>
+<div class="wheelbox"><svg id="wheel" role="group" aria-label="The circle of fifths: the major keys are on the outer ring; the inner ring has twelve slots for their relative minors"></svg></div>
+<div id="bank" role="group" aria-label="The twelve minor keys: tap the one that goes in the lit slot"></div>
+<div class="row"><button type="button" id="again">New exercise</button><span id="hint"></span></div>
+<div class="score"><span id="counter"></span><button id="reset" class="linkbtn" type="button">Reset</button></div>
+<div id="board" aria-label="Score of each level"></div>
+<span id="sr" class="sr" role="status" aria-live="polite"></span>
+</div>
+<script>
+(function () {
+  "use strict";
+  // 2026-11-23-1025 - the CIRCLE EXERCISE "build the inner ring": the outer ring is complete and the inner slots are empty. The lit slot sits under a major key; tap its relative minor from the bank of the twelve minor keys (A minor under C, E minor under G, and so on). A wrong
+  // minor says in words that the relative minor is three half steps below its major, and how far below the one you tapped is. Easy: the bank is in order and the first slot is filled in for you. Medium: the bank is shuffled. Hard: the bank is shuffled and you start from a random sector.
+  // An exercise, never a test: when it ends the answer is said in words. It shares its blocks with the other circle gadgets, byte for byte (pinned by a test): the scale core, the circle core, the exercise core and the wheel; the ring core and the ring page are shared with the other two
+  // ring exercises. Memory only; no sound.
+  // ---- pure functions (no DOM; the node harness exports them) ------------------------------------------------------------------------------------------
+  @@PRELUDE@@
+@@SCALE_CORE@@
+@@CIRCLE_CORE@@
+@@CIRCLE_EXERCISE_CORE@@
+@@RING_CORE@@
+  // ==== inner ring core BEGIN (2026-11-23-1025) ======================================================================================================
+  // One exercise, pure. The slots are the twelve sectors clockwise from the start (seq); the tile of sector j is the relative minor of the major key of sector j (the one at six o'clock reads D-sharp/E-flat minor: either spelling is that tile). A right tile is free; a wrong tile
+  // uses one of the level's wrong taps (once per slot) and says how far below the major it is; the last wrong tap ends the exercise ("gaveup"); every slot filled = "built". On easy the first slot (the start) is filled in for you.
+  function i2Start(start, level, rng) {
+    var seq = rgOrder(start), easy = level === "easy", filled = [], ids = [], k;
+    for (k = 0; k < 12; k++) { filled.push(false); ids.push(k); }
+    var hinted = easy ? seq[0] : -1; if (hinted >= 0) filled[hinted] = true;
+    return { start: start, level: level, left: exAttempts(level), seq: seq, filled: filled, hinted: hinted, bank: easy ? ids : rgShuffle(ids, rng), wrong: [], taps: 0, mine: 0, note: "", phase: "playing", outcome: null };
+  }
+  function i2Next(s) { var i; for (i = 0; i < 12; i++) if (!s.filled[s.seq[i]]) return s.seq[i]; return -1; }
+  function i2Used(s, tile) { return s.filled[tile]; }
+  function i2WrongWords(s, tile) {
+    var c = i2Next(s), n = scMod(ciPc(c) - ciMinorPc(tile), 12);
+    if (n === 0) return rgMinorTitle(tile) + " starts on the same note as " + rgMajorTitle(c) + ", not three half steps below it: a relative minor is three half steps below its major.";
+    return rgMinorTitle(tile) + " is " + rgHalfSteps(n) + " below " + rgMajorTitle(c) + ", not three: a relative minor is three half steps below its major.";
+  }
+  function i2Tap(s, tile) {
+    if (s.phase !== "playing" || i2Used(s, tile) || s.wrong.indexOf(tile) >= 0) return { state: s, event: "ignored", first: false };
+    var first = s.taps === 0, c = i2Next(s);
+    if (tile === c) {
+      var filled = s.filled.slice(); filled[c] = true; var ns = exCopy(s, { filled: filled, wrong: [], taps: s.taps + 1, mine: s.mine + 1, note: "" }), done = i2Next(ns) < 0;
+      return { state: exCopy(ns, { phase: done ? "done" : "playing", outcome: done ? "built" : null }), event: done ? "built" : "right", first: first };
+    }
+    var left = s.left - 1;
+    return { state: exCopy(s, { phase: left <= 0 ? "done" : "playing", wrong: s.wrong.concat([tile]), left: Math.max(0, left), taps: s.taps + 1, note: i2WrongWords(s, tile), outcome: left <= 0 ? "gaveup" : null }), event: left <= 0 ? "gaveup" : "wrong", first: first };
+  }
+  function i2Answer() { var all = [], k; for (k = 0; k < 12; k++) all.push(rgMinorSlotName(k) + " under " + rgSlotName(k)); return "Each relative minor is three half steps below its major: " + all.join(", ") + "."; }
+  function i2Prompt(s) {
+    if (s.phase === "done") return (s.outcome === "built" ? "Exercise done. " : "Exercise over: out of wrong taps. ") + i2Answer();
+    var c = i2Next(s), shown = s.mine === 0 && s.hinted >= 0 ? rgMinorSlotName(s.hinted) + " is shown under " + rgSlotName(s.hinted) + ". " : "";
+    return "Exercise: build the inner ring. " + shown + "Tap the relative minor of " + rgMajorTitle(c) + ": it goes under " + rgSlotName(c) + "." + (s.note ? " " + s.note : "");
+  }
+  function i2Hint(s) { return s.phase === "done" ? "Press New exercise for another start." : exLeftText(s.left); }
+  function i2Announce(s, event) {
+    if (event === "start") return "New exercise: build the inner ring. The outer ring is complete. " + exLeftText(s.left) + ".";
+    if (event === "right") return "Right. Next: the relative minor of " + rgMajorTitle(i2Next(s)) + ".";
+    if (event === "wrong") return "Not that one. " + s.note + " " + exLeftText(s.left) + ".";
+    if (event === "built") return "Done. " + i2Answer();
+    if (event === "gaveup") return "Out of wrong taps. " + i2Answer();
+    return "";
+  }
+  // ==== inner ring core END =========================================================================================================================
+  if (typeof document === "undefined") {           // node test harness
+    module.exports = { BASE: BASE, SC_SCALES: SC_SCALES, scaleNotes: scaleNotes, spellScale: spellScale, scHeptatonic: scHeptatonic, noteName: noteName, noteWords: noteWords,
+      CIRCLE_TONICS: CIRCLE_TONICS, ciPc: ciPc, ciMinorPc: ciMinorPc, ciTonic: ciTonic, ciScale: ciScale, ciSigned: ciSigned, ciSignature: ciSignature, ciName: ciName, ciKeyTitle: ciKeyTitle, ciKeyWords: ciKeyWords, ciMinorTitle: ciMinorTitle, ciMinorName: ciMinorName,
+      EX_LEVELS: EX_LEVELS, EX_DEFAULT_LEVEL: EX_DEFAULT_LEVEL, exAttempts: exAttempts, exEmptyScores: exEmptyScores, exTried: exTried, exBuilt: exBuilt, exCounterText: exCounterText, exBoardText: exBoardText,
+      rgOrder: rgOrder, rgShuffle: rgShuffle, rgPickStart: rgPickStart, rgUp: rgUp, rgIntervalWords: rgIntervalWords, rgSlotName: rgSlotName, rgMinorSlotName: rgMinorSlotName,
+      i2Start: i2Start, i2Next: i2Next, i2Used: i2Used, i2Tap: i2Tap, i2Answer: i2Answer, i2Prompt: i2Prompt, i2Hint: i2Hint, i2Announce: i2Announce };
+    return;
+  }
+  // ---- the page ---------------------------------------------------------------------------------------------------------------------------------------
+  var rng = function () { return (window.__earRandom || Math.random)(); };                                   // an injected random source for tests
+  var level = EX_DEFAULT_LEVEL, scores = exEmptyScores(), state = null, chosen = 0;
+  var NS = "http://www.w3.org/2000/svg";
+  var $ = function (id) { return document.getElementById(id); };
+  function el(tag, attrs, parent) { var n = document.createElementNS(NS, tag); for (var a in attrs) n.setAttribute(a, attrs[a]); if (parent) parent.appendChild(n); return n; }
+@@CIRCLE_WHEEL@@
+@@RING_PAGE@@
+  var segs = buildWheel($("wheel"), { counts: false, onPick: function () {} }); rgInert(segs); var labels = rgLabels(segs);
+  function drawBank() {
+    var bank = $("bank"); bank.textContent = "";
+    state.bank.forEach(function (id) {
+      var b = document.createElement("button"); b.type = "button"; b.id = "tile-" + id; b.textContent = rgMinorSlotName(id);
+      b.setAttribute("aria-label", rgMinorTitle(id)); b.addEventListener("click", function () { apply(i2Tap(state, id)); }); bank.appendChild(b);
+    });
+  }
+  function apply(r) { if (r.event === "ignored") return; state = r.state; if (r.first) scores = exTried(scores, level); if (r.event === "built") scores = exBuilt(scores, level); render(i2Announce(state, r.event)); }
+  function render(announce) {
+    var done = state.phase === "done", next = i2Next(state), k, shown;
+    for (k = 0; k < 12; k++) {
+      shown = state.filled[k] || (done && state.outcome === "gaveup");
+      labels.name("minor", k, shown ? "full" : "none");
+      segs.major[k].setAttribute("class", "seg major" + (!done && k === next ? " tonic" : "")); segs.major[k].setAttribute("aria-label", ciKeyTitle(k, false));
+      segs.minor[k].setAttribute("class", "seg minor" + (state.filled[k] ? " found" : " empty") + (k === state.hinted ? " hint" : "") + (!done && k === next ? " lit" : "") + (done && !state.filled[k] ? " reveal" : ""));
+      segs.minor[k].setAttribute("aria-label", state.filled[k] ? ciMinorTitle(k, false) : "Empty slot" + (!done && k === next ? ", next" : ""));
+    }
+    state.bank.forEach(function (id) { var b = $("tile-" + id); b.disabled = done || i2Used(state, id); b.setAttribute("class", state.wrong.indexOf(id) >= 0 ? "wrongbtn" : ""); });
+    $("prompt").textContent = i2Prompt(state); $("hint").textContent = i2Hint(state);
+    rgBoard(scores, level); rgChooser(level === "hard", state.start);
+    if (announce !== undefined) $("sr").textContent = announce;
+  }
+  function fresh(announce) { var start = level === "hard" ? rgPickStart(rng, false, state ? state.start : null) : chosen; state = i2Start(start, level, rng); drawBank(); render(announce === false ? undefined : i2Announce(state, "start")); }
+  rgChrome({
+    onLevel: function (l) { if (l === level) return; level = l; fresh(); },
+    onStart: function (k) { chosen = k; fresh(); },
+    onRandom: function () { chosen = rgPickStart(rng, false, chosen); fresh(); },
+    onAgain: function () { fresh(); },
+    onReset: function () { scores = exEmptyScores(); render("Score cleared."); }
+  });
+  fresh(false);
+})();
+</script>
+</body>
+</html>

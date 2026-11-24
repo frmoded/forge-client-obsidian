@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// 2026-11-19-0900 - build the FOUR circle of fifths gadgets from their templates (scripts/dev/templates/circle/*) and the shared blocks: the Scales player's scale core, piano voice and scale view (read from scale_player.html, byte for byte) and the circle blocks
-// (circle core, exercise core, wheel, staff), each written once here and copied into every file that uses it. src/circle-of-fifths-gadget.test.ts pins that the copies are identical, that the generator reproduces the files, and everything else.
+// 2026-11-19-0900 - build the circle of fifths gadgets (the FOUR of 2026-11-19, and from 2026-11-23-1025 the three ring exercises) from their templates (scripts/dev/templates/circle/*) and the shared blocks: the Scales player's scale core, piano voice and scale view (read from scale_player.html, byte for byte) and the circle blocks
+// (circle core, exercise core, wheel, staff; and for the three ring exercises the ring core, the ring page and the ring css), each written once here and copied into every file that uses it. src/circle-of-fifths-gadget.test.ts pins that the copies are identical, that the generator reproduces the files, and everything else.
 //   node scripts/dev/make-circle-gadgets.mjs [--vault ~/projects/music-theory] [--also <another vault root, e.g. assets/vaults/music-theory>]...
 import fs from 'node:fs';
 import os from 'node:os';
@@ -28,6 +28,9 @@ const FILES = [
   { file: 'circle_exercise_key_to_signature.html', template: 'ex1.template.html', title: 'Exercise: key to signature' },
   { file: 'circle_exercise_signature_to_key.html', template: 'ex2.template.html', title: 'Exercise: signature to key' },
   { file: 'circle_exercise_neighbours.html', template: 'ex3.template.html', title: 'Exercise: neighbours on the circle' },
+  { file: 'circle_exercise_outer_ring.html', template: 'ex4.template.html', title: 'Exercise: build the outer ring' },                 // 2026-11-23-1025: build the outer ring, build the inner ring, add the number of sharps or flats
+  { file: 'circle_exercise_inner_ring.html', template: 'ex5.template.html', title: 'Exercise: build the inner ring' },
+  { file: 'circle_exercise_signature_counts.html', template: 'ex6.template.html', title: 'Exercise: add the sharps and flats' },
 ];
 const fill = (t, f) => t
   .replace('@@HEAD@@', () => rd('head.html'))
@@ -39,7 +42,10 @@ const fill = (t, f) => t
   .replace('@@CIRCLE_CORE@@', () => rd('circle-core.js'))
   .replace('@@CIRCLE_EXERCISE_CORE@@', () => rd('circle-exercise-core.js'))
   .replace('@@CIRCLE_WHEEL@@', () => rd('circle-wheel-view.js'))
-  .replace('@@CIRCLE_STAFF@@', () => rd('circle-staff-view.js'));
+  .replace('@@CIRCLE_STAFF@@', () => rd('circle-staff-view.js'))
+  .replace('@@RING_CORE@@', () => rd('circle-ring-core.js'))
+  .replace('@@RING_PAGE@@', () => rd('circle-ring-page.js'))
+  .replace('@@RING_CSS@@', () => rd('ring.css'));
 for (const root of [vault, ...also]) {
   const dir = path.join(root, 'circle_of_fifths/resources/html');
   fs.mkdirSync(dir, { recursive: true });

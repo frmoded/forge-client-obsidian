@@ -1,0 +1,137 @@
+@@HEAD@@
+@@RING_CSS@@
+  #bank { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin: 3px 0 0; min-height: 64px; align-content: start; }
+  #bank button { padding: 4px 0; min-width: 0; font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="row" id="levels" role="group" aria-label="Choose a level"></div>
+<div class="row" id="choose"><label for="start">Start at</label><select id="start" aria-label="The key that is given"></select><button type="button" id="random">Random</button></div>
+<div id="prompt" aria-live="off"></div>
+<div class="wheelbox"><svg id="wheel" role="group" aria-label="The circle of fifths: twelve slots on the outer ring for the major keys, twelve on the inner ring for their relative minors"></svg></div>
+<div id="bank" role="group" aria-label="The twelve major keys: tap the one that goes in the lit slot"></div>
+<div class="row"><button type="button" id="again">New exercise</button><span id="hint"></span></div>
+<div class="score"><span id="counter"></span><button id="reset" class="linkbtn" type="button">Reset</button></div>
+<div id="board" aria-label="Score of each level"></div>
+<span id="sr" class="sr" role="status" aria-live="polite"></span>
+</div>
+<script>
+(function () {
+  "use strict";
+  // 2026-11-23-1025 - the CIRCLE EXERCISE "build the outer ring": an empty wheel and a bank of the twelve major keys. The key you start at is given (C at the top; choose another, or Random); the next slot clockwise is lit, and you tap the key a fifth above the last one.
+  // A wrong key costs one of the level's wrong taps and says in words why ("D is a fifth above G, not a fourth"). Easy: the bank is in order and the key at six o'clock is shown to you. Medium: the bank is shuffled. Hard: the bank is shuffled, the start is random, and at six o'clock you also
+  // name the other name of the key (F-sharp and G-flat are one key). An exercise, never a test: when it ends the answer is said in words. It shares its blocks with the other circle gadgets, byte for byte (pinned by a test): the scale core, the circle core, the exercise core and the wheel;
+  // the ring core and the ring page are shared with the other two ring exercises. Memory only; no sound.
+  // ---- pure functions (no DOM; the node harness exports them) ------------------------------------------------------------------------------------------
+  @@PRELUDE@@
+@@SCALE_CORE@@
+@@CIRCLE_CORE@@
+@@CIRCLE_EXERCISE_CORE@@
+@@RING_CORE@@
+  // ==== outer ring core BEGIN (2026-11-23-1025) ======================================================================================================
+  // One exercise, pure. The climb is the twelve sectors clockwise from the start (seq); a sector is "placed" when its key is on the wheel (the given start, the slot shown on easy, the keys you tapped). The tiles are the sector numbers 0..11 (the one at six o'clock reads
+  // F-sharp/G-flat; in hard it reads F-sharp) and, in hard only, tile 12 = G-flat. In hard the slot at six o'clock takes two taps: F-sharp (hand "pending"), then G-flat (hand "done"). A right tile is free; a wrong tile uses one of the level's wrong taps (once per slot) and says why;
+  // the last wrong tap ends the exercise ("gaveup"); every slot (and the hand-off in hard) placed = "built".
+  var O1_HINT_INDEX = 6, O1_FLAT_TILE = 12;
+  function o1Start(start, level, rng) {
+    var seq = rgOrder(start), hard = level === "hard", easy = level === "easy", placed = [], ids = [], k;
+    for (k = 0; k < 12; k++) { placed.push(false); ids.push(k); }
+    if (hard) ids.push(O1_FLAT_TILE);
+    placed[start] = true; var hinted = easy ? seq[O1_HINT_INDEX] : -1; if (hinted >= 0) placed[hinted] = true;
+    return { start: start, level: level, left: exAttempts(level), seq: seq, placed: placed, hinted: hinted, hand: placed[6] ? "done" : "none", bank: easy ? ids : rgShuffle(ids, rng), wrong: [], taps: 0, mine: 0, note: "", phase: "playing", outcome: null };
+  }
+  function o1Next(s) { var i; if (s.hand === "pending") return 6; for (i = 1; i < 12; i++) if (!s.placed[s.seq[i]]) return s.seq[i]; return -1; }
+  function o1Used(s, tile) { return tile === O1_FLAT_TILE ? s.level !== "hard" || s.hand === "done" : s.placed[tile]; }
+  function o1TileName(s, tile) { return tile === O1_FLAT_TILE ? ciName(6, true) : tile === 6 ? (s.level === "hard" ? ciName(6, false) : rgSlotName(6)) : ciName(tile, false); }
+  function o1Before(s, c) { return s.seq[s.seq.indexOf(c) - 1]; }                                                   // the sector whose key a fifth is measured from
+  function o1LastName(s, c) { var p = o1Before(s, c); return p === 6 ? (s.level === "hard" ? ciName(6, true) : rgSlotName(6)) : ciName(p, false); }
+  function o1WrongWords(s, tile) {
+    var c = o1Next(s), last = o1LastName(s, c);
+    if (s.hand === "pending") return tile === 7 ? ciName(7, false) + " comes after " + ciName(6, true) + ": " + ciName(6, false) + " and " + ciName(6, true) + " are the same key, so name " + ciName(6, true) + " first." : "At six o'clock the key has two names: tap " + ciName(6, true) + ", the flat name of " + ciName(6, false) + ".";
+    if (tile === O1_FLAT_TILE && c === 6) return ciName(6, true) + " is the same key as " + ciName(6, false) + ": going clockwise from " + last + " you reach it by its sharp name, " + ciName(6, false) + ". Tap " + ciName(6, false) + " first.";
+    return o1TileName(s, tile) + " is " + rgIntervalWords(rgUp(o1Before(s, c), tile === O1_FLAT_TILE ? 6 : tile)) + " above " + last + ", not a fifth.";
+  }
+  function o1Tap(s, tile) {
+    if (s.phase !== "playing" || o1Used(s, tile) || s.wrong.indexOf(tile) >= 0) return { state: s, event: "ignored", first: false };
+    var first = s.taps === 0, c = o1Next(s), hard = s.level === "hard", right = s.hand === "pending" ? tile === O1_FLAT_TILE : tile === c;
+    if (right) {
+      var placed = s.placed.slice(), hand = s.hand, handoff = false;
+      if (s.hand === "pending") hand = "done"; else { placed[c] = true; if (c === 6) { if (hard) { hand = "pending"; handoff = true; } else hand = "done"; } }
+      var ns = exCopy(s, { placed: placed, hand: hand, wrong: [], taps: s.taps + 1, mine: s.mine + 1, note: "" }), done = o1Next(ns) < 0;
+      return { state: exCopy(ns, { phase: done ? "done" : "playing", outcome: done ? "built" : null }), event: done ? "built" : handoff ? "handoff" : "right", first: first };
+    }
+    var left = s.left - 1;
+    return { state: exCopy(s, { phase: left <= 0 ? "done" : "playing", wrong: s.wrong.concat([tile]), left: Math.max(0, left), taps: s.taps + 1, note: o1WrongWords(s, tile), outcome: left <= 0 ? "gaveup" : null }), event: left <= 0 ? "gaveup" : "wrong", first: first };
+  }
+  function o1Answer() { var all = [], k; for (k = 0; k < 12; k++) all.push(rgSlotName(k)); return "The outer ring, clockwise from C: " + all.join(", ") + ". Each key is a fifth above the one before it, and " + ciName(6, false) + " and " + ciName(6, true) + " are one key under two names."; }
+  function o1Given(s) { return (s.start === 0 ? "C is given at the top." : rgSlotName(s.start) + " is given.") + (s.hinted >= 0 ? " " + rgSlotName(s.hinted) + " is shown to help you." : ""); }
+  function o1Prompt(s) {
+    if (s.phase === "done") return (s.outcome === "built" ? "Exercise done. " : "Exercise over: out of wrong taps. ") + o1Answer();
+    var base = s.hand === "pending" ? "Exercise: " + ciName(6, false) + " is in. At six o'clock the same key has a second name: tap it." : "Exercise: build the outer ring. " + (s.mine === 0 ? o1Given(s) + " " : "") + "Tap the key a fifth above " + o1LastName(s, o1Next(s)) + ".";
+    return base + (s.note ? " " + s.note : "");
+  }
+  function o1Hint(s) { return s.phase === "done" ? "Press New exercise for another start." : exLeftText(s.left); }
+  function o1Announce(s, event) {
+    if (event === "start") return "New exercise: build the outer ring. " + o1Given(s) + " " + exLeftText(s.left) + ".";
+    if (event === "right") return "Right. Next: the key a fifth above " + o1LastName(s, o1Next(s)) + ".";
+    if (event === "handoff") return "Right. Now the second name of the key at six o'clock.";
+    if (event === "wrong") return "Not that one. " + s.note + " " + exLeftText(s.left) + ".";
+    if (event === "built") return "Done. " + o1Answer();
+    if (event === "gaveup") return "Out of wrong taps. " + o1Answer();
+    return "";
+  }
+  // ==== outer ring core END =========================================================================================================================
+  if (typeof document === "undefined") {           // node test harness
+    module.exports = { BASE: BASE, SC_SCALES: SC_SCALES, scaleNotes: scaleNotes, spellScale: spellScale, scHeptatonic: scHeptatonic, noteName: noteName, noteWords: noteWords,
+      CIRCLE_TONICS: CIRCLE_TONICS, ciPc: ciPc, ciMinorPc: ciMinorPc, ciTonic: ciTonic, ciScale: ciScale, ciSigned: ciSigned, ciSignature: ciSignature, ciName: ciName, ciKeyTitle: ciKeyTitle, ciKeyWords: ciKeyWords,
+      EX_LEVELS: EX_LEVELS, EX_DEFAULT_LEVEL: EX_DEFAULT_LEVEL, exAttempts: exAttempts, exEmptyScores: exEmptyScores, exTried: exTried, exBuilt: exBuilt, exCounterText: exCounterText, exBoardText: exBoardText,
+      rgOrder: rgOrder, rgShuffle: rgShuffle, rgPickStart: rgPickStart, rgUp: rgUp, rgIntervalWords: rgIntervalWords, rgSlotName: rgSlotName, rgMinorSlotName: rgMinorSlotName,
+      o1Start: o1Start, o1Next: o1Next, o1Used: o1Used, o1TileName: o1TileName, o1Tap: o1Tap, o1Answer: o1Answer, o1Prompt: o1Prompt, o1Hint: o1Hint, o1Announce: o1Announce };
+    return;
+  }
+  // ---- the page ---------------------------------------------------------------------------------------------------------------------------------------
+  var rng = function () { return (window.__earRandom || Math.random)(); };                                   // an injected random source for tests
+  var level = EX_DEFAULT_LEVEL, scores = exEmptyScores(), state = null, chosen = 0;
+  var NS = "http://www.w3.org/2000/svg";
+  var $ = function (id) { return document.getElementById(id); };
+  function el(tag, attrs, parent) { var n = document.createElementNS(NS, tag); for (var a in attrs) n.setAttribute(a, attrs[a]); if (parent) parent.appendChild(n); return n; }
+@@CIRCLE_WHEEL@@
+@@RING_PAGE@@
+  var segs = buildWheel($("wheel"), { counts: false, onPick: function () {} }); rgInert(segs); var labels = rgLabels(segs);
+  function drawBank() {
+    var bank = $("bank"); bank.textContent = "";
+    state.bank.forEach(function (id) {
+      var b = document.createElement("button"); b.type = "button"; b.id = "tile-" + id; b.textContent = o1TileName(state, id);
+      b.setAttribute("aria-label", id === O1_FLAT_TILE ? ciWords(6, true) + " major" : id === 6 ? (state.level === "hard" ? ciWords(6, false) + " major" : ciWords(6, false) + " or " + ciWords(6, true) + " major") : ciWords(id, false) + " major");
+      b.addEventListener("click", function () { apply(o1Tap(state, id)); }); bank.appendChild(b);
+    });
+  }
+  function apply(r) { if (r.event === "ignored") return; state = r.state; if (r.first) scores = exTried(scores, level); if (r.event === "built") scores = exBuilt(scores, level); render(o1Announce(state, r.event)); }
+  function render(announce) {
+    var done = state.phase === "done", next = o1Next(state), k, cls, shown, mode;
+    for (k = 0; k < 12; k++) {
+      shown = state.placed[k] || (done && state.outcome === "gaveup"); mode = !shown ? "none" : k === 6 && state.level === "hard" && !done && state.hand !== "done" && state.placed[6] ? "first" : "full";
+      labels.name("major", k, mode); labels.name("minor", k, "none");
+      cls = "seg major" + (state.placed[k] ? " found" : " empty") + (k === state.start ? " tonic" : "") + (k === state.hinted ? " hint" : "") + (!done && k === next ? " lit" : "") + (done && !state.placed[k] ? " reveal" : "");
+      segs.major[k].setAttribute("class", cls); segs.major[k].setAttribute("aria-label", state.placed[k] ? ciKeyTitle(k, false) : "Empty slot" + (!done && k === next ? ", next" : ""));
+      segs.minor[k].setAttribute("class", "seg minor empty"); segs.minor[k].setAttribute("aria-label", "Inner ring, empty");
+    }
+    state.bank.forEach(function (id) { var b = $("tile-" + id); b.disabled = done || o1Used(state, id); b.setAttribute("class", state.wrong.indexOf(id) >= 0 ? "wrongbtn" : ""); });
+    $("prompt").textContent = o1Prompt(state); $("hint").textContent = o1Hint(state);
+    rgBoard(scores, level); rgChooser(level === "hard", state.start);
+    if (announce !== undefined) $("sr").textContent = announce;
+  }
+  function fresh(announce) { var start = level === "hard" ? rgPickStart(rng, true, state ? state.start : null) : chosen; state = o1Start(start, level, rng); drawBank(); render(announce === false ? undefined : o1Announce(state, "start")); }
+  rgChrome({
+    onLevel: function (l) { if (l === level) return; level = l; fresh(); },
+    onStart: function (k) { chosen = k; fresh(); },
+    onRandom: function () { chosen = rgPickStart(rng, false, chosen); fresh(); },
+    onAgain: function () { fresh(); },
+    onReset: function () { scores = exEmptyScores(); render("Score cleared."); }
+  });
+  fresh(false);
+})();
+</script>
+</body>
+</html>
