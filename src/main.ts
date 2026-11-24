@@ -5923,7 +5923,8 @@ export default class ForgePlugin extends Plugin {
     const body = extractDataBody(content);
 
     try {
-      const outputView = await this.getOutputView();
+      // 2026-11-23-1022z: a MusicXML note is a score and its Score is drawn in the Forge panel: in a score-first vault a call WITHOUT a gesture gets a buffered sink while the panel is closed (M4), so the note showed only its XML text and nothing said why. Opening one is the person's own gesture.
+      const outputView = await this.getOutputView(contentType === 'musicxml' ? { userInitiated: true } : undefined);
       await outputView.previewDataSnippet(file.basename, contentType, body, file.path);
     } catch (e) {
       console.error('maybePreviewDataSnippet: data snippet preview failed', e);

@@ -11,6 +11,7 @@
 // file). The lean build never reaches this module, so verovio / html-midi-player and their
 // transitive audio chain are absent from lean main.js.
 
+import { scoreFailureText } from './score-failure-core.ts';
 import { setSrLabel } from './sr-label-core.ts';
 import { renderMusicXMLAndMIDI, getTimeForElement, TimeBucket } from './verovio.ts';
 import {
@@ -551,7 +552,7 @@ function renderMusicXML(
     } catch (e) {
       console.error('Forge: Verovio render failed', e);
       host.empty();
-      host.createEl('p', { text: 'Score render failed — see console.', cls: 'forge-output-error' });
+      host.createEl('p', { text: scoreFailureText(e), cls: 'forge-output-error' });          // 2026-11-23-1022z: the reason, in words (the console has the whole error); the XML stays below for whoever wants to read it
       host.createEl('pre', { text: musicxml, cls: 'forge-output-stdout' });
     }
   });
