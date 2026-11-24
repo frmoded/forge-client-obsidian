@@ -2896,3 +2896,13 @@ button.forge-chat-link:not(.clickable-icon) {
 .forge-review-status { min-height: 1.5em; margin: 8px 0 0; }
 .forge-review-tab button:disabled { opacity: 0.5; cursor: default; }
 @media (max-width: 480px) { .forge-review-tab { padding: var(--size-4-2, 8px); } .forge-review-actions button { flex: 1 1 100%; } }
+
+/* 1030z begin */
+/* 2026-11-24-1030z (driver: "[3, R1] looks great size wise. can you center it horizontally? (it does not show in reading mode"): the circle-of-fifths wheel (360 px, 1026) is centred by the PLUGIN, keyed on that ONE image file name, in Reading view and in Live Preview.
+   Why here: the note wraps the embed in a flex <div> with blank lines inside (the site needs that); in Obsidian a blank line ends an HTML block, so the wrapper reaches nothing and the picture sits left in its own paragraph. The DOM, read from Obsidian 1.12's own app.js / app.css:
+   Reading view = `span.internal-embed.image-embed[src]` (a lone inline span in a `p`; `src` is the link text as written) so it becomes a shrink-wrapped block with auto side margins; Live Preview = `div.internal-embed.image-embed[src]`, inline-flex inside a `.cm-line` or, as a
+   widget, a direct child of `.cm-content` whose margin Obsidian zeroes with `!important` (`.cm-content > * { margin: 0 !important }`), so the Live Preview rule is scoped to the editor, stays a block-level flex box and out-ranks that margin with its own `!important`.
+   No `|alias` in the note (on the site it becomes alt text); no other note, embed or selector is touched. */
+.internal-embed.image-embed[src$="circle_of_fifths_wheel.svg"] { display: block; width: fit-content; margin-inline: auto; }
+.markdown-source-view.mod-cm6 .cm-content .internal-embed.image-embed[src$="circle_of_fifths_wheel.svg"] { display: flex; width: fit-content; margin-inline: auto !important; }
+/* 1030z end */
