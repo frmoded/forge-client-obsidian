@@ -77,9 +77,11 @@ test('B: a move that goes NOWHERE is refused in plain words: no question, the se
     await r.say('Move bar 3 before bar 3.'); assert.ok(r.texts().includes('Bar 3 cannot go before itself.'), r.texts().join(' | ')); assert.equal(r.requests.length, 0);
   }
 });
-test('B: Copy keeps its own way: `Copy bar 1 after bar 3.` is asked of the service first, has NO repair (Copy adds a bar: a chain of moves is not what it means), and is kept waiting when nothing reads it', async () => {
+// 2026-11-24-1036 (deliberate): Copy now has place words (`Copy bar 1 and put it after bar 3.`), so `Copy bar 1 after bar 3.` is a sentence the GRAMMAR reads (the copy is put after bar 3): it was asked of the service first, had no repair and was kept waiting (1027). The chain-of-moves idea is still wrong for Copy.
+test('B: `Copy bar 1 after bar 3.` is read by the grammar (the copy is PUT after bar 3), the service is not asked, there is no repair; a Copy the grammar still cannot read is asked of the service first and kept waiting', async () => {
   const r = await phraseWithHead(async () => ({ status: 200, json: { ok: false, error: 'no' } }));
-  await r.say('Copy bar 1 after bar 3.'); assert.equal(r.requests.length, 1); assert.ok(!r.texts().some((x) => /^Did you mean/.test(x)), r.texts().join(' | ')); assert.deepEqual(r.list(), [EXTEND, 'Waiting: Copy bar 1 after bar 3.']);
+  await r.say('Copy bar 1 after bar 3.'); assert.equal(r.requests.length, 0); assert.ok(!r.texts().some((x) => /^Did you mean/.test(x)), r.texts().join(' | ')); assert.deepEqual(r.list(), [EXTEND, 'Copy bar 1 and put it after bar 3.']);
+  await r.say('Copy bars 3 to 1 after bar 4.'); assert.equal(r.requests.length, 1); assert.deepEqual(r.list(), [EXTEND, 'Copy bar 1 and put it after bar 3.', 'Waiting: Copy bars 3 to 1 after bar 4.']);
 });
 
 // ---- ADDENDUM 2 (2) and (3): a waiting line in the note ---------------------------------------------------------------------------------------------------------------------------------------------

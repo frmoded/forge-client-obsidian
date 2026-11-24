@@ -4,6 +4,7 @@
 //   "Keep bars 3 to 5 and bar 8."                  the result is only those bars, in their order
 //   "Delete bars 3 to 5 and bar 8."                those bars go; the rest close up
 //   "Copy bars 3 to 5."                            each range is played again right after itself
+//   "Copy bar 6 and put it at the end."            (2026-11-24-1036) the copy goes in a gap instead: after bar N, at the start, at the end; the originals stay
 //   "Move bars 3 to 5 one bar left." / "... right."  each range swaps places with the one bar next to it
 //   "Morph bars 2 and 3 across 5 bars, in musical order, and put them between bars 2 and 3."   (2026-11-19-0996b) 5 NEW bars that change step by step from bar 2 to bar 3, put in a gap; needs the ENGINE (applyStepsAsync)
 //   "Mix bars 2 and 3, 50 percent bar 2, as a vote, and put it between bars 2 and 3."           (2026-11-19-0999b) the ONE bar the Mix head makes of bar 2 and bar 3, put in a gap; needs the engine
@@ -59,6 +60,7 @@ export function structureWords(o: StructureOp): string {
     const tempo = o.tempo_change_pct !== 0 ? `, ${plain(Math.abs(o.tempo_change_pct))} percent ${o.tempo_change_pct < 0 ? 'slower' : 'faster'}` : '';
     return `extend bar ${o.bar} to ${o.bars} ${barsWord(o.bars)}, ${STYLE_WORDS[o.style]}${tempo}${o.after === undefined ? '' : `, and put ${o.bars === 1 ? 'it' : 'them'} ${placeWords({ after: o.after })}`}`;
   }
+  if (o.op === 'copy' && o.after !== undefined) return `copy ${runsWords(o.runs)} and put ${o.runs.length === 1 && o.runs[0][0] === o.runs[0][1] ? 'it' : 'them'} ${placeWords({ after: o.after })}`;          // 2026-11-24-1036: the copy goes in a gap (the words Extend writes)
   return `${STRUCTURE_WORDS[o.op].verb} ${runsWords(o.runs)}${o.op === 'move' ? ` ${MOVE_WORDS[String(o.by) as '-1' | '1']}` : ''}`;
 }
 /** One step as a sentence of the Description: "Keep bars 3 to 5 and bar 8." */
@@ -89,6 +91,11 @@ export function applyStructure<T>(items: readonly T[], op: RunsOp): StructureRes
     for (const [a, b] of op.runs) for (let i = a; i <= b; i++) gone.add(i);
     const left = items.filter((_, i) => !gone.has(i + 1));
     return left.length === 0 ? { ok: false, message: `deleting ${runsWords(op.runs)} would leave no bars.` } : { ok: true, items: left };
+  }
+  if (op.op === 'copy' && op.after !== undefined) {                              // 2026-11-24-1036: the copies of every range, in order, are INSERTED in the gap after bar `after` (0 = at the start, 'end'); the originals stay
+    if (op.after !== 'end' && op.after > n) return { ok: false, message: `after bar ${op.after} asked for, but there ${n === 1 ? 'is 1 bar' : `are ${n} bars`}.` };
+    const at = op.after === 'end' ? n : op.after;
+    return { ok: true, items: [...items.slice(0, at), ...op.runs.flatMap(([a, b]) => items.slice(a - 1, b)), ...items.slice(at)] };
   }
   if (op.op === 'copy') {
     const out: T[] = [];
@@ -184,6 +191,7 @@ export function structurePython(o: StructureOp): string[] {
   const runs = JSON.stringify(o.runs);
   if (o.op === 'keep') return [`  bars = [bars[i - 1] for a, b in ${runs} for i in range(a, b + 1)]`];
   if (o.op === 'delete') return [`  bars = [x for i, x in enumerate(bars, 1) if not any(a <= i <= b for a, b in ${runs})]`];
+  if (o.op === 'copy' && o.after !== undefined) return [`  bars[${o.after === 'end' ? 'len(bars)' : o.after}:${o.after === 'end' ? 'len(bars)' : o.after}] = [bars[i - 1] for a, b in ${runs} for i in range(a, b + 1)]`];          // 2026-11-24-1036: the copies go in the gap (the slice is read first, then assigned)
   if (o.op === 'copy') return [`  bars = [y for i, x in enumerate(bars, 1) for y in [x] + [z for a, b in ${runs} if b == i for z in bars[a - 1:b]]]`];
   const left = o.by === -1;
   return [

@@ -130,7 +130,8 @@ export type DensityOp = ThinOutOp | DoubleUpOp;
 export type BarRun = [number, number];
 export interface KeepOp { op: 'keep'; runs: BarRun[] }
 export interface DeleteOp { op: 'delete'; runs: BarRun[] }
-export interface CopyOp { op: 'copy'; runs: BarRun[] }
+/** 2026-11-24-1036: a Copy with `after` puts the copies in the gap after bar `after` (0 = at the start, 'end'; the bars as they are BEFORE the step) instead of right after each original; the originals stay. */
+export interface CopyOp { op: 'copy'; runs: BarRun[]; after?: number | 'end' }
 export interface MoveOp { op: 'move'; runs: BarRun[]; by: -1 | 1 }
 /** 2026-11-19-0996b: the steps that work on RANGES of bars (the four above). */
 export type RunsOp = KeepOp | DeleteOp | CopyOp | MoveOp;
@@ -401,7 +402,7 @@ function validateStructureOp(raw: Record<string, unknown>, at: string): Structur
   if (raw.op === 'mix_bars') return validateMixBars(raw, at);
   if (raw.op === 'extend_bar') return validateExtendBar(raw, at);
   const op = raw.op as RunsOp['op'];
-  const allowed = op === 'move' ? ['op', 'runs', 'by'] : ['op', 'runs'];
+  const allowed = op === 'move' ? ['op', 'runs', 'by'] : op === 'copy' ? ['op', 'runs', 'after'] : ['op', 'runs'];
   for (const key of Object.keys(raw)) if (!allowed.includes(key)) return `${at}: unexpected field "${key}" (${op} holds only ${allowed.join(', ')}).`;
   const whole = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v);
   if (!Array.isArray(raw.runs) || raw.runs.length < 1 || raw.runs.length > STRUCTURE_RUNS_MAX) return `${at}.runs must be a list of 1 to ${STRUCTURE_RUNS_MAX} bar ranges like [3, 5], got ${JSON.stringify(raw.runs)}.`;
@@ -412,6 +413,7 @@ function validateStructureOp(raw: Record<string, unknown>, at: string): Structur
     if (before !== undefined && r[0] <= before[1] + 1) return `${at}.runs: the ranges must be in order and apart (at least one bar between them), got ${JSON.stringify(before)} and ${JSON.stringify(r)}.`;
     runs.push([r[0], r[1]]);
   }
+  if (op === 'copy' && 'after' in raw) { const after = afterProblem(at, raw.after, 'copies follow'); if (after !== null) return after; return { op, runs, after: raw.after as number | 'end' }; }          // 2026-11-24-1036
   if (op !== 'move') return { op, runs };
   if (raw.by !== -1 && raw.by !== 1) return `${at}.by must be -1 (one bar left) or 1 (one bar right), got ${JSON.stringify(raw.by)}.`;
   return { op, runs, by: raw.by };
@@ -617,7 +619,7 @@ export function formatTransformOp(o: TransformOp): string {
   if (o.op === 'morph_between') return `{"op": "morph_between", "a": ${o.a}, "b": ${o.b}, "bars": ${o.bars}, "order": ${JSON.stringify(o.order)}, "seed": ${o.seed}, "after": ${JSON.stringify(o.after)}}`;
   if (o.op === 'mix_bars') return `{"op": "mix_bars", "a": ${o.a}, "b": ${o.b}, "weight": ${o.weight}, "threshold": ${o.threshold}, "ghost": ${o.ghost}, "mode": ${JSON.stringify(o.mode)}${o.mode === 'path' ? `, "order": ${JSON.stringify(o.order)}, "seed": ${o.seed}` : ''}, "after": ${JSON.stringify(o.after)}}`;
   if (o.op === 'extend_bar') return `{"op": "extend_bar", "bar": ${o.bar}, "bars": ${o.bars}, "style": ${JSON.stringify(o.style)}, "tempo_change_pct": ${o.tempo_change_pct}${o.after !== undefined ? `, "after": ${JSON.stringify(o.after)}` : ''}}`;
-  if (isStructureOp(o)) return `{"op": ${JSON.stringify(o.op)}, "runs": ${JSON.stringify(o.runs)}${o.op === 'move' ? `, "by": ${o.by}` : ''}}`;
+  if (isStructureOp(o)) return `{"op": ${JSON.stringify(o.op)}, "runs": ${JSON.stringify(o.runs)}${o.op === 'move' ? `, "by": ${o.by}` : o.op === 'copy' && o.after !== undefined ? `, "after": ${JSON.stringify(o.after)}` : ''}}`;
   const parts = [`"op": ${JSON.stringify(o.op)}`, `"first": ${o.first}`, `"last": ${o.last}`];
   if (o.row !== undefined) parts.push(`"row": ${JSON.stringify(o.row)}`);
   if (o.op === 'double_up') parts.push(`"grid": ${o.grid}`);

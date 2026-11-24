@@ -13,7 +13,7 @@ test('the caps are what the proposal says', () => {
 });
 
 test('each family table holds exactly its own verbs (and a bar\'s rows are all `bar:`)', () => {
-  assert.deepEqual(verbsOf('phrase'), ['extend', 'mix', 'morph', 'take', 'thin out', 'double up', 'keep', 'delete', 'copy', 'move', 'bar replaced', 'threshold', 'ghost notes', 'make it']);
+  assert.deepEqual(verbsOf('phrase'), ['extend', 'mix', 'morph', 'take', 'thin out', 'double up', 'keep', 'delete', 'copy', 'copy to a place', 'move', 'bar replaced', 'threshold', 'ghost notes', 'make it']);          // 2026-11-24-1036 (deliberate): `copy to a place` is the new row (Copy takes the place words of Extend)
   assert.deepEqual(verbsOf('arrangement'), ['play', 'volume', 'mute', 'only', 'together']);
   assert.deepEqual(verbsOf('composition'), ['play for', 'then play', 'repeat that', 'for bars play']);
   assert.ok(grammarTable('bar').length > 5 && verbsOf('bar').every((v) => v === 'bar'));

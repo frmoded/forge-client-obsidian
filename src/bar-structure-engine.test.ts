@@ -114,3 +114,27 @@ test('a fork lies over the bars that are LEFT (its number is a bar of the result
   const bars = barsOfPayload((out as { payload: unknown }).payload as never) as unknown[];
   assert.equal(bars.length, 3);
 });
+
+// 2026-11-24-1036: a COPY PUT IN A PLACE (`Copy bar 6 and put it at the end.`), on the real engine: a 12-bar Extend followed by the step is drawn through the real phrase path (the head by the engine, the step in TypeScript, the engine never told the step), the Score has 13 bars with the copy LAST
+// and the original still at bar 6, and the Python the note itself carries returns the same bars.
+test('a copy put in a place on the real engine: 12 bars + `Copy bar 6 and put it at the end.` = 13 bars, the copy last; every gap agrees with applyStructureOps and with the note\'s own Python', async () => {
+  const py = await engine();
+  const twelve: PhraseParams = { ...SOURCE, bars: 12 } as PhraseParams;
+  const source = await drawn(py, vault({ phrase_001: twelve }), twelve);
+  assert.equal(source.length, 12);
+  const steps: StructureOp[] = [{ op: 'copy', runs: [[6, 6]], after: 'end' }, { op: 'copy', runs: [[6, 6]], after: 0 }, { op: 'copy', runs: [[3, 5]], after: 1 }, { op: 'copy', runs: [[2, 2], [9, 9]], after: 8 }, { op: 'copy', runs: [[3, 4]] }];
+  for (const step of steps) {
+    const p = { ...twelve, ops: [step] } as unknown as PhraseParams;
+    const files = vault({ phrase_002: p });
+    const want = applyStructureOps(source, [step as never]);
+    assert.ok(want.ok);
+    const seen: unknown[][] = [];
+    const bars = await drawn(py, files, p, seen);
+    assert.deepEqual(bars, want.ok ? want.items : [], JSON.stringify(step));
+    assert.deepEqual(await ran(py, files), want.ok ? want.items : [], `the note's Python: ${JSON.stringify(step)}`);
+    assert.deepEqual(seen.at(-1), [], `the engine was told no structure step (it got ${JSON.stringify(seen)})`);
+  }
+  const last = await drawn(py, vault({ phrase_002: { ...twelve, ops: [steps[0]] } as unknown as PhraseParams }), { ...twelve, ops: [steps[0]] } as unknown as PhraseParams);
+  assert.equal(last.length, 13); assert.deepEqual(last[12], source[5], 'the copy is last'); assert.deepEqual(last[5], source[5], 'the original stays at bar 6'); assert.deepEqual(last.slice(0, 12), source);
+  assert.match(await refusal(py, vault({ phrase_002: { ...twelve, ops: [{ op: 'copy', runs: [[2, 2]], after: 15 }] } as unknown as PhraseParams }), { ...twelve, ops: [{ op: 'copy', runs: [[2, 2]], after: 15 }] } as unknown as PhraseParams), /after bar 15 asked for, but there are 12 bars\./);
+});

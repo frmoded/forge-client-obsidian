@@ -5,7 +5,7 @@
 //   moveRepair   `Move bar 4 before bar 2.` -> the CHAIN of one-place moves, `Move bar 4 one bar left. Move bar 3 one bar left.` (2026-11-23-1027: it said only the first sentence before), with the hint that says what it did
 // The missing full stop needs no repair of its own (the grammar's splitter adds it): every suggestion is shown WITH its stop. `suggestRepair` offers a candidate ONLY when the caller's reader says the grammar reads it: a guess is never shown.
 import { VERBS } from './phrase-grammar-core.ts';
-import { STRUCTURE_WORDS } from './bar-structure-core.ts';
+import { STRUCTURE_WORDS, structureSentence } from './bar-structure-core.ts';
 import { BAR_FORMS } from './bar-grammar-core.ts';
 import { BAR_WORD_VERBS } from './duplicate-sentence-core.ts';
 import { BAR_NOTE_ATTR } from './selection-tint-dom.ts';
@@ -113,29 +113,86 @@ export function drawnBarNames(pane: ParentNode | null | undefined): string[] | n
 
 /** 2026-11-24-1033: the answer to a sentence that says a bar by its LINK and asks for a copy of it: `copy` (the one position it holds: the grammar's own `Copy bar K.`), `which` (it holds several: ask, in words, never guess), `absent` (it is not in the phrase). */
 /** `message`: what the dialog says (for `copy`, what it would write: said when a waiting line stops the sentence from being added). */
-export type DuplicateByLink = { kind: 'copy'; sentence: string; hint: string; message: string } | { kind: 'which'; message: string } | { kind: 'absent'; message: string };
+export type DuplicateByLink = { kind: 'copy'; sentence: string; hint?: string; message: string } | { kind: 'which'; message: string } | { kind: 'absent'; message: string };
 const LINK_COPY = /^\s*(?:please\b[\s,]*)?(?:duplicate|copy)\s+\[\[([^\[\]|]*)(?:\|[^\[\]]*)?\]\]\s*(?:please\b)?\s*[.!]?\s*$/i;
 const and = (n: number[]): string => (n.length === 1 ? `${n[0]}` : `${n.slice(0, -1).join(', ')} and ${n[n.length - 1]}`);
 /** `please duplicate [[bar_007]]`, `Copy [[bar_007]].`, `duplicate [[bar_007]] please` (ONE sentence, a link of a bar, no number): which position of the drawn Score (`names`: one note name per bar) holds that bar. null = not this shape, or the Score does not say (`names` null or empty): the sentence goes the way it always went. */
 export function duplicateByLink(text: string, names: readonly string[] | null): DuplicateByLink | null {
   const m = LINK_COPY.exec(String(text ?? ''));
-  if (m === null || names === null || names.length === 0) return null;
-  let name = m[1].trim().replace(/\.md$/i, '');
-  const folder = /^([^/]+)\/(.+)$/.exec(name);
-  if (folder !== null) { if (folder[1] !== 'bars') return null; name = folder[2]; }
-  if (name === '' || name.includes('/')) return null;
-  const at = names.flatMap((n, i) => (n === name ? [i + 1] : []));
+  if (m === null) return copyInPlace(String(text ?? ''), names);          // 2026-11-24-1036: a copy that says a PLACE (`Make a copy of [[bar_006]] at the end of the score.`)
+  if (names === null || names.length === 0) return null;
+  const name = bareName(m[1]);
+  if (name === null) return null;
+  const at = positionsOf(name, names);
   const number = /^bar_(.+)$/.exec(name), label = number === null ? `[[${name}]]` : `Bar ${number[1]}`;
   if (at.length === 0) return { kind: 'absent', message: `${label} is not in this phrase.` };
   if (at.length === 1) return { kind: 'copy', sentence: `Copy bar ${at[0]}.`, hint: `${name} is bar ${at[0]} of this phrase.`, message: `${name} is bar ${at[0]} of this phrase, so it would write: Copy bar ${at[0]}.` };
-  const list = at.map((k) => `Copy bar ${k}.`);
-  return { kind: 'which', message: `${label} is bars ${and(at)} of this phrase: which one? Say ${at.length > 4 ? 'Copy bar N. for the one you mean.' : `${list.slice(0, -1).join(', ')} or ${list[list.length - 1]}`}` };
+  return which(label, at, (k) => `Copy bar ${k}.`, 'Copy bar N. for the one you mean.');
+}
+
+/** The question for a bar the Score holds at several positions: each answer in the grammar's words (4 or fewer), else the one pattern. */
+function which(label: string, at: number[], say: (k: number) => string, generic: string): DuplicateByLink {
+  const list = at.map(say);
+  return { kind: 'which', message: `${label} is bars ${and(at)} of this phrase: which one? Say ${at.length > 4 ? generic : `${list.slice(0, -1).join(', ')} or ${list[list.length - 1]}`}` };
+}
+/** The bar name a link says (`bar_007`, `bars/bar_007`, `bar_007.md`); null for a link into another folder or an empty one. */
+function bareName(link: string): string | null {
+  let name = link.trim().replace(/\.md$/i, '');
+  const folder = /^([^/]+)\/(.+)$/.exec(name);
+  if (folder !== null) { if (folder[1] !== 'bars') return null; name = folder[2]; }
+  return name === '' || name.includes('/') ? null : name;
+}
+const positionsOf = (name: string, names: readonly string[]): number[] => names.flatMap((n, i) => (n === name ? [i + 1] : []));
+
+// 2026-11-24-1036: a COPY PUT IN A PLACE, in free words. The grammar says `Copy bar 6 and put it at the end.` (the place words of Extend, Mix and Morph); this reads the few free ways a person says it (a small CLOSED list; the service handles the rest) and writes that sentence:
+// `make a copy of` / `put a copy of` / `copy` / `duplicate` + a bar (`bar 6`, `bars 3 to 5`, `[[bar_006]]`) + `at the end [of the score]`, `to the end of the score`, `after the last bar`, `at the start [of the score]`, `at the beginning`, `after|before bar N`, `after|before [[a bar]]`,
+// `between bars N and M`; an optional `and put it` / `and put them` before the place, `please`, a full stop. A link must be a bar of the drawn Score: one that is not is refused in words, naming it, never guessed (nothing is written, the service is not asked).
+const COPY_HEAD = /^\s*(?:please\b[\s,]*)?(?:(?:make|put)\s+a\s+copy\s+of|(copy|duplicate))\s+/i;
+const COPY_REF = /^(?:\[\[([^\[\]|]*)(?:\|[^\[\]]*)?\]\]|bars?\s+(\d+)(?:\s*(?:to|-)\s*(\d+))?)/i;
+const COPY_FILLER = /^\s*,?\s*(?:and\s+)?(?:(?:put|place)\s+(?:it|them|a\s+copy|the\s+copy)\s+)?/i;
+const COPY_END = /^(?:(?:at|to)\s+the\s+end(?:\s+of\s+(?:the\s+)?(?:score|phrase))?|after\s+the\s+last\s+bar)/i, COPY_START = /^(?:at|to)\s+the\s+(?:start|beginning)(?:\s+of\s+(?:the\s+)?(?:score|phrase))?/i;
+const COPY_BETWEEN = /^between\s+bars?\s+(\d+)\s+and\s+(?:bars?\s+)?(\d+)/i, COPY_TAIL = /^\s*(?:please\b)?\s*[.!]?\s*$/i, PLACE_HINT = /\b(?:at\s+the\s+(?:end|start|beginning)|to\s+the\s+end|after|before|between|put|place)\b/i;
+
+function copyInPlace(text: string, names: readonly string[] | null): DuplicateByLink | null {
+  const head = COPY_HEAD.exec(text), ref = head === null ? null : COPY_REF.exec(text.slice(head[0].length));
+  if (head === null || ref === null) return null;
+  const known = names !== null && names.length > 0, plain = head[1] !== undefined;
+  let rest = text.slice(head[0].length + ref[0].length);
+  if (known && PLACE_HINT.test(rest)) for (const l of text.matchAll(/\[\[([^\[\]|]*)(?:\|[^\[\]]*)?\]\]?/g)) { const n = bareName(l[1]); if (n !== null && positionsOf(n, names).length === 0) return { kind: 'absent', message: `There is no bar named ${n}.` }; }          // a link the Score does not hold: refused, naming it
+  const said: string[] = [];
+  const bar = (link: string, as: (k: number) => string): number | DuplicateByLink | null => {          // the one position a link has in the Score, or the question / refusal in words
+    const n = bareName(link); if (!known || n === null) return null;
+    const at = positionsOf(n, names);
+    if (at.length === 0) return { kind: 'absent', message: `There is no bar named ${n}.` };
+    if (at.length > 1) return which(n.replace(/^bar_/, 'Bar '), at, as, `${as(0).replace(/ \d+/, ' N')} for the one you mean.`);
+    said.push(`${n} is bar ${at[0]}`); return at[0];
+  };
+  let first: number, last: number;
+  if (ref[1] !== undefined) { const k = bar(ref[1], (j) => `Copy bar ${j}.`); if (typeof k !== 'number') return k; first = last = k; }
+  else { first = Number(ref[2]); last = ref[3] === undefined ? first : Number(ref[3]); if (first < 1 || last < first) return null; }
+  rest = rest.replace(COPY_FILLER, '');
+  let after: number | 'end' | undefined;
+  const end = COPY_END.exec(rest), start = COPY_START.exec(rest), between = COPY_BETWEEN.exec(rest), rel = /^(after|before)\s+/i.exec(rest);
+  if (end !== null) { after = 'end'; rest = rest.slice(end[0].length); }
+  else if (start !== null) { after = 0; rest = rest.slice(start[0].length); }
+  else if (between !== null) { if (Number(between[2]) !== Number(between[1]) + 1) return null; after = Number(between[1]); rest = rest.slice(between[0].length); }
+  else if (rel !== null) {
+    const place = COPY_REF.exec(rest.slice(rel[0].length)), before = rel[1].toLowerCase() === 'before';
+    if (place === null || place[3] !== undefined) return null;
+    const k = place[1] !== undefined ? bar(place[1], (j) => `${before ? 'before' : 'after'} bar ${j}`) : Number(place[2]);
+    if (typeof k !== 'number') return k; if (k < 1) return null;
+    after = before ? k - 1 : k; rest = rest.slice(rel[0].length + place[0].length);
+  }
+  if (!COPY_TAIL.test(rest) || (after === undefined && plain)) return null;          // anything else in the sentence is not ours (the service handles the rest); a bare `Copy bar 3.` / `Copy [[bar_007]].` is the grammar's / the first reading's
+  const sentence = structureSentence({ op: 'copy', runs: [[first, last]], ...(after !== undefined ? { after } : {}) });
+  const hint = said.length === 0 ? undefined : `${said.join(' and ')} of this phrase.`;
+  return { kind: 'copy', sentence, ...(hint !== undefined ? { hint } : {}), message: hint === undefined ? `It would write: ${sentence}` : `${hint.slice(0, -1)}, so it would write: ${sentence}` };
 }
 
 /** The repaired text, or null when no repair applies: each sentence on its own (a Move with place words; else its links closed and a typo of its first word mended), every sentence with its full stop. The FIRST hint is kept. */
 export function repairCandidate(text: string, family: RepairFamily, names?: readonly string[] | null): Repair | null {
   const copy = family === 'phrase' ? duplicateByLink(text, names ?? null) : null;          // 2026-11-24-1033: a copy said by its link is the grammar's `Copy bar K.` for the position the drawn Score gives it
-  if (copy !== null) return copy.kind === 'copy' ? { sentence: copy.sentence, hint: copy.hint } : null;
+  if (copy !== null) return copy.kind === 'copy' ? { sentence: copy.sentence, ...(copy.hint !== undefined ? { hint: copy.hint } : {}) } : null;
   const sentences = String(text ?? '').trim().split(/(?<=[.!?])\s+|\n+/).map((x) => x.trim()).filter((x) => x !== '');
   if (sentences.length === 0) return null;
   const verbs = verbsOf(family); let changed = false, hint: string | undefined;

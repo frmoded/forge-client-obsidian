@@ -45,6 +45,7 @@ export const VERBS: ReadonlyArray<{ verb: string; kind: 'extend' | 'mix' | 'morp
   { verb: 'keep', kind: null, example: 'Keep bars 3 to 5 and bar 8.' },
   { verb: 'delete', kind: null, example: 'Delete bars 3 to 5 and bar 8.' },
   { verb: 'copy', kind: null, example: 'Copy bars 3 to 5.' },
+  { verb: 'copy to a place', kind: null, example: 'Copy bar 6 and put it at the end.' },
   { verb: 'move', kind: null, example: 'Move bars 3 to 5 one bar left.' },
   { verb: 'bar replaced', kind: null, example: 'Bar 9 is replaced by [[bar_009]].' },
   { verb: 'threshold', kind: null, example: 'Threshold 40 percent.' },
@@ -251,9 +252,17 @@ export function readStructureStep(f: Scan, afterDensity: boolean): StructureOp |
     addRun(runs, first, last);
     if (runs.length > STRUCTURE_RUNS_MAX) f.failAt(`Expected at most ${STRUCTURE_RUNS_MAX} ranges of bars, but found more.`, at);
     const more = f.comma();
+    const here = f.i;
+    if (verb === 'copy' && placeSegment(f, () => {}).read()) { f.i = here; break; }          // 2026-11-24-1036: `and put it at the end` / `after bar 4` starts here, not another bar
     if (f.kw('and')) continue;
     if (more) continue;
     break;
+  }
+  if (verb === 'copy') {                                                                                // 2026-11-24-1036: Copy takes the place words of Extend, Mix and Morph (`and put it at the end`); no place = the copy goes right after each original, as before
+    let after: number | 'end' | null = null;
+    placeSegment(f, (p) => { after = p; }).read();
+    f.end();
+    return { op: 'copy', runs, ...(after !== null ? { after } : {}) };
   }
   if (verb !== 'move') { f.end(); return { op: verb, runs }; }
   return readMoveDirection(f, runs);

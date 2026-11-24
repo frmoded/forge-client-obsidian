@@ -46,7 +46,11 @@ test('B: the bar is NOT in the phrase: `Bar 007 is not in this phrase.`, nothing
 test('B: not this shape, or the Score does not say: null (the sentence goes the way it always went)', () => {
   assert.equal(duplicateByLink('please duplicate [[bar_007]]', null), null, 'the Score gives no names: unknown, not "absent"');
   assert.equal(duplicateByLink('please duplicate [[bar_007]]', []), null, 'no drawn bar: unknown');
-  for (const s of ['Copy bar 3.', 'Duplicate bar 3.', 'Copy bars 3 to 5.', 'Copy [[bar_007]] after bar 2.', 'Copy [[bar_007]] and [[bar_005]].', 'please duplicate bar_007', 'Copy [[bar_007]]. Delete bar 1.', 'Copy [[phrases/phrase_002]].', 'Copy [[]].', 'duplicate the kick', 'Move [[bar_007]].', 'unduplicate [[bar_007]]']) assert.equal(duplicateByLink(s, NAMES), null, s);
+  for (const s of ['Copy bar 3.', 'Duplicate bar 3.', 'Copy bars 3 to 5.', 'Copy [[bar_007]] and [[bar_005]].', 'please duplicate bar_007', 'Copy [[bar_007]]. Delete bar 1.', 'Copy [[phrases/phrase_002]].', 'Copy [[]].', 'duplicate the kick', 'Move [[bar_007]].', 'unduplicate [[bar_007]]']) assert.equal(duplicateByLink(s, NAMES), null, s);
+});
+// 2026-11-24-1036 (deliberate): `Copy [[bar_007]] after bar 2.` was "not this shape" (null) because Copy had no place words; now it is the copy of the bar the Score says is bar 2, PUT after bar 2 (the grammar's `Copy bar 2 and put it after bar 2.`).
+test('B: 2026-11-24-1036: a copy by link that says a place is read (it was not before: Copy had no place words)', () => {
+  assert.equal((duplicateByLink('Copy [[bar_007]] after bar 2.', NAMES) as { sentence: string }).sentence, 'Copy bar 2 and put it after bar 2.');
 });
 test('B: the sentence it writes is one the grammar READS (Copy bar K.), and the repair offers it with the words that say why', async () => {
   const c = repairCandidate('please duplicate [[bar_007]]', 'phrase', NAMES);
