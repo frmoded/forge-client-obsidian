@@ -6,7 +6,8 @@ import { test } from 'node:test';
 import { EXTEND, lines, phraseWithHead, rig } from './test-support/service-lines-rig.ts';
 import { placeWordSentence } from './did-you-mean-core.ts';
 
-const REPAIR_CARD = /Did you mean: Move bar 4 one bar left\?/;
+// 2026-11-23-1027 (deliberate): the repair is the whole chain (`Move bar 4 one bar left. Move bar 3 one bar left`), it was `Move bar 4 one bar left` alone
+const REPAIR_CARD = /Did you mean: Move bar 4 one bar left\. Move bar 3 one bar left\?/;
 
 test('placeWordSentence: a Move or Copy of bars with before/after place words, in a phrase only; a plain sentence, a typo and other families are not', () => {
   for (const s of ['Move bar 4 before bar 2.', 'Move bar 2 after bar 5.', 'move bar 4 before bar 2', 'Move bars 2 to 3 before bar 5.', 'Copy bars 1 and 2 after bar 4.']) assert.equal(placeWordSentence(s, 'phrase'), true, s);
@@ -29,7 +30,7 @@ test('set up and REFUSING: the one-place repair is the fallback (the service was
   const r = await phraseWithHead(async () => ({ status: 200, json: { ok: false, error: 'I cannot do that with these bars.' } }));
   await r.say('Move bar 4 before bar 2.');
   assert.equal(r.requests.length, 1); assert.ok(r.texts().some((t) => REPAIR_CARD.test(t)), r.texts().join(' | '));
-  assert.deepEqual(r.list(), [EXTEND]); await r.enter(); assert.match(r.list()[1] ?? '', /^Move bar 4 one bar left\./);
+  assert.deepEqual(r.list(), [EXTEND]); await r.enter(); assert.match(r.list()[1] ?? '', /^Move bar 4 one bar left\./); assert.match(r.list()[2] ?? '', /^Move bar 3 one bar left\./);          // 2026-11-23-1027 (deliberate): both moves
 });
 
 test('set up but UNREACHABLE (the call throws): the repair is the fallback', async () => {
@@ -62,7 +63,7 @@ test('B: a service plan applied keeps the driver\'s words on its FIRST line (the
 test('B: a repaired sentence keeps the driver\'s words too', async () => {
   const r = await phraseWithHead(async () => ({ status: 200, json: { ok: false, error: 'no' } }));
   await r.say('Move bar 4 before bar 2.'); await r.enter();
-  assert.deepEqual(r.list(), [EXTEND, `Move bar 4 one bar left.${SAID}`]);
+  assert.deepEqual(r.list(), [EXTEND, `Move bar 4 one bar left.${SAID}`, 'Move bar 3 one bar left.']);          // 2026-11-23-1027 (deliberate): the whole chain, the words on the first line only
 });
 test('B: undo (Cmd/Ctrl+Z in the empty composer) takes the line and its marker off together, and redo puts them back', async () => {
   const r = await phraseWithHead(lines('Move bar 4 one bar left.', 'Move bar 3 one bar left.'));

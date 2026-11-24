@@ -38,6 +38,7 @@ import { append, expireOpen, fromOutcome, memoryStore, openSuggestion, resolveSu
 import { createUndoStack, defaultSeed, drawSeeds, isHeadLine, linesOfParams, planAppend, replayGrammar, splitSaid, withSaid, replay, sentencesOfText, stopNotice, type ListStop, type Plan, type ReplayCtx, type UndoStack } from './sentence-list-core.ts';
 import { listOfNote, writeListNote } from './sentence-list-note-core.ts';
 import { REDO_ID, REDO_LABEL, UNDO_ID, UNDO_LABEL } from './composer-core.ts';
+const GRAMMAR_SAID = /^The grammar did not accept this sentence\s*\([\s\S]*?\)\.\s*/;          // 2026-11-23-1027: the grammar's own line, whole (the old cut stopped at the first full stop INSIDE its quoted words and left a fragment in the "Kept as line N" message)
 const TRANSLATE_ID = '__translate__', TRANSLATE_LABEL = 'Translate the waiting line';          // 2026-11-21-1015 (Part C)
 import { isEmptyNote } from './empty-note-core.ts';
 import { FAMILY_KINDS } from './note-family-core.ts';
@@ -739,26 +740,43 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     if (done.ok === false) { pb(`waiting line not kept: ${done.message}`); return; }
     pb(`kept as a waiting line: line ${before.length + 1}`);
     told.delete(path); set(path, null);
-    say(path, { type: 'notice', message: listModel.waiting.kept(before.length + 1, reason.replace(/^The grammar did not accept this sentence[^.]*\.\s*/, '')) });
+    say(path, { type: 'notice', message: listModel.waiting.kept(before.length + 1, reason.replace(GRAMMAR_SAID, '')) });
+  }
+  /** 2026-11-23-1027 (the driver's retest, addendum 2): a sentence typed while a WAITING line is in the note cannot be applied (later lines wait), but it used to be answered by "Line 2 is waiting" ALONE: the service was never asked and the dialog did not say so.
+   *  Now: the sentence is asked of the service ONCE on entry (against the note as it is before the waiting line) when the service is set up and the grammar does not read it, and the dialog says what the service answered (or why it was not asked) and that nothing was
+   *  added; the same sentence typed again says the line is already waiting (no second call, no identical line). null = the note's stop is not a waiting line (the old message stands). */
+  const blockedSaid = new Map<string, string>();          // path -> `line | waiting line | sentence`: what a waiting line has already blocked and asked about
+  async function blockedByWaiting(path: string, family: ListFamily, text: string, cur: string): Promise<PreviewResult | null> {
+    const list = listOf(cur, family), stop = replayGrammar(list, family, ctxFor(path)).stop;
+    if (stop === null || stop.waiting !== true) return null;
+    const n = stop.index + 1, typed = text.trim(), key = `${n}|${list[stop.index]}|${typed}`, W = listModel.waiting;
+    const fin = (message: string): PreviewResult => { say(path, { type: 'notice', message }); setBoxNote(path, message); return { ok: false, message }; };
+    if (blockedSaid.get(path) === key) { pb(`service not asked: line ${n} is already waiting and this sentence was asked about`); return fin(W.already(n)); }
+    blockedSaid.set(path, key);
+    const notAsked = (why: string): PreviewResult => { pb(`service not asked: ${why}`); return fin(W.blocked(n, typed, W.tail({ kind: 'not-asked', why }))); };
+    if (ports.askPlan === undefined) return notAsked('it is not available in this build.');
+    if (ports.configured?.() === false) return notAsked('it is not set up in this vault.');
+    const reads = await planAppend(list.slice(0, n - 1), family, sentencesOfText(typed, family), ctxFor(path));
+    if (reads.ok === true) return notAsked('the grammar reads it.');
+    if (reads.reason !== 'unreadable') return notAsked(reads.message);
+    const a = await askAtLine(path, family, typed, list, n, cur);
+    ports.trace(askedServiceLine(basename(path), `sentence after waiting line ${n}: ${a.kind}`));
+    if (a.kind === 'not-built') return notAsked(a.message.endsWith('.') ? a.message : `${a.message}.`);
+    return fin(W.blocked(n, typed, W.tail(a.kind === 'lines' ? { kind: 'lines', lines: a.lines } : a)));
   }
   /** The first line of the list the replay stops at (a waiting line or one the grammar cannot read after a hand edit), 1-based; null when every line reads. */
   const translatableLine = (path: string): number | null => {
     const family = familyOfPath(path), text = lastText.get(path); if (family === null || text === undefined) return null;
     const rp = replayGrammar(listOf(text, family), family, ctxFor(path)); return rp.stop !== null && rp.stop.reason === 'unreadable' ? rp.stop.index + 1 : null;
   };
-  /** 2026-11-21-1015: `Translate line N.` - the service is asked for line N ALONE (its words, in lines mode); the answer is a PLAN (the suggestion in the dialog) that REPLACES the line when the person confirms; a refusal changes nothing; no call on save. */
-  async function previewTranslate(path: string, family: ListFamily, n: number, cur: string, typed: string): Promise<PreviewResult> {
-    const refuse = (message: string): PreviewResult => { say(path, { type: 'notice', message }); setBoxNote(path, message); return { ok: false, message }; };
-    const list = listOf(cur, family), line = list[n - 1];
-    if (line === undefined) return refuse(`There is no line ${n}.`);
-    const stopped = replayGrammar(list, family, ctxFor(path)).stop;
-    const words = listModel.waiting.words(line) ?? (stopped !== null && stopped.index === n - 1 ? splitSaid(line).line : null);
-    if (words === null) return refuse(`Line ${n} is already a sentence I can read.`);
-    if (ports.askPlan === undefined || ports.configured?.() === false) return refuse('The sentence service is not set up: add its URL and token in Settings → Forge Actions (Beta).');
+  /** 2026-11-23-1027: the service asked for `words` ALONE, planned against the note as it is BEFORE line `n` of `list` (the lines that come first; the waiting words are not part of the request). Said in the dialog (`Asking the sentence service...`) and traced; the answer is NOT applied here.
+   *  Shared by `Translate line N` and by a sentence typed while a waiting line is in the note. */
+  type LineAsk = { kind: 'not-built'; message: string } | { kind: 'question'; question: string } | { kind: 'refused'; message: string } | { kind: 'lines'; lines: string[]; outcome: Extract<Asked, { ok: true }> };
+  async function askAtLine(path: string, family: ListFamily, words: string, list: string[], n: number, cur: string): Promise<LineAsk> {
     const v = ports.vault();
     const req = family === 'phrase' ? buildPlanRequest({ sentence: words, barNames: ports.barNames(), phraseNames: ports.phraseNames(), ownKey: ports.ownKey?.() })
       : buildFamilyPlanRequest({ family, sentence: words, kitNames: v.kits, phraseNames: ports.phraseNames(), arrangementNames: v.arrangements, compositionNames: v.compositions, note: path.replace(/\.md$/, ''), ownKey: ports.ownKey?.() });
-    if (req.ok === false) return refuse(req.message);
+    if (req.ok === false) return { kind: 'not-built', message: req.message };
     setBoxBusy(path, 'Asking the sentence service...'); say(path, { type: 'asking' }); ports.trace(askingServiceLine(basename(path)));
     let outcome: Asked; let question: string | null = null;
     const head = await replay(list.slice(0, n - 1), family, ctxFor(path)), headNote = writeListNote(cur, basename(path), family, head);          // the note as it is BEFORE line n: the service plans (and the grammar checks) against the lines that come first
@@ -770,10 +788,25 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
       outcome = a; question = 'question' in a && a.question !== undefined ? a.question : null;
     } catch (e) { outcome = { ok: false, message: `Could not reach the transpile service (${(e as Error)?.message ?? e}). Check your connection and Settings → Forge Actions (Beta) → Transpile service URL.` }; }
     setBoxBusy(path, null);
-    if (question !== null) { asked.set(path, { sentence: words, question }); return refuse(`The service asks: ${question}`); }
+    if (question !== null) return { kind: 'question', question };
+    if (outcome.ok === false) return { kind: 'refused', message: outcome.message };
+    return { kind: 'lines', lines: outcome.lines ?? linesOfParams(outcome.params, family), outcome };
+  }
+  /** 2026-11-21-1015: `Translate line N.` - the service is asked for line N ALONE (its words, in lines mode); the answer is a PLAN (the suggestion in the dialog) that REPLACES the line when the person confirms; a refusal changes nothing; no call on save. */
+  async function previewTranslate(path: string, family: ListFamily, n: number, cur: string, typed: string): Promise<PreviewResult> {
+    const refuse = (message: string): PreviewResult => { say(path, { type: 'notice', message }); setBoxNote(path, message); return { ok: false, message }; };
+    const list = listOf(cur, family), line = list[n - 1];
+    if (line === undefined) return refuse(`There is no line ${n}.`);
+    const stopped = replayGrammar(list, family, ctxFor(path)).stop;
+    const words = listModel.waiting.words(line) ?? (stopped !== null && stopped.index === n - 1 ? splitSaid(line).line : null);
+    if (words === null) return refuse(`Line ${n} is already a sentence I can read.`);
+    if (ports.askPlan === undefined || ports.configured?.() === false) return refuse('The sentence service is not set up: add its URL and token in Settings → Forge Actions (Beta).');
+    const a = await askAtLine(path, family, words, list, n, cur);
+    if (a.kind === 'not-built') return refuse(a.message);
+    if (a.kind === 'question') { asked.set(path, { sentence: words, question: a.question }); return refuse(`The service asks: ${a.question}`); }
     asked.delete(path);
-    if (outcome.ok === false) return refuse(`The service refused: ${outcome.message}`);
-    const lines = outcome.lines ?? linesOfParams(outcome.params, family);
+    if (a.kind === 'refused') return refuse(`The service refused: ${a.message}`);
+    const outcome = a.outcome, lines = a.lines;
     if (lines.length === 0) return refuse('The service gave no sentence for that line.');
     const next = [...list.slice(0, n - 1), withSaid(lines[0], words), ...lines.slice(1), ...list.slice(n)];
     const rp = await replay(next, family, ctxFor(path));
@@ -800,16 +833,21 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
       return { ok: true, proposal: { description, via: 'grammar', ...(replaces !== '' ? { replaces } : {}), ...(instant ? { instant: true } : {}) } };
     }
     if (plan.reason === 'loop') { pb(`grammar verdict: accepted, then refused: ${plan.message}`); say(path, { type: 'refused', message: plan.message, by: 'plugin' }); setBoxNote(path, `Refused: ${plan.message}`); return { ok: false, message: `Refused: ${plan.message}` }; }
-    if (plan.reason !== 'unreadable') { say(path, { type: 'notice', message: plan.message }); setBoxNote(path, plan.message); return { ok: false, message: plan.message }; }       // an unreadable line already in the list, or nothing to add: said in plain words
+    if (plan.reason === 'blocked') { const held = await blockedByWaiting(path, family, text, cur); if (held !== null) return held; }          // 2026-11-23-1027: a waiting line is in the note: the service is asked once, and the dialog says what it answered
+    if (plan.reason !== 'unreadable') { pb(`service not asked: ${plan.reason === 'blocked' ? 'a line of the note cannot be read' : plan.reason}`); say(path, { type: 'notice', message: plan.message }); setBoxNote(path, plan.message); return { ok: false, message: plan.message }; }       // an unreadable line already in the list, or nothing to add: said in plain words
     const serviceUp = ports.askPlan !== undefined && ports.configured?.() !== false;
-    const placeWords = serviceUp && listModel.repair.placeWords(text, family);                              // 2026-11-21-1015 (service first, driver "[7]"): place words the grammar cannot read go to the service FIRST; its answer is a plan; the repair below is the fallback
+    const shaped = listModel.repair.placeWords(text, family), nowhere = shaped ? listModel.repair.placeRefusal(text) : null;
+    if (nowhere !== null) { pb('service not asked: the move goes nowhere'); say(path, { type: 'notice', message: nowhere }); setBoxNote(path, nowhere); return { ok: false, message: nowhere }; }          // 2026-11-23-1027: `Move bar 2 before bar 3.`: a plain refusal in words, never a question
+    const placeWords = serviceUp && shaped;                                                                 // 2026-11-21-1015 (service first, driver "[7]"): place words the grammar cannot read go to the service FIRST; its answer is a plan; the repair below is the fallback
+    if (shaped && !serviceUp) pb(`service not asked: ${ports.askPlan === undefined ? 'not available in this build' : 'not set up in this vault'}`);
+    if (shaped && !serviceUp) say(path, { type: 'notice', message: listModel.repair.notAsked(ports.askPlan === undefined) });          // 2026-11-23-1027: the repair that follows is not the service's answer: say the service was not asked
     let viaService: PreviewResult | null = null;
     if (placeWords) { fpHold++; try { viaService = await askTail(path, text, saidRejected(path, text, cur, plan)); } finally { fpHold--; } if (viaService.ok) return viaService; }
     const offered = await listModel.repair.offer(text, family, async (repaired) => (await planAppend(listOf(cur, family), family, sentencesOfText(repaired, family), ctxFor(path))).ok, (ev) => say(path, ev), (t) => fp?.known(t) ?? null);          // 2026-11-20-1002 (DID YOU MEAN): a deterministic repair the grammar reads is offered BEFORE the service is asked; Enter or its button applies the SUGGESTION
-    if (offered !== null) return offered;
+    if (offered !== null) { if (viaService === null) pb('service not asked: a repair mends the sentence'); return offered; }
     if (viaService !== null) fp?.ended(path, text);                                                         // the service refused and no repair mended it: NOW it is a failure (one record)
     const result = viaService ?? await askTail(path, text, saidRejected(path, text, cur, plan));
-    if (result.ok === false) await keepWaiting(path, family, text, result.message.replace(/^The grammar did not accept this sentence[^.]*\.\)?\s*/, ''));          // 2026-11-21-1015 (Part C)
+    if (result.ok === false) await keepWaiting(path, family, text, result.message);          // 2026-11-21-1015 (Part C)
     return result;
   }
   /** 2026-11-19-0970 - the second Enter (or an apply with no preview) in an arrangement or a composition: the same plan, made again against the note as it is NOW, written in one go. */

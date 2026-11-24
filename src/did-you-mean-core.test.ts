@@ -1,7 +1,7 @@
 // 2026-11-20-1002 (DID YOU MEAN) - the pure repairs of a sentence the grammar cannot read. Written RED first. Three deterministic repairs, each a small pure function:
 //   closeLinks   `Play [[phrase_001]` -> `Play [[phrase_001]]` (an unclosed link: one bracket, none, or a name cut by the full stop)
 //   typoOfVerb   `Delet` -> `Delete` (Damerau distance 1 against the verbs of the grammar's own tables; a UNIQUE match only; a word that already IS a verb is never touched)
-//   moveRepair   `Move bar 4 before bar 2.` -> `Move bar 4 one bar left.` plus the hint that Move takes one bar one place at a time (so: say it twice)
+//   moveRepair   `Move bar 4 before bar 2.` -> `Move bar 4 one bar left.` plus the hint that Move takes one bar one place at a time (so: say it twice)   [2026-11-23-1027 (deliberate): now the whole chain, `Move bar 4 one bar left. Move bar 3 one bar left.`; see move-chain.test.ts]
 // and `repairCandidate` (the three in order, each sentence of the text, always with its full stop) and `suggestRepair` (a candidate is offered ONLY when the caller's reader says the grammar reads it: never a guess).
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -86,15 +86,15 @@ test('closeLinks: one bracket closed, none closed after the name, a name before 
 });
 
 // ---- Move with place words ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
-test('moveRepair: before and after another bar are places left or right, said as ONE place, with the count in the hint', () => {
+test('moveRepair: before and after another bar are places left or right, said as the CHAIN of one-place moves (2026-11-23-1027 (deliberate): it said ONE sentence and the hint said "say it twice"), with the count in the hint', () => {
   const r1 = moveRepair('Move bar 4 before bar 2.')!;
-  assert.equal(r1.sentence, 'Move bar 4 one bar left.');
-  assert.equal(r1.hint, 'Move takes one bar one place at a time. Bar 4 before bar 2 is 2 places left: say it twice (the second time for bar 3).');
-  const r2 = moveRepair('Move bar 2 before bar 5.')!; assert.equal(r2.sentence, 'Move bar 2 one bar right.'); assert.match(r2.hint, /is 2 places right: say it twice \(the second time for bar 3\)\.$/);
-  const r3 = moveRepair('Move bar 2 after bar 5.')!; assert.equal(r3.sentence, 'Move bar 2 one bar right.'); assert.match(r3.hint, /is 3 places right: say it 3 times \(the next time for bar 3\)\.$/, JSON.stringify(r3));
-  const r4 = moveRepair('move bar 6 after bar 2')!; assert.equal(r4.sentence, 'Move bar 6 one bar left.'); assert.match(r4.hint, /is 3 places left: say it 3 times/);
-  const one = moveRepair('Move bar 3 before bar 2.')!; assert.equal(one.sentence, 'Move bar 3 one bar left.'); assert.equal(one.hint, 'Move takes one bar one place at a time.');
-  const oneR = moveRepair('Move bar 2 after bar 3.')!; assert.equal(oneR.sentence, 'Move bar 2 one bar right.'); assert.equal(oneR.hint, 'Move takes one bar one place at a time.');
+  assert.equal(r1.sentence, 'Move bar 4 one bar left. Move bar 3 one bar left.');
+  assert.equal(r1.hint, 'Bar 4 before bar 2 is 2 places left: both moves are written.');
+  const r2 = moveRepair('Move bar 2 before bar 5.')!; assert.equal(r2.sentence, 'Move bar 2 one bar right. Move bar 3 one bar right.'); assert.match(r2.hint, /is 2 places right: both moves are written\.$/);
+  const r3 = moveRepair('Move bar 2 after bar 5.')!; assert.equal(r3.sentence, 'Move bar 2 one bar right. Move bar 3 one bar right. Move bar 4 one bar right.'); assert.match(r3.hint, /is 3 places right: all 3 moves are written\.$/, JSON.stringify(r3));
+  const r4 = moveRepair('move bar 6 after bar 2')!; assert.equal(r4.sentence, 'Move bar 6 one bar left. Move bar 5 one bar left. Move bar 4 one bar left.'); assert.match(r4.hint, /is 3 places left: all 3 moves are written/);
+  const one = moveRepair('Move bar 3 before bar 2.')!; assert.equal(one.sentence, 'Move bar 3 one bar left.'); assert.equal(one.hint, 'Bar 3 before bar 2 is 1 place left.');
+  const oneR = moveRepair('Move bar 2 after bar 3.')!; assert.equal(oneR.sentence, 'Move bar 2 one bar right.'); assert.equal(oneR.hint, 'Bar 2 after bar 3 is 1 place right.');
 });
 test('moveRepair: no move at all (the bar would stay where it is), another verb and other shapes are null', () => {
   for (const t of ['Move bar 4 before bar 5.', 'Move bar 4 after bar 3.', 'Move bar 4 before bar 4.', 'Move bar 4 after bar 4.', 'Move bar 2 one bar left.', 'Delete bar 2 before bar 1.', 'Move bars 2 to 3 before bar 1.', 'Move bar 4 before.', '', 'Move bar x before bar 2.']) assert.equal(moveRepair(t), null, t);
@@ -106,7 +106,7 @@ test('repairCandidate: the repairs of the three kinds in one sentence, each sent
   assert.deepEqual(repairCandidate('Delet bar 2.', 'phrase'), { sentence: 'Delete bar 2.' });
   assert.deepEqual(repairCandidate('delet bar 2', 'phrase'), { sentence: 'Delete bar 2.' }, 'a typo and a missing stop: one suggestion');
   assert.deepEqual(repairCandidate('Take [[phrase_001]. Delet bar 2', 'phrase'), { sentence: 'Take [[phrase_001]]. Delete bar 2.' }, 'each sentence on its own');
-  assert.deepEqual(repairCandidate('Move bar 4 before bar 2.', 'phrase'), { sentence: 'Move bar 4 one bar left.', hint: moveRepair('Move bar 4 before bar 2.')!.hint });
+  assert.deepEqual(repairCandidate('Move bar 4 before bar 2.', 'phrase'), { sentence: 'Move bar 4 one bar left. Move bar 3 one bar left.', hint: moveRepair('Move bar 4 before bar 2.')!.hint });          // 2026-11-23-1027 (deliberate): the whole chain
   assert.deepEqual(repairCandidate('Clera kick.', 'bar'), { sentence: 'Clear kick.' });
   assert.equal(repairCandidate('Delete bar 2.', 'phrase'), null, 'nothing to repair');
   assert.equal(repairCandidate('Delete bar 2', 'phrase'), null, 'a missing stop alone is nothing the grammar needs (it adds it): not a repair');
@@ -121,7 +121,7 @@ test('repairCandidate: the verbs of the family, not of another (Clera is a bar t
 });
 test('repairCandidate: a Move with place words is repaired, but the other sentences of the text keep their own repairs; only the FIRST hint is kept', () => {
   const r = repairCandidate('Keap bars 1 to 2. Move bar 4 before bar 2.', 'phrase')!;
-  assert.equal(r.sentence, 'Keep bars 1 to 2. Move bar 4 one bar left.'); assert.match(r.hint!, /^Move takes one bar one place at a time\./);
+  assert.equal(r.sentence, 'Keep bars 1 to 2. Move bar 4 one bar left. Move bar 3 one bar left.'); assert.match(r.hint!, /^Bar 4 before bar 2 is 2 places left/);          // 2026-11-23-1027 (deliberate): the whole chain, the first hint
 });
 
 // ---- the question ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

@@ -2,7 +2,7 @@
 // `Did you mean: <sentence>?` with a button and Enter applies the SUGGESTION (never silently). Three repairs, each a small pure function:
 //   closeLinks   an unclosed link: `Play [[phrase_001]` -> `Play [[phrase_001]]` (one bracket, none and a name cut by the full stop; a name with a space needs its one bracket)
 //   typoOfVerb   a one-letter typo of a verb (Damerau distance 1: one letter added, dropped, changed or two neighbours swapped) against the verbs of the grammar's OWN tables (VERBS, the structure words, the bar forms); a UNIQUE match only
-//   moveRepair   `Move bar 4 before bar 2.` -> `Move bar 4 one bar left.` with the hint that Move takes one bar one place at a time (say it twice)
+//   moveRepair   `Move bar 4 before bar 2.` -> the CHAIN of one-place moves, `Move bar 4 one bar left. Move bar 3 one bar left.` (2026-11-23-1027: it said only the first sentence before), with the hint that says what it did
 // The missing full stop needs no repair of its own (the grammar's splitter adds it): every suggestion is shown WITH its stop. `suggestRepair` offers a candidate ONLY when the caller's reader says the grammar reads it: a guess is never shown.
 import { VERBS } from './phrase-grammar-core.ts';
 import { STRUCTURE_WORDS } from './bar-structure-core.ts';
@@ -67,19 +67,35 @@ export function closeLinks(sentence: string): string {
   return out;
 }
 
-/** `Move bar 4 before bar 2.` / `... after bar 6.`: the bar's way there is some places left or right, and Move takes one bar ONE place at a time: the sentence for one place, and the hint that says how many times. null = not this shape, or the bar would stay where it is. */
+/** 2026-11-23-1027: `Move bar A before bar M.` / `... after bar M.` in words and numbers: how many places the bar moves and which way (n = 0 or less: it stays where it is, or it is asked to go before or after itself). null = not this shape. */
+export function movePlaces(sentence: string): { a: number; m: number; rel: 'before' | 'after'; n: number; dir: 'left' | 'right' } | null {
+  const x = /^\s*move\s+bar\s+(\d+)\s+(before|after)\s+bar\s+(\d+)\s*\.?\s*$/i.exec(String(sentence ?? ''));
+  if (x === null) return null;
+  const a = Number(x[1]), m = Number(x[3]), rel = x[2].toLowerCase() as 'before' | 'after', left = m < a;
+  return { a, m, rel, n: rel === 'before' ? (left ? a - m : m - 1 - a) : (left ? a - m - 1 : m - a), dir: left ? 'left' : 'right' };
+}
+
+/** `Move bar 4 before bar 2.` / `... after bar 6.`: the bar's way there is some places left or right, and Move takes one bar ONE place at a time, so the way is the CHAIN of one-place moves, each sentence for the bar where the moving bar NOW sits (2026-11-23-1027: the repair says them ALL,
+ *  `Move bar 4 one bar left. Move bar 3 one bar left.`, joined as the repair joins sentences, with the hint that says what it did). null = not this shape, or the bar would stay where it is (`placeRefusal` says that in words). */
 export function moveRepair(sentence: string): { sentence: string; hint: string } | null {
-  const m = /^\s*move\s+bar\s+(\d+)\s+(before|after)\s+bar\s+(\d+)\s*\.?\s*$/i.exec(String(sentence ?? ''));
-  if (m === null) return null;
-  const a = Number(m[1]), b = Number(m[3]), rel = m[2].toLowerCase();
-  const left = b < a, n = rel === 'before' ? (left ? a - b : b - 1 - a) : (left ? a - b - 1 : b - a);
-  if (!(n >= 1)) return null;
-  const dir = left ? 'left' : 'right', one = 'Move takes one bar one place at a time.';
+  const p = movePlaces(sentence);
+  if (p === null || !(p.n >= 1)) return null;
+  const { a, m, rel, n, dir } = p, step = dir === 'left' ? -1 : 1;
   return {
-    sentence: `Move bar ${a} one bar ${dir}.`,
-    hint: n === 1 ? one : `${one} Bar ${a} ${rel} bar ${b} is ${n} places ${dir}: say it ${n === 2 ? 'twice' : `${n} times`} (the ${n === 2 ? 'second' : 'next'} time for bar ${left ? a - 1 : a + 1}).`,
+    sentence: Array.from({ length: n }, (_, i) => `Move bar ${a + step * i} one bar ${dir}.`).join(' '),
+    hint: `Bar ${a} ${rel} bar ${m} is ${n} place${n === 1 ? '' : 's'} ${dir}${n === 1 ? '' : n === 2 ? ': both moves are written' : `: all ${n} moves are written`}.`,
   };
 }
+
+/** 2026-11-23-1027: a move to the place the bar already is in (`Move bar 2 before bar 3.`) or before or after itself is a plain refusal in words, never a question and never asked of the service; null = it is a move, or not this shape. */
+export function placeRefusal(sentence: string): string | null {
+  const p = movePlaces(sentence);
+  if (p === null || p.n >= 1) return null;
+  return p.a === p.m ? `Bar ${p.a} cannot go ${p.rel} itself.` : `Bar ${p.a} is already ${p.rel} bar ${p.m}: nothing to move.`;
+}
+
+/** 2026-11-23-1027: the repair that follows a place-word sentence is not the service's answer: the dialog says the service was NOT asked, and why. */
+export const notAskedNote = (noService: boolean): string => (noService ? 'The sentence service is not available in this build, so it was not asked.' : 'The sentence service is not set up in this vault, so it was not asked. Add its URL and token in Settings → Forge Actions (Beta).');
 
 /** 2026-11-21-1015 (service first): a PHRASE sentence whose verb the grammar knows but whose place words it cannot read: a Move or Copy of bars with `before bar N` / `after bar N` (one sentence). Such a sentence is asked of the sentence service FIRST when it is set up; the repair above stays the fallback. */
 export function placeWordSentence(text: string, family: RepairFamily): boolean {

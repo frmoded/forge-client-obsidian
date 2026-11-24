@@ -111,7 +111,7 @@ export interface ListModel {
     apply: typeof import('./typed-step-core.ts').applyTyped;
   };
   /** 2026-11-20-1002: did-you-mean-core.ts: the deterministic repair of a sentence the grammar cannot read (`Did you mean: ...?`), said in the dialog and handed back as the composer's proposal; null = none. Lean: always null (the bare message stays). */
-  repair: { offer: typeof import('./did-you-mean-core.ts').offerRepair; placeWords: typeof import('./did-you-mean-core.ts').placeWordSentence };          // 2026-11-21-1015: placeWords: a sentence with place words the grammar cannot read goes to the service FIRST (lean: never)
+  repair: { offer: typeof import('./did-you-mean-core.ts').offerRepair; placeWords: typeof import('./did-you-mean-core.ts').placeWordSentence; placeRefusal: typeof import('./did-you-mean-core.ts').placeRefusal; notAsked: typeof import('./did-you-mean-core.ts').notAskedNote };          // 2026-11-21-1015: placeWords: a sentence with place words the grammar cannot read goes to the service FIRST (lean: never)
   /** 2026-11-20-1004z (4a): the undo-trigger trace (undo-trace-core.ts): which way in asked for each undo or redo, in memory, readable as `window.__forgeUndoTrace`. Lean: records nothing. */
   trace: { create: typeof import('./undo-trace-core.ts').createUndoTrace };
   /** 2026-11-20-1005 (F9): a renamed note's generated description follows the new name (rename-follow-core.ts). Lean: nothing (it has none of these notes). */
@@ -121,6 +121,8 @@ export interface ListModel {
   waiting: {
     line: typeof import('./waiting-line-core.ts').waitingLine; words: typeof import('./waiting-line-core.ts').waitingWords; translate: typeof import('./waiting-line-core.ts').translateRequest;
     kept: typeof import('./waiting-line-core.ts').keptMessage; is: typeof import('./waiting-line-core.ts').isWaitingLine;
+    /** 2026-11-23-1027: the words for a sentence typed while a waiting line is in the note (lean: never reached) */
+    already: typeof import('./waiting-line-core.ts').alreadyWaiting; blocked: typeof import('./waiting-line-core.ts').blockedMessage; tail: typeof import('./waiting-line-core.ts').blockedTail;
   };
   /** 2026-11-22-1016 (11i): the script as the third entry point (script-edit-core.ts). `on` is false in lean: a hand-edited Recipe is applied at once, as before. */
   script: { on: boolean; stale: typeof import('./script-edit-core.ts').staleMessage; held: typeof import('./script-edit-core.ts').heldMessage; askOnce: string; labels: typeof import('./script-edit-core.ts').SCRIPT_LABELS; rewrite: typeof import('./script-edit-core.ts').rewriteFromScript; forge: typeof import('./script-edit-core.ts').forgeText };

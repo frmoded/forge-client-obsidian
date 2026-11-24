@@ -26,3 +26,11 @@ export function translateRequest(text: string): { n: number } | null {
 
 /** What the dialog says when a sentence was kept as line `n`: where, why, how to translate it, how to take it back. */
 export const keptMessage = (n: number, reason: string): string => `Kept as line ${n}, waiting for a translation.${reason.trim() === '' ? '' : ` ${reason.trim()}`} Say "Translate line ${n}." to ask the service again; with the box empty, Cmd/Ctrl+Z takes it back.`;
+
+/** 2026-11-23-1027 (the driver's retest, addendum 2): what the dialog says when a sentence is typed while line `n` WAITS (later lines wait: it is not added). `already`: the same sentence a second time. `blocked`: the sentence, the fact that nothing was added, `tail` (what the service answered, or why it was not asked) and the way out. */
+export const alreadyWaiting = (n: number): string => `Line ${n} is already waiting; say "Translate line ${n}."`;
+export const blockedMessage = (n: number, typed: string, tail: string): string => `Line ${n} is waiting for a translation, so "${typed}" was not added. ${tail} Say "Translate line ${n}." first (with the box empty, Cmd/Ctrl+Z takes line ${n} back), then say it again.`;
+/** The tail: why the service was not asked, or what it answered (a question, a refusal, the lines it would write). */
+export const blockedTail = (a: { kind: 'not-asked'; why: string } | { kind: 'question'; question: string } | { kind: 'refused'; message: string } | { kind: 'lines'; lines: readonly string[] }): string => (
+  a.kind === 'not-asked' ? `The sentence service was not asked: ${a.why}` : a.kind === 'question' ? `The service asks: ${a.question}` : a.kind === 'refused' ? `The service refused: ${a.message}`
+    : a.lines.length === 0 ? 'The service gave no sentence for it.' : `The service would write it as: ${a.lines.join(' ')}`);

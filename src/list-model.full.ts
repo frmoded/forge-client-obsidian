@@ -16,12 +16,12 @@ import { LIST_MODEL_SENTINEL_DUPLICATE_SENTENCE_CORE } from './duplicate-sentenc
 import { LIST_MODEL_SENTINEL_DUPLICATE_NOTE_CORE } from './duplicate-note-core.ts';
 import { LIST_MODEL_SENTINEL_DUPLICATE_UNDO_CORE } from './duplicate-undo-core.ts';
 import { LIST_MODEL_SENTINEL_PHRASE_STEPS_LINEAGE_CORE, annotateWithSteps, stepLineageOf } from './phrase-steps-lineage-core.ts';
-import { LIST_MODEL_SENTINEL_DID_YOU_MEAN_CORE, offerRepair, placeWordSentence } from './did-you-mean-core.ts';
+import { LIST_MODEL_SENTINEL_DID_YOU_MEAN_CORE, notAskedNote, offerRepair, placeRefusal, placeWordSentence } from './did-you-mean-core.ts';
 import { LIST_MODEL_SENTINEL_TYPED_STEP_CORE, applyTyped, previewTyped } from './typed-step-core.ts';
 import { LIST_MODEL_SENTINEL_UNDO_TRACE_CORE, createUndoTrace } from './undo-trace-core.ts';
 import { LIST_MODEL_SENTINEL_RENAME_FOLLOW_CORE, followRenamedDescription } from './rename-follow-core.ts';
 import { ASK_ONCE, LIST_MODEL_SENTINEL_SCRIPT_EDIT_CORE, SCRIPT_LABELS, forgeText, heldMessage, rewriteFromScript, staleMessage } from './script-edit-core.ts';
-import { LIST_MODEL_SENTINEL_WAITING_LINE_CORE, isWaitingLine, keptMessage, translateRequest, waitingLine, waitingWords } from './waiting-line-core.ts';
+import { LIST_MODEL_SENTINEL_WAITING_LINE_CORE, alreadyWaiting, blockedMessage, blockedTail, isWaitingLine, keptMessage, translateRequest, waitingLine, waitingWords } from './waiting-line-core.ts';
 import { LIST_MODEL_SENTINEL_DIALOG_FOLLOW_CORE, dialogDeleted, dialogFresh, dialogPrune, dialogRenamed, dialogStamp, noteCtimeOf } from './dialog-follow-core.ts';
 import { LIST_MODEL_SENTINEL_RENAME_DESCRIPTION_CORE } from './rename-description-core.ts';
 import { LIST_MODEL_SENTINEL_FAILED_PROMPT_CORE } from './failed-prompt-core.ts';
@@ -43,10 +43,10 @@ export const listModel: ListModel = {
   duplicate: { readActionText, barWordVerb, barNumberOf, barInsertion, linkInsertion, idParts, resolveDuplicateTarget, duplicatePreviewLine, copyNoteText, createdLine, duplicateNote, undoCopy },
   steps: { annotate: annotateWithSteps, lineageOf: stepLineageOf },
   typed: { preview: previewTyped, apply: applyTyped },
-  repair: { offer: offerRepair, placeWords: placeWordSentence },
+  repair: { offer: offerRepair, placeWords: placeWordSentence, placeRefusal, notAsked: notAskedNote },
   trace: { create: createUndoTrace },          // 2026-11-20-1004z
   renamed: { follow: followRenamedDescription },          // 2026-11-20-1005 (F9)
-  waiting: { line: waitingLine, words: waitingWords, translate: translateRequest, kept: keptMessage, is: isWaitingLine },          // 2026-11-21-1015 (Part C)
+  waiting: { line: waitingLine, words: waitingWords, translate: translateRequest, kept: keptMessage, is: isWaitingLine, already: alreadyWaiting, blocked: blockedMessage, tail: blockedTail },          // 2026-11-21-1015 (Part C)
   script: { on: true, stale: staleMessage, held: heldMessage, askOnce: ASK_ONCE, labels: SCRIPT_LABELS, rewrite: rewriteFromScript, forge: forgeText },          // 2026-11-22-1016 (11i)
   dialogs: { renamed: dialogRenamed, deleted: dialogDeleted, ctime: noteCtimeOf, fresh: dialogFresh, stamp: dialogStamp, prune: dialogPrune },          // 2026-11-21-1011
   review: { create: createReview, track: createTracker },          // 2026-11-20-1004
