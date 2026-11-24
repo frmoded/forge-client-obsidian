@@ -88,9 +88,8 @@ export interface ListModel {
   /** duplicate-sentence-core.ts, duplicate-note-core.ts, duplicate-undo-core.ts: the composer's action sentences and the bar words. Lean: no sentence is an action, nothing can be copied. */
   duplicate: {
     readActionText: typeof import('./duplicate-sentence-core.ts').readActionText;
-    barWordVerb: typeof import('./duplicate-sentence-core.ts').barWordVerb;
     barNumberOf: typeof import('./duplicate-sentence-core.ts').barNumberOf;
-    barInsertion: typeof import('./duplicate-sentence-core.ts').barInsertion;
+    barClickText: typeof import('./duplicate-sentence-core.ts').barClickText;          // 2026-11-24-1034: what a click on a phrase bar writes (barWordVerb and barInsertion, 2026-11-19-0996b, went with the "first word" rule)
     linkInsertion: typeof import('./duplicate-sentence-core.ts').linkInsertion;
     idParts: typeof import('./duplicate-sentence-core.ts').idParts;
     resolveDuplicateTarget: typeof import('./duplicate-sentence-core.ts').resolveDuplicateTarget;

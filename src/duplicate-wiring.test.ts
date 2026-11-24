@@ -193,7 +193,7 @@ test('duplicateClick (2026-11-19-0996b, deliberate): with any text that is not a
   const r = rig(); await r.ready(); r.type('Please duplicate');
   const done = await r.ctl.duplicateClick(r.path, 'bars/bar_007', 4); await r.flush();
   assert.equal(done.ok, true);
-  assert.equal(r.field().value, 'Please duplicate [[bar_007]]');
+  assert.equal(r.field().value, 'Please duplicate bar 4', '2026-11-24-1034 (deliberate): the POSITION (it was the link [[bar_007]])');
   assert.ok(win.document.activeElement === r.field(), 'focus is back in the field');
   assert.equal(r.suggestion(), ''); assert.deepEqual(r.buttons(), []);
   assert.equal(r.ctl.duplicateArmed(r.path), true, 'any text arms the click now (0992a, deliberate: it was false: a normal click pinned again); the next click would add a second link');
@@ -204,20 +204,23 @@ test('duplicateClick (2026-11-19-0996b, deliberate): with any text that is not a
 });
 
 test('duplicateClick: a click on a note of a phrase (a transform\'s bar) gives the PHRASE\'s link (2026-11-19-0996b, deliberate: with "Foo"; "Duplicate" gives the number); a bar with no known source, and a kit, say so in words and change nothing', async () => {
-  const r = rig(); await r.ready(); r.type('Foo');
+  const r = rig(); await r.ready(); r.type('Take');          // 2026-11-24-1034 (deliberate): it was "Foo": a plain text now gets the bar's position, a link goes after `Take` or `replaced by`
   await r.ctl.duplicateClick(r.path, 'phrases/phrase_008', 2); await r.flush();
-  assert.equal(r.field().value, 'Foo [[phrase_008]]');
-  const r2 = rig(); await r2.ready(); r2.type('Foo');
+  assert.equal(r.field().value, 'Take [[phrase_008]]');
+  const r2 = rig(); await r2.ready(); r2.type('Take');
   const none = await r2.ctl.duplicateClick(r2.path, null, 2); await r2.flush();
-  assert.equal(none.ok, false); assert.match(none.message, /which note made that bar/i); assert.equal(r2.field().value, 'Foo');
+  assert.equal(none.ok, false); assert.match(none.message, /which note made that bar/i); assert.equal(r2.field().value, 'Take');
   const kit = await r2.ctl.duplicateClick(r2.path, 'kits/rock', 2); await r2.flush();
-  assert.equal(kit.ok, false); assert.equal(r2.field().value, 'Foo'); assert.deepEqual(r2.creates, []);
+  assert.equal(kit.ok, false); assert.equal(r2.field().value, 'Take'); assert.deepEqual(r2.creates, []);
+  const pos = rig(); await pos.ready(); pos.type('Foo'); assert.equal((await pos.ctl.duplicateClick(pos.path, null, 2)).ok, true); assert.equal(pos.field().value, 'Foo bar 2', 'a plain text needs no note: the bar\'s position is enough');
 });
 
 // 2026-11-19-0992a (deliberate): 0992 said a click with other text in the field does nothing ("Keep bars 1 to 2." stayed as it was); now it inserts the link (duplicate-followups-wiring.test.ts); an EMPTY composer still does nothing (the Score pins).
-test('duplicateClick with an EMPTY composer does nothing (the Score pins; defence in depth), and with no composer open it says so', async () => {
+// 2026-11-24-1034 (deliberate): an EMPTY phrase composer now gets `bar K` (and the Score still pins); a click that cannot name a bar number writes nothing and says so; a note with no composer open still says so.
+test('duplicateClick with an EMPTY composer writes `bar K` when the click names the bar (the Score pins too), nothing when it cannot, and with no composer open it says so', async () => {
   const r = rig(); await r.ready(); r.type('');
   const d = await r.ctl.duplicateClick(r.path, 'bars/bar_007'); assert.equal(d.ok, false); assert.equal(r.field().value, '');
+  const k = await r.ctl.duplicateClick(r.path, 'bars/bar_007', 5); assert.deepEqual(k, { ok: true, message: 'Added bar 5 to the composer.' }); assert.equal(r.field().value, 'bar 5');
   const gone = await r.ctl.duplicateClick('phrases/other.md', 'bars/bar_007'); assert.equal(gone.ok, false);
 });
 

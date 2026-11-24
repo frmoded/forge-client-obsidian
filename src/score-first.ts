@@ -593,6 +593,7 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
       plugin.register(registerBarSelectionHost({
         appendLine: (path, sentence) => descriptions.appendLine(path, sentence),
         duplicateArmed: (path) => descriptions.duplicateArmed(path),                                       // 2026-11-19-0992: the composer says "Duplicate": the next click on a bar copies it, it does not pin
+        duplicateEmpty: (path) => descriptions.duplicateEmpty(path),                                       // 2026-11-24-1034 (R2): an EMPTY phrase composer: the click writes `bar K` and still pins
         duplicateClick: (path, noteId, bar) => descriptions.duplicateClick(path, noteId, bar),
         makePhrase: (params) => {
           // 2026-11-19-0975: what this action wrote (the text and the modification time of the new note), so a Cancel on the "Note title" dialog can take the note back (new-note-cancel-core.ts) and only an untouched one

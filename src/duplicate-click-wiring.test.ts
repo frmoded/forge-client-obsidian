@@ -45,7 +45,7 @@ async function rig(phrase: PhraseParams, opts: { host?: boolean; composer?: bool
   }, {}));
   const off = opts.host === false ? () => {} : registerBarSelectionHost({
     appendLine: (p, s) => ctl.appendLine(p, s), makePhrase: async () => ({ ok: true as const, path: 'phrases/phrase_099.md' }),
-    duplicateArmed: (p) => ctl.duplicateArmed(p), duplicateClick: (p, id, bar) => ctl.duplicateClick(p, id, bar),      // 2026-11-19-0996b (deliberate): the bar's number rides along, as score-first.ts registers it
+    duplicateArmed: (p) => ctl.duplicateArmed(p), duplicateEmpty: (p) => ctl.duplicateEmpty(p), duplicateClick: (p, id, bar) => ctl.duplicateClick(p, id, bar),      // 2026-11-19-0996b (deliberate): the bar's number rides along, as score-first.ts registers it
   });
   const ports: PhraseMountPorts = {
     path: notePath, title: 'phrase_020', plan: 'score',
@@ -124,11 +124,11 @@ test('Enter on the preview creates the copy (bars/bar_010: one past the highest)
   } finally { r.done(); }
 });
 
-test('a TRANSFORM\'s bar was taken from a phrase: the link click gives that phrase\'s name (2026-11-19-0996b (deliberate): with "Foo", it was "Duplicate"), the typed Duplicate says "to a new phrase"', async () => {
+test('a TRANSFORM\'s bar was taken from a phrase: the link click gives that phrase\'s name (2026-11-19-0996b (deliberate): with "Foo", it was "Duplicate"; 2026-11-24 (deliberate): with "Take", where a line needs a link: "Foo" now gets the bar\'s position), the typed Duplicate says "to a new phrase"', async () => {
   const r = await rig(TRANSFORM);
   try {
     assert.equal(r.bars().length, 8);
-    for (const i of [0, 4, 7]) { r.type('Foo'); r.click(r.bars()[i]); await r.flush(); assert.equal(r.field().value, 'Foo [[phrase_006]]', `bar ${i + 1}`); }
+    for (const i of [0, 4, 7]) { r.type('Take'); r.click(r.bars()[i]); await r.flush(); assert.equal(r.field().value, 'Take [[phrase_006]]', `bar ${i + 1}`); }
     r.type('Duplicate [[phrase_006]].'); await r.press({ key: 'Enter' }); assert.equal(r.suggestion(), 'Copy [[phrase_006]] to a new phrase.'); await r.press({ key: 'Escape' });
     assert.deepEqual(r.pins, []);
   } finally { r.done(); }
@@ -140,12 +140,13 @@ test('the rule the click uses is the notes pane\'s (pinnedNoteFor): a morph\'s b
 });
 
 // 2026-11-19-0992a (deliberate): 0992 pinned for 'Keep bars 1 to 2.' and 'Duplicate bars' too (three clicks, three pins); now only the EMPTY composer pins (1 pin); the other two insert their link (the new tests below).
-test('in every OTHER state a click on a bar is what it was: the composer empty pins; a menu selection (Shift-click) is the selection gesture even while text is in the composer', async () => {
+// 2026-11-24-1034 (deliberate): the EMPTY composer's click also writes `bar 2` (and still pins: one pin); any other text gets the bar's POSITION (` bar 3`), no longer the source link (that is for `Take`, `replaced by`: duplicate click tests below).
+test('in every OTHER state a click on a bar is what it was: the composer empty pins (and, 1034, writes `bar 2`); a menu selection (Shift-click) is the selection gesture even while text is in the composer', async () => {
   const r = await rig(FORKED);
   try {
-    r.type(''); r.click(r.bars()[1]); await r.flush(); assert.equal(r.field().value, '', 'the composer text is untouched'); assert.equal(r.pins.length, 1, 'one click, one pin');
+    r.type(''); r.click(r.bars()[1]); await r.flush(); assert.equal(r.field().value, 'bar 2', '2026-11-24-1034 (deliberate): the empty composer gets the position (it stayed empty)'); assert.equal(r.pins.length, 1, 'one click, one pin');
     for (const [i, t] of ['Make it 8 bars long.', 'Foo'].entries()) { r.type(t);       // 2026-11-19-0996b (deliberate): the texts were 'Keep bars 1 to 2.' and 'Duplicate bars', bar words now (their click inserts a bar number: bar-words-click-wiring.test.ts)
-       r.click(r.bars()[i + 2]); await r.flush(); assert.equal(r.field().value, `${t} [[bar_009]]`.replace('bar_009', i === 0 ? 'bar_009' : 'bar_005'), `${t}: the link goes in (0992a, deliberate: it used to pin)`); }
+       r.click(r.bars()[i + 2]); await r.flush(); assert.equal(r.field().value, `${t} bar ${i + 3}`, `${t}: the POSITION goes in (0992a, deliberate: it used to pin; 2026-11-24-1034, deliberate: it was the source link)`); }
     assert.equal(r.pins.length, 1, 'no more pins');
     r.type('Duplicate'); r.click(r.bars()[2], { shiftKey: true }); r.click(r.bars()[4], { shiftKey: true }); await r.flush();
     assert.equal(r.pins.length, 1, 'a Shift-click is the selection gesture even while the word is in the composer'); assert.equal(r.count(), '3 bars selected: bars 3 to 5'); assert.equal(r.field().value, 'Duplicate');
@@ -153,13 +154,13 @@ test('in every OTHER state a click on a bar is what it was: the composer empty p
 });
 
 // ---- 2026-11-19-0992a (R1): a click inserts the link after ANY typed text (the real phrase tab, the real composer) ------------------------------------------------------------------------------------------
-test('R1: with "Foo" in the field a plain click on ANY bar of an extend with two forks inserts " [[name]]" (the note that made THAT bar), no full stop, no preview, focus in the field, NOTHING pinned, nothing created', async () => {
+test('R1: with "Take" in the field (2026-11-24-1034, deliberate: it was "Foo": a plain text now gets the bar\'s position) a plain click on ANY bar of an extend with two forks inserts " [[name]]" (the note that made THAT bar), no full stop, no preview, focus in the field, NOTHING pinned, nothing created', async () => {
   const r = await rig(FORKED);
   try {
     const expected = ['bar_005', 'bar_005', 'bar_009', 'bar_005', 'bar_005', 'bar_002', 'bar_005', 'bar_005'];
     for (let i = 0; i < 8; i++) {
-      r.type('Foo'); r.click(r.bars()[i]); await r.flush();
-      assert.equal(r.field().value, `Foo [[${expected[i]}]]`, `bar ${i + 1}`);
+      r.type('Take'); r.click(r.bars()[i]); await r.flush();
+      assert.equal(r.field().value, `Take [[${expected[i]}]]`, `bar ${i + 1}`);
       assert.ok(win.document.activeElement === r.field(), `bar ${i + 1}: focus is back in the field`);
       assert.equal(r.suggestion(), '', `bar ${i + 1}: no preview`); assert.deepEqual(r.buttons(), []);
     }
@@ -171,19 +172,20 @@ test('R1: the link goes at the CARET of the field, not at the end', async () => 
   const r = await rig(FORKED);
   try {
     r.type('Make it 8 bars long.'); r.field().setSelectionRange(4, 4); r.click(r.bars()[2]); await r.flush();       // 2026-11-19-0996b (deliberate): it was 'Keep bars 1 to 2.' (Keep is a bar word now)
-    assert.equal(r.field().value, 'Make [[bar_009]] it 8 bars long.'); assert.deepEqual(r.pins, []);
+    assert.equal(r.field().value, 'Make bar 3 it 8 bars long.', '2026-11-24-1034 (deliberate): the position (it was the link [[bar_009]])'); assert.deepEqual(r.pins, []);
+    r.type('Bar 3 is replaced by it.'); r.field().setSelectionRange(20, 20); r.click(r.bars()[2]); await r.flush(); assert.equal(r.field().value, 'Bar 3 is replaced by [[bar_009]] it.', 'where the line needs a link the link still goes at the caret');
   } finally { r.done(); }
 });
 
-test('R1: an EMPTY composer: a click pins as ever (P3: byte for byte; the field stays empty); a transform\'s bar gives its phrase; Shift and Ctrl/Cmd clicks are the selection gestures with text in the field', async () => {
+test('R1: an EMPTY composer: a click pins as ever (2026-11-24-1034, deliberate: and writes `bar 2`: the field used to stay empty); a transform\'s bar gives its phrase after `Take`; Shift and Ctrl/Cmd clicks are the selection gestures with text in the field', async () => {
   const r = await rig(FORKED);
   try {
-    r.type(''); r.click(r.bars()[1]); await r.flush(); assert.equal(r.pins.length, 1); assert.equal(r.field().value, '');
+    r.type(''); r.click(r.bars()[1]); await r.flush(); assert.equal(r.pins.length, 1); assert.equal(r.field().value, 'bar 2');
     r.type('Foo'); r.click(r.bars()[2], { shiftKey: true }); r.click(r.bars()[4], { ctrlKey: true }); await r.flush();
     assert.equal(r.pins.length, 1); assert.equal(r.field().value, 'Foo', 'a selection gesture adds no link');
   } finally { r.done(); }
   const t = await rig(TRANSFORM);
-  try { t.type('Foo'); t.click(t.bars()[3]); await t.flush(); assert.equal(t.field().value, 'Foo [[phrase_006]]'); assert.deepEqual(t.pins, []); } finally { t.done(); }
+  try { t.type('Take'); t.click(t.bars()[3]); await t.flush(); assert.equal(t.field().value, 'Take [[phrase_006]]'); assert.deepEqual(t.pins, []); } finally { t.done(); }
 });
 
 test('R1: "Duplicate" is a bar word since 0996b (deliberate: it was 0992\'s " [[bar_005]]." with the full stop and the usual preview): " bar 2", no preview', async () => {
@@ -205,7 +207,8 @@ test('P3: a tab with no host registered, and a tab whose composer is not there, 
 const SRC = (f: string) => fs.readFileSync(path.join(import.meta.dirname, f), 'utf8');
 test('MECHANISM PIN: the plugin registers the two host methods on the description controller; the three phrase inspectors (extend/transform, mix, morph) carry the copy click and it asks pinnedNoteFor; nobody else passes it (P3)', () => {
   const first = SRC('score-first.ts');
-  assert.match(first, /duplicateArmed: \(path\) => descriptions\.duplicateArmed\(path\)/); assert.match(first, /duplicateClick: \(path, noteId, bar\) => descriptions\.duplicateClick\(path, noteId, bar\)/);       // 2026-11-19-0996b (deliberate): the bar's number rides along
+  assert.match(first, /duplicateArmed: \(path\) => descriptions\.duplicateArmed\(path\)/); assert.match(first, /duplicateEmpty: \(path\) => descriptions\.duplicateEmpty\(path\)/);          // 2026-11-24-1034 (deliberate): the empty composer's click writes `bar K` (the host method)
+ assert.match(first, /duplicateClick: \(path, noteId, bar\) => descriptions\.duplicateClick\(path, noteId, bar\)/);       // 2026-11-19-0996b (deliberate): the bar's number rides along
   const dom = SRC('phrase-dom.ts');
   assert.equal((dom.match(/copyClick: copyClickPort\(\),/g) ?? []).length, 3, 'extend (and transform, which shares its inspector), mix and morph');
   assert.match(dom, /pinnedNoteFor\(e\.prov\)[\s\S]{0,200}duplicateClick|duplicateClick[\s\S]{0,200}pinnedNoteFor/);

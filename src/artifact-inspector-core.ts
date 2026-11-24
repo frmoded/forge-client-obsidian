@@ -63,7 +63,7 @@ export interface ArtifactInspectorOptions {
   /** 2026-11-19-0992 (opt-in, like `selectBars`: this inspector is shared with the bar's Beat Box tab of EVERY vault, P3): the COPY CLICK. While `armed()` says yes (the phrase tab's composer says "Duplicate"), the next PLAIN click on a bar - on a drawn part or inside
    *  the bar's box - does not pin it: `onBar(entry)` is told which element it was, and the pin stays where it was. Asked at the click itself. Every other click is what it was: not armed, a click on empty space (it unpins), a Shift-click and a Ctrl/Cmd-click
    *  (the selection gestures), the click that ends a drag, a click on the player. Absent = no question is ever asked. */
-  copyClick?: { armed(): boolean; onBar(entry: InspectorEntry): void };
+  copyClick?: { armed(): boolean; onBar(entry: InspectorEntry): void; /** 2026-11-24-1034 (R2): true = a plain click ALSO calls `onBar` (it writes into the empty composer) and then pins as ever. Absent = it only pins. */ alsoPin?(): boolean };
 }
 
 export interface ArtifactInspector {
@@ -276,6 +276,7 @@ export function attachArtifactInspector(opts: ArtifactInspectorOptions): Artifac
       opts.copyClick.onBar(entry(el.id));
       return;
     }
+    if (el && opts.copyClick?.alsoPin?.() === true && !(e as MouseEvent).shiftKey && !(e as MouseEvent).ctrlKey && !(e as MouseEvent).metaKey) opts.copyClick.onBar(entry(el.id));          // 2026-11-24-1034 (R2): the composer is EMPTY: the click writes `bar K` there (the port) AND pins the bar below, as ever
     setPinned(el ? el.id : null);                          // a click on empty space inside the root (and in no bar's box) unpins
     opts.trace?.(`[forge-pin] click ${clickKind(e.target)} -> ${el ? (opts.pinLabel ? opts.pinLabel(el.id) : el.id) : 'none'} (${drawn ? 'on the bar' : el ? "inside the bar's box" : 'not on a bar'})`);
   };

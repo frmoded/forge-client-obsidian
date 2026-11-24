@@ -265,6 +265,8 @@ export function mountPromptBox(parent: HTMLElement, ports: PromptBoxPorts, initi
   function insertAtCaret(insert: string): void {
     const a = text.selectionStart ?? text.value.length, b = text.selectionEnd ?? a;
     const next = text.value.slice(0, a) + insert + text.value.slice(b);
+    // 2026-11-24-1034: through the field's OWN `insertText` when the browser has it: that is one step of the browser's undo (Cmd/Ctrl+Z takes a clicked `bar 6` away) and it fires the field's own `input` event; a plain `value =` leaves NOTHING to undo (measured in Chromium: `execCommand('undo')` = false). Anywhere it cannot (a hidden pane, no execCommand) the value is set as before.
+    try { text.focus(); text.setSelectionRange(a, b); if ((doc as unknown as { execCommand?(c: string, u: boolean, v: string): boolean }).execCommand?.('insertText', false, insert) === true && text.value === next) return; } catch { /* not focusable */ }
     text.value = next; try { text.setSelectionRange(a + insert.length, a + insert.length); } catch { /* not focusable */ }
     s = typed(s, next); dispatch({ type: 'type', text: next });
   }

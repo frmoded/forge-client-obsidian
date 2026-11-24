@@ -61,10 +61,11 @@ test('R1 armed: ANY non-empty text (trimmed) in a PHRASE composer arms the click
   assert.equal(arr.ctl.duplicateArmed(arr.path), true, 'an arrangement composer holding text arms the LINK click too');          // 2026-11-23-1023 (deliberate): Part B, a click on a bar of an arrangement or composition Score writes the link of the note it comes from
 });
 
-test('R1: a click with "Foo" in the field appends " [[bar_007]]" (one space, NO full stop), focus is back in the field, NO preview is asked, nothing is created, the phrase is not written', async () => {
-  const r = rig(); await r.ready(); r.type('Foo'); const before = r.store.get(PH)!, calls = r.calls();
+// 2026-11-24-1034 (deliberate): "Foo" was the text of these tests; a plain text now gets the bar's POSITION (` bar 4`), the source link only where a line needs one (`replaced by`, `Take`, a head): the texts below say so.
+test('R1: a click with "Take" in the field appends " [[bar_007]]" (one space, NO full stop), focus is back in the field, NO preview is asked, nothing is created, the phrase is not written', async () => {
+  const r = rig(); await r.ready(); r.type('Take'); const before = r.store.get(PH)!, calls = r.calls();
   const done = await r.ctl.duplicateClick(r.path, 'bars/bar_007'); await r.flush();
-  assert.equal(done.ok, true); assert.equal(r.field().value, 'Foo [[bar_007]]');
+  assert.equal(done.ok, true); assert.equal(r.field().value, 'Take [[bar_007]]');
   assert.ok(win.document.activeElement === r.field(), 'focus is back in the field');
   assert.ok(!r.entries().some((e) => e.kind === 'suggestion'), 'no preview: the text is not an action'); assert.deepEqual(r.creates, []);
   assert.equal(r.store.get(PH), before); assert.equal(r.calls(), calls);
@@ -72,23 +73,24 @@ test('R1: a click with "Foo" in the field appends " [[bar_007]]" (one space, NO 
 
 test('R1: where the link goes: at the CARET (the middle of the text too), one leading space unless the text before it already ends in a space or an opening bracket, none at the very start; a phrase link and the typed text after the caret are kept', async () => {
   const cases: Array<[string, number, string]> = [
-    ['Foo', 3, 'Foo [[bar_007]]'], ['Foo ', 4, 'Foo [[bar_007]]'], ['Foo\n', 4, 'Foo\n[[bar_007]]'], ['Make (', 6, 'Make ([[bar_007]]'], ['Make [', 6, 'Make [[[bar_007]]'],      // 2026-11-19-0996b (deliberate): it was 'Keep (' and 'Keep [': Keep is a bar word now
-     ['Foo{', 4, 'Foo{[[bar_007]]'],
-    ['Foo bar', 3, 'Foo [[bar_007]] bar'], ['Foo bar', 0, '[[bar_007]]Foo bar'], ['Foo bar', 7, 'Foo bar [[bar_007]]'],
+    ['Foo', 3, 'Foo bar 4'], ['Foo ', 4, 'Foo bar 4'], ['Foo\n', 4, 'Foo\nbar 4'], ['Make (', 6, 'Make (bar 4'], ['Make [', 6, 'Make [bar 4'],      // 2026-11-19-0996b (deliberate): it was 'Keep (' and 'Keep [': Keep is a bar word now; 2026-11-24-1034 (deliberate): the POSITION goes in (it was the link [[bar_007]]: the same spacing rule)
+     ['Foo{', 4, 'Foo{bar 4'],
+    ['Foo bar', 3, 'Foo bar 4 bar'], ['Foo bar', 0, 'bar 4Foo bar'], ['Foo bar', 7, 'Foo bar 4'],
+    ['Take', 4, 'Take [[bar_007]]'], ['Bar 2 is replaced by', 20, 'Bar 2 is replaced by [[bar_007]]'], ['Bar 2 is replaced by ', 21, 'Bar 2 is replaced by [[bar_007]]'],
   ];
   for (const [text, caret, want] of cases) {
     const r = rig(); await r.ready(); r.type(text, caret);
-    await r.ctl.duplicateClick(r.path, 'bars/bar_007'); await r.flush();
+    await r.ctl.duplicateClick(r.path, 'bars/bar_007', 4); await r.flush();
     assert.equal(r.field().value, want, `${JSON.stringify(text)} with the caret at ${caret}`);
   }
-  const r = rig(); await r.ready(); r.type('Foo'); await r.ctl.duplicateClick(r.path, 'phrases/phrase_008'); await r.flush();
-  assert.equal(r.field().value, 'Foo [[phrase_008]]');
+  const r = rig(); await r.ready(); r.type('Take'); await r.ctl.duplicateClick(r.path, 'phrases/phrase_008'); await r.flush();
+  assert.equal(r.field().value, 'Take [[phrase_008]]');
 });
 
-test('R1: the caret ends AFTER the inserted link (a second click goes after the first); every click appends, nothing pins from the controller', async () => {
+test('R1: the caret ends AFTER the inserted text (a second click goes after the first); every click appends, nothing pins from the controller', async () => {
   const r = rig(); await r.ready(); r.type('Foo');
-  await r.ctl.duplicateClick(r.path, 'bars/bar_007'); await r.ctl.duplicateClick(r.path, 'bars/bar_005'); await r.flush();
-  assert.equal(r.field().value, 'Foo [[bar_007]] [[bar_005]]'); assert.equal(r.field().selectionStart, r.field().value.length);
+  await r.ctl.duplicateClick(r.path, 'bars/bar_007', 4); await r.ctl.duplicateClick(r.path, 'bars/bar_005', 5); await r.flush();
+  assert.equal(r.field().value, 'Foo bar 4 and bar 5'); assert.equal(r.field().selectionStart, r.field().value.length);
 });
 
 test('R1 (2026-11-19-0996b, deliberate: it was "the word Duplicate keeps 0992 EXACTLY"): the word Duplicate first in the text now gives the bar NUMBER ("Duplicate bar 4", no preview); a text that only ENDS with the word is any other text: the link at the caret; a click with no bar number says so', async () => {
@@ -97,7 +99,7 @@ test('R1 (2026-11-19-0996b, deliberate: it was "the word Duplicate keeps 0992 EX
   assert.equal(r.field().value, 'Duplicate bar 4'); assert.ok(win.document.activeElement === r.field());
   assert.equal([...r.el.querySelectorAll('.forge-chat-suggestion-description')].pop()?.textContent, undefined, 'no preview'); assert.deepEqual(r.creates, []);
   const kw = rig(); await kw.ready(); kw.type('Make it long. duplicate'); await kw.ctl.duplicateClick(kw.path, 'bars/bar_007', 4); await kw.flush();
-  assert.equal(kw.field().value, 'Make it long. duplicate [[bar_007]]', 'ends with the word: the link, as any other text');
+  assert.equal(kw.field().value, 'Make it long. duplicate bar 4', 'ends with the word: the position, as any other text (2026-11-24-1034, deliberate: it was the link [[bar_007]])');
   const nobar = rig(); await nobar.ready(); nobar.type('Duplicate'); const said = await nobar.ctl.duplicateClick(nobar.path, 'bars/bar_007'); await nobar.flush();
   assert.equal(said.ok, false); assert.equal(nobar.field().value, 'Duplicate');
 });

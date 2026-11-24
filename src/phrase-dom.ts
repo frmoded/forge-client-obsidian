@@ -850,6 +850,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
   /** 2026-11-19-0992: the COPY CLICK of the three phrase inspectors. While the composer of this note says "Duplicate" (asked of the host at the click), the next plain click on a bar does not pin it: the note that made THAT bar (the rule the notes pane follows: `pinnedNoteFor`) is handed to the host, which appends its name to the composer's text and shows the preview. */
   const copyClickPort = (): ScoreInspectorPorts['copyClick'] => ({
     armed: () => barSelectionHost()?.duplicateArmed?.(notePath) === true,
+    alsoPin: () => barSelectionHost()?.duplicateEmpty?.(notePath) === true,          // 2026-11-24-1034 (R2): an empty composer: the click writes `bar K` and still pins
     onBar: (e) => {
       const bar = listModel.duplicate.barNumberOf(e.prov.params, e.prov.role === MIX_BAR_ROLE || e.prov.role === MIX_HIT_ROLE);          // 2026-11-19-0996b: the bar's number in the Score now (a mix is one bar and has none: bar 1)
       const pin = pinnedNoteFor(e.prov);

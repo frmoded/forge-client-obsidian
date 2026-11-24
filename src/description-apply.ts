@@ -135,7 +135,9 @@ export interface DescriptionController {
   appendLine(path: string, sentence: string, opts?: BarAppendOpts): Promise<{ ok: boolean; message: string } & Partial<Pick<BarAppendResult, 'data' | 'reason' | 'unchanged'>>>;
   /** 2026-11-19-0992a (R1; it was "the text is Duplicate" in 0992): is the NEXT click on a bar of this note's Score a link click? True in a PHRASE tab whose composer has ANY text (trimmed). */
   duplicateArmed(path: string): boolean;
-  /** The click on a bar while the phrase composer has text. 2026-11-19-0996b: with a bar word FIRST in the text (Duplicate, Copy, Move, Delete, Remove, Keep, Morph, Mix, Extend) it inserts ` bar 3` (then ` and bar 5`) at the caret (`bar` = the bar's number in the Score now); 2026-11-19-0992a: with any other text the link ` [[name]]` of the note `noteId` (a lineage id like `bars/bar_007`) goes in at the caret. Focus back, no preview, no pin. */
+  /** 2026-11-24-1034 (R2): is this PHRASE's composer open and EMPTY? Then the click on a bar writes `bar K` there AND still pins the bar. */
+  duplicateEmpty(path: string): boolean;
+  /** The click on a bar while the phrase composer has text (2026-11-24-1034: or is EMPTY). A PHRASE writes the bar's POSITION at the caret (`bar` = its number in the Score now): `bar 3` (` and bar 5` after a bar reference, `3` after `bar `/`bars `: `barClickText`); the SOURCE link ` [[name]]` of the note `noteId` (a lineage id like `bars/bar_007`) only where the line needs one (`replaced by`, `Take`, a head line). An arrangement or a composition (1023) always writes the link. Focus back, no preview; the controller pins nothing (the Score does, for an empty composer). 2026-11-19-0996b: it was `bar N` only when a bar word came FIRST; 2026-11-19-0992a: any other text got the link. */
   duplicateClick(path: string, noteId: string | null, bar?: number | null): Promise<{ ok: boolean; message: string }>;
   /** 2026-11-19-0970 (the list model): take back the last sentence of an arrangement's or composition's list (Cmd/Ctrl+Z in an empty composer, the "+" menu), and put it back. One write each; the dialog says what was removed or added again. */
   undoLast(path: string, via?: UndoVia): Promise<{ ok: boolean; message: string }>;
@@ -704,31 +706,29 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   async function phraseHasHead(path: string): Promise<boolean> {
     try { return listOf(await ports.read(path), 'phrase').some(isHeadLine); } catch (e) { console.error('[forge-duplicate] phraseHasHead: could not read the note', e); return true; }
   }
+  /** 2026-11-24-1034 (R2): a PHRASE's composer that is open and EMPTY (trimmed): the click on a bar writes `bar K` there and still pins the bar (the Score asks this at the click; an absent method = the empty click only pins). */
+  const duplicateEmpty = (path: string): boolean => familyOfPath(path) === 'phrase' && (boxText(path) ?? 'x').trim() === '';
   async function duplicateClick(path: string, noteId: string | null, bar?: number | null): Promise<{ ok: boolean; message: string }> {
     const box = [...boxes.values()].find((b) => b.path === path);
     if (box === undefined) return { ok: false, message: 'There is no composer open for this note.' };
-    if (!duplicateArmed(path)) return { ok: false, message: 'The composer is empty: a click on a bar pins it.' };
-    const typed = box.handle.state().text;
-    const opensHead = !linkOnly(path) && listModel.duplicate.barWordVerb(typed) !== null && listModel.duplicate.barWordVerb(typed, false) === null;          // 2026-11-19-0999 (deliberate): Extend, Mix and Morph are a bar step only once the phrase has a head line; the six other verbs never read the note (this click stays synchronous for them)
-    if (!linkOnly(path) && listModel.duplicate.barWordVerb(typed, opensHead ? await phraseHasHead(path) : true) !== null) {                          // 2026-11-19-0996b: the text starts with a bar word (Duplicate, Copy, Move, Delete, Remove, Keep, Morph, Mix, Extend): the click says WHICH BAR (its number in the Score now), at the caret, no preview, no pin
-      if (typeof bar !== 'number' || !Number.isInteger(bar) || bar < 1) {
-        const message = 'I cannot tell which bar that is, so I cannot write its number.';
-        say(path, { type: 'notice', message }); box.handle.focus();
-        return { ok: false, message };
-      }
-      pb(`bar click: bar ${bar}`);
-      box.handle.insertAtCaret((before) => listModel.duplicate.barInsertion(before, bar));
-      return { ok: true, message: `Added bar ${bar} to the composer.` };
+    if (!duplicateArmed(path) && !duplicateEmpty(path)) return { ok: false, message: 'The composer is empty: a click on a bar pins it.' };
+    const typed = box.handle.state().text, parts = linkOnly(path) ? listModel.duplicate.idParts(noteId) : null, name = parts === null ? null : parts.name;
+    const hasHead = linkOnly(path) || !/\b(?:extend|mix|morph)\b/i.test(typed) || await phraseHasHead(path);          // 2026-11-19-0999 (deliberate): Extend, Mix and Morph are a bar step only once the phrase has a head line (the note is read only when the text names one of them: the click stays synchronous otherwise)
+    let say_: { ok: boolean; message: string } = { ok: true, message: '' };
+    if (linkOnly(path)) {                                                                                 // 2026-11-23-1023: an arrangement's or a composition's Score writes the link of the note a bar comes from
+      if (name === null) say_ = { ok: false, message: noteId === null ? 'I cannot tell which note made that bar, so I cannot copy it.' : `That bar comes from ${noteId}, which is not a bar, a phrase, an arrangement or a composition I can copy.` };
+      else { pb(`link click: ${noteId}`); box.handle.insertAtCaret((before) => listModel.duplicate.linkInsertion(before, name)); say_ = { ok: true, message: `Added [[${name}]] to the composer.` }; }
+    } else {                                                                                              // 2026-11-24-1034: a PHRASE writes the bar's POSITION (`bar 6`, or `6` after `bar `), the source link only where the line needs one (`replaced by`, `Take`, a head)
+      const link = listModel.duplicate.idParts(noteId)?.name ?? null; const got: { r: { ok: boolean; message: string } } = { r: say_ };
+      box.handle.insertAtCaret((before) => {
+        const w = listModel.duplicate.barClickText(before, bar, link, hasHead);
+        if ('text' in w) { got.r = { ok: true, message: w.text.includes('[[') ? `Added [[${link}]] to the composer.` : `Added bar ${bar} to the composer.` }; pb(w.text.includes('[[') ? `link click: ${noteId}` : `bar click: bar ${bar}`); return w.text; }
+        got.r = { ok: false, message: w.need === 'bar' ? 'I cannot tell which bar that is, so I cannot write its number.' : noteId === null ? 'I cannot tell which note made that bar, so I cannot copy it.' : `That bar comes from ${noteId}, which is not a bar, a phrase, an arrangement or a composition I can copy.` }; return '';
+      });
+      say_ = got.r;
     }
-    const parts = listModel.duplicate.idParts(noteId);
-    if (parts === null) {
-      const message = noteId === null ? 'I cannot tell which note made that bar, so I cannot copy it.' : `That bar comes from ${noteId}, which is not a bar, a phrase, an arrangement or a composition I can copy.`;
-      say(path, { type: 'notice', message }); box.handle.focus();
-      return { ok: false, message };
-    }
-    pb(`link click: ${noteId}`);                                                                            // 2026-11-19-0992a (R1): any other text: the link goes in at the caret, focus back, no preview, nothing else
-    box.handle.insertAtCaret((before) => listModel.duplicate.linkInsertion(before, parts.name));
-    return { ok: true, message: `Added [[${parts.name}]] to the composer.` };       // 2026-11-19-0996b: the 0992 branch (a text that ENDS with the word Duplicate got ` [[name]].` and a preview) is gone: a Duplicate sentence starts the text, so it is a bar word now, and the note copy is the typed `Duplicate [[bar_007]].`
+    if (!say_.ok) { say(path, { type: 'notice', message: say_.message }); box.handle.focus(); }
+    return say_;
   }
 
   /** 2026-11-21-1015 (Part C): a sentence that neither the grammar nor the service could turn into lines is KEPT as a waiting line (the driver's words), on the undo stack, said in the dialog with why. Not kept: a question is pending, nothing worth keeping, the same words are already waiting, a cancel. */
@@ -1216,7 +1216,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     revertGenerated,
     focusBox(path) { for (const b of boxes.values()) if (path === undefined || b.path === path) { b.handle.focus(); return true; } return false; },
     applyFromBox, previewFromBox, applyProposal,
-    duplicateArmed, duplicateClick,
+    duplicateArmed, duplicateEmpty, duplicateClick,
     appendLine, undoLast, redoLast, canUndo: (path) => canStep(path, 'undo'), canRedo: (path) => canStep(path, 'redo'),
     update, revert, ask, syncBars, forge,
     canUpdate: (path) => { const u = ui.get(path); return u !== undefined && (u.state.kind === 'apply' || u.state.kind === 'recipe-apply' || u.state.kind === 'python-apply' || u.state.kind === 'python-custom'); },

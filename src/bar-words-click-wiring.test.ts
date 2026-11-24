@@ -54,7 +54,7 @@ async function rig(phrase: PhraseParams, opts: { host?: boolean; composer?: bool
   }, {}));
   const off = opts.host === false ? () => {} : registerBarSelectionHost({
     appendLine: (p, s) => ctl.appendLine(p, s), makePhrase: async () => ({ ok: true as const, path: 'phrases/phrase_099.md' }),
-    duplicateArmed: (p) => ctl.duplicateArmed(p), duplicateClick: (p, id, bar) => ctl.duplicateClick(p, id, bar),
+    duplicateArmed: (p) => ctl.duplicateArmed(p), duplicateEmpty: (p) => ctl.duplicateEmpty(p), duplicateClick: (p, id, bar) => ctl.duplicateClick(p, id, bar),
   });
   const ports: PhraseMountPorts = {
     path: notePath, title: 'phrase_020', plan: 'score',
@@ -141,22 +141,23 @@ test('Morph: click bar 2, click bar 3, type "across 5 bars": the line is "Morph 
   } finally { r.done(); }
 });
 
-test('any other text keeps 0992a: the NOTE link at the caret ("Foo", a head, "Make it ...", a bar word that is not the first word, see the next test); an EMPTY composer still pins; Shift and Ctrl/Cmd clicks are the selection gestures with a bar word in the field', async () => {
+// 2026-11-24-1034 (deliberate): "any other text" no longer gets the note link: it gets the bar's POSITION (`Foo bar 2`); the link stays where a line needs one (`replaced by`, `Take`, a head: Take and `Bar 3 is replaced by` below). The EMPTY composer writes `bar 2` and still pins.
+test('any other text gets the bar\'s POSITION at the caret ("Foo", "Make it ...", "Duplicates"), the NOTE link only where the line needs one (Take, replaced by); an EMPTY composer pins AND writes `bar 2`; Shift and Ctrl/Cmd clicks are the selection gestures with a bar word in the field', async () => {
   const r = await rig(FORKED);
   try {
-    for (const [t, link] of [['Foo', 'Foo [[bar_005]]'], ['Take', 'Take [[bar_005]]'], ['Make it 8 bars long.', 'Make it 8 bars long. [[bar_005]]'], ['Duplicates', 'Duplicates [[bar_005]]'], ['Bar 3 is replaced by', 'Bar 3 is replaced by [[bar_005]]']] as const) {
+    for (const [t, link] of [['Foo', 'Foo bar 2'], ['Take', 'Take [[bar_005]]'], ['Make it 8 bars long.', 'Make it 8 bars long. bar 2'], ['Duplicates', 'Duplicates bar 2'], ['Bar 3 is replaced by', 'Bar 3 is replaced by [[bar_005]]']] as const) {
       r.type(t); r.click(r.bars()[1]); await r.flush(); assert.equal(r.field().value, link, t);
     }
     assert.deepEqual(r.pins, []);
-    r.type(''); r.click(r.bars()[1]); await r.flush(); assert.equal(r.pins.length, 1, 'empty: pinned as ever'); assert.equal(r.field().value, '');
+    r.type(''); r.click(r.bars()[1]); await r.flush(); assert.equal(r.pins.length, 1, 'empty: pinned as ever'); assert.equal(r.field().value, 'bar 2', 'and written (1034)');
     r.type('Duplicate'); r.click(r.bars()[2], { shiftKey: true }); r.click(r.bars()[4], { ctrlKey: true }); r.click(r.bars()[5], { metaKey: true }); await r.flush();
     assert.equal(r.pins.length, 1); assert.equal(r.field().value, 'Duplicate', 'a selection gesture adds no bar word'); assert.match(r.count() ?? '', /bars? selected/);
   } finally { r.done(); }
 });
 
-test('a text that only ENDS with the word Duplicate is not a bar-word text: it is any other text, the click inserts the note link (the 0992 branch that appended ` [[name]].` and previewed is gone)', async () => {
+test('a text that only ENDS with the word Duplicate is not a bar-word text: it is any other text, the click inserts the position (2026-11-24-1034, deliberate: it was the note link; the 0992 branch that appended ` [[name]].` and previewed is gone)', async () => {
   const r = await rig(FORKED);
-  try { r.type('Please duplicate'); r.click(r.bars()[1]); await r.flush(); assert.equal(r.field().value, 'Please duplicate [[bar_005]]'); assert.equal(r.suggestion(), ''); assert.deepEqual(r.pins, []); } finally { r.done(); }
+  try { r.type('Please duplicate'); r.click(r.bars()[1]); await r.flush(); assert.equal(r.field().value, 'Please duplicate bar 2'); assert.equal(r.suggestion(), ''); assert.deepEqual(r.pins, []); } finally { r.done(); }
 });
 
 test('a transform\'s bars are numbered by their place in the Score (the number is the bar\'s, whatever note made it)', async () => {
@@ -213,7 +214,7 @@ test('the click names a bar by NUMBER even when no note made it (a bar of a comp
     r.type('Delete'); const said = await r.ctl.duplicateClick(r.notePath, null, null); assert.equal(said.ok, false); assert.equal(r.field().value, 'Delete', 'nothing inserted');
     assert.ok(r.entries().some((e) => /which bar/i.test(e.text)), JSON.stringify(r.entries().map((e) => e.text)));
     const ok = await r.ctl.duplicateClick(r.notePath, null, 4); assert.equal(ok.ok, true); assert.equal(r.field().value, 'Delete bar 4');
-    r.type('Foo'); const link = await r.ctl.duplicateClick(r.notePath, null, 4); assert.equal(link.ok, false, 'a link click with no note is still refused as 0992a');
+    r.type('Take'); const link = await r.ctl.duplicateClick(r.notePath, null, 4); assert.equal(link.ok, false, 'a link click with no note is still refused as 0992a (where the line needs a link: 2026-11-24-1034, deliberate: "Foo" gets the position now)');
   } finally { r.done(); }
 });
 
@@ -253,18 +254,17 @@ test('the two accepted clicks answer in exact words and leave exact trace lines 
       assert.equal(r.field().value, `Delete bar ${n}`); assert.ok(win.document.activeElement === r.field(), `bar ${n}: focus is back in the field`);
       assert.equal(r.traces.filter((t) => t === `[forge-promptbox] bar click: bar ${n}`).length, 1, `bar ${n}: exactly one trace line, in these words`);
     }
-    r.type('Foo'); r.field().blur();
+    r.type('Take'); r.field().blur();          // 2026-11-24-1034 (deliberate): it was "Foo" (any other text got the link); the link is for `Take`, `replaced by` and a head now
     const link = await r.ctl.duplicateClick(r.notePath, 'bars/bar_005', 3);
     assert.deepEqual(link, { ok: true, message: 'Added [[bar_005]] to the composer.' });
-    assert.equal(r.field().value, 'Foo [[bar_005]]'); assert.ok(win.document.activeElement === r.field(), 'the link click gives the focus back too');
+    assert.equal(r.field().value, 'Take [[bar_005]]'); assert.ok(win.document.activeElement === r.field(), 'the link click gives the focus back too');
     assert.equal(r.traces.filter((t) => t === '[forge-promptbox] link click: bars/bar_005').length, 1, 'the link click leaves one trace line, in these words');
     assert.equal(r.traces.filter((t) => /bar click/.test(t) && /Foo|link/.test(t)).length, 0);
     // the words of the refusals that stayed: no composer for this note, an empty composer, a bar no note made, a bar from a note that cannot be copied
     assert.deepEqual(await r.ctl.duplicateClick('phrases/phrase_777.md', 'bars/bar_005', 3), { ok: false, message: 'There is no composer open for this note.' });
-    r.type('   '); assert.deepEqual(await r.ctl.duplicateClick(r.notePath, 'bars/bar_005', 3), { ok: false, message: 'The composer is empty: a click on a bar pins it.' });
-    r.type('Foo'); assert.deepEqual(await r.ctl.duplicateClick(r.notePath, null, 3), { ok: false, message: 'I cannot tell which note made that bar, so I cannot copy it.' });
+    r.type('Take'); assert.deepEqual(await r.ctl.duplicateClick(r.notePath, null, 3), { ok: false, message: 'I cannot tell which note made that bar, so I cannot copy it.' });
     assert.deepEqual(await r.ctl.duplicateClick(r.notePath, 'kits/kit_001', 3), { ok: false, message: 'That bar comes from kits/kit_001, which is not a bar, a phrase, an arrangement or a composition I can copy.' });
-    assert.equal(r.field().value, 'Foo', 'no refusal changed the text'); assert.deepEqual(r.creates, []); assert.equal(r.calls(), 0);
+    assert.equal(r.field().value, 'Take', 'no refusal changed the text'); assert.deepEqual(r.creates, []); assert.equal(r.calls(), 0);
   } finally { r.done(); }
 });
 

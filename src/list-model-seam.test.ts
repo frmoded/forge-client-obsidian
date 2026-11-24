@@ -57,7 +57,7 @@ test('the lean stubs have the shape of the real model (a member the interface ga
 test('the lean stubs answer what lean answered before the list model: no action sentence, no bar word, no Beat Box host, a bar with no list, a bar list that writes nothing', async () => {
   const d = lean.duplicate;
   for (const sentence of ['Duplicate [[bar_007]].', 'Copy bar 3.', 'Hit kick on steps 1, 5 and 9.', '']) assert.deepEqual(d.readActionText(sentence), { kind: 'none' }, sentence);
-  assert.equal(d.barWordVerb('Duplicate bar 3'), null);
+  assert.deepEqual(d.barClickText('Copy bar ', 3, null, true), { need: 'bar' });          // 2026-11-24-1034 (deliberate): barWordVerb and barInsertion left the seam; lean writes nothing for a click on a bar
   assert.equal(d.barNumberOf({ bar: 2 }, false), null);
   assert.equal(d.idParts('bars/bar_007'), null);
   assert.equal(lean.createBarBoxHost({} as never, {} as never), null);
@@ -85,7 +85,7 @@ test('the FULL model is the real thing (the stubs above would pass if both sides
   const d = full.duplicate;
   assert.equal(d.readActionText('Duplicate [[bar_007]].').kind, 'duplicate');
   assert.deepEqual(d.readActionText('Undo 3'), { kind: 'undo', count: 3 });
-  assert.equal(d.barWordVerb('Duplicate bar 3'), 'duplicate');
+  assert.deepEqual(d.barClickText('Copy bar ', 3, null, true), { text: '3' }); assert.deepEqual(d.barClickText('', 6, null, true), { text: 'bar 6' });          // 2026-11-24-1034 (deliberate): it asked barWordVerb(...) = 'duplicate'
   assert.notEqual(full.createBarBoxHost, lean.createBarBoxHost);
   assert.match(full.melody.template('bar_001'), /melody: true/); assert.equal(full.melody.read(full.melody.template('bar_001'))?.instrument, 'piano'); assert.equal(full.melody.read('---\ntype: data\ncontent_type: json\n---\n'), null);          // 2026-11-23-1030
   assert.match(full.withBarLines('---\ntype: data\n---\nbody', []), /lines: \[\]/);

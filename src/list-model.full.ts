@@ -7,7 +7,7 @@ import { LIST_MODEL_SENTINEL_MELODY_GRAMMAR_CORE } from './melody-grammar-core.t
 import { LIST_MODEL_SENTINEL_MELODY_LIST_CORE } from './melody-list-core.ts';
 import { createBarBoxHost } from './bar-box-host-core.ts';
 import { withBarLines } from './bar-list-note-core.ts';
-import { barInsertion, barNumberOf, barWordVerb, duplicatePreviewLine, idParts, linkInsertion, readActionText, resolveDuplicateTarget } from './duplicate-sentence-core.ts';
+import { barClickText, barNumberOf, duplicatePreviewLine, idParts, linkInsertion, readActionText, resolveDuplicateTarget } from './duplicate-sentence-core.ts';
 import { copyNoteText, createdLine, duplicateNote } from './duplicate-note-core.ts';
 import { undoCopy } from './duplicate-undo-core.ts';
 import { LIST_MODEL_SENTINEL_BAR_LIST_CONTROLLER } from './bar-list-controller.ts';
@@ -46,7 +46,7 @@ export const listModel: ListModel = {
   createBarBoxHost,
   melody: { read: (text) => { const r = readMelodyNote(text); return r.ok ? r.value.data : null; }, template: melodyNoteTemplate },          // 2026-11-23-1030
   withBarLines,
-  duplicate: { readActionText, barWordVerb, barNumberOf, barInsertion, linkInsertion, idParts, resolveDuplicateTarget, duplicatePreviewLine, copyNoteText, createdLine, duplicateNote, undoCopy },
+  duplicate: { readActionText, barNumberOf, barClickText, linkInsertion, idParts, resolveDuplicateTarget, duplicatePreviewLine, copyNoteText, createdLine, duplicateNote, undoCopy },
   steps: { annotate: annotateWithSteps, lineageOf: stepLineageOf },
   typed: { preview: previewTyped, apply: applyTyped },
   repair: { offer: offerRepair, placeWords: placeWordSentence, placeRefusal, notAsked: notAskedNote, duplicate: duplicateByLink, names: drawnBarNames, paintNames: paintBarNotes },

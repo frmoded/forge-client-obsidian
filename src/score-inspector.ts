@@ -71,7 +71,7 @@ export interface ScoreInspectorPorts {
    *  Absent = the Score behaves exactly as it did (P3). */
   selectBars?: { onRange(first: number, last: number): void; onRangeEnd?(): void; onShiftClick(bar: number): void; onToggleClick?(bar: number): void };
   /** 2026-11-19-0992 (opt-in, see artifact-inspector-core `copyClick`): the next plain click on a bar is a COPY click while the composer says "Duplicate". Only the phrase tab passes it. Absent = every click is what it was (P3). */
-  copyClick?: { armed(): boolean; onBar(entry: InspectorEntry): void };
+  copyClick?: { armed(): boolean; onBar(entry: InspectorEntry): void; alsoPin?(): boolean };
   /** 2026-11-20-1000: bars of `role` whose provenance carries `steps` are tied THROUGH the step lines of a phrase (phrase-steps-lineage-core.ts): the surface's own `lineage` is not asked for them, they are selected by their box, labelled `bar N` and walked by the arrow keys in order.
    *  Absent, or a map with no such bar = nothing changes (P3). */
   stepBars?: { role: string; lineage(prov: Provenance): LineageEntry[] };

@@ -25,9 +25,8 @@ export const listModel: ListModel = {
   withBarLines: (text) => text,
   duplicate: {
     readActionText: () => ({ kind: 'none' }),
-    barWordVerb: () => null,
     barNumberOf: () => null,
-    barInsertion: (before) => before,
+    barClickText: () => ({ need: 'bar' }),
     linkInsertion: () => '',
     idParts: () => null,
     resolveDuplicateTarget: () => ({ ok: false, message: NOT_IN_LEAN }),

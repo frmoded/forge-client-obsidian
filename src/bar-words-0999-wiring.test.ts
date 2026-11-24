@@ -56,7 +56,7 @@ async function rig(phrase: PhraseParams, opts: { host?: boolean; composer?: bool
   }, { askPlan: async () => { serviceCalls++; return { status: 200, json: {} }; }, planConfigured: () => true }));
   const off = opts.host === false ? () => {} : registerBarSelectionHost({
     appendLine: (p, s) => ctl.appendLine(p, s), makePhrase: async () => ({ ok: true as const, path: 'phrases/phrase_099.md' }),
-    duplicateArmed: (p) => ctl.duplicateArmed(p), duplicateClick: (p, id, bar) => ctl.duplicateClick(p, id, bar),
+    duplicateArmed: (p) => ctl.duplicateArmed(p), duplicateEmpty: (p) => ctl.duplicateEmpty(p), duplicateClick: (p, id, bar) => ctl.duplicateClick(p, id, bar),
   });
   const ports: PhraseMountPorts = {
     path: notePath, title: 'phrase_020', plan: 'score',
@@ -216,13 +216,14 @@ test('2026-11-19-0999 (deliberate): the controller\'s own answers on the head-le
   } finally { console.error = origErr; r.done(); }
 });
 
-test('P3: any other text keeps 0992a with an empty list too (Foo, Take, Make it ...), an EMPTY composer still pins, selection gestures are unchanged', async () => {
+// 2026-11-24-1034 (deliberate): with an empty list too, any other text ("Foo", "Make it ...") gets the bar's POSITION, `Take` still gets the note link, an EMPTY composer writes `bar 2` AND pins.
+test('P3: with an empty list too: any other text gets the position (Foo, Make it ...), Take the link, an EMPTY composer pins and writes `bar 2`, selection gestures are unchanged', async () => {
   const r = await rig(FORKED);
   try {
     noHead(r);
-    for (const [t, link] of [['Foo', 'Foo [[bar_005]]'], ['Take', 'Take [[bar_005]]'], ['Make it 8 bars long.', 'Make it 8 bars long. [[bar_005]]'], ['Duplicates', 'Duplicates [[bar_005]]']] as const) { r.type(t); r.click(r.bars()[1]); await r.flush(); assert.equal(r.field().value, link, t); }
+    for (const [t, link] of [['Foo', 'Foo bar 2'], ['Take', 'Take [[bar_005]]'], ['Make it 8 bars long.', 'Make it 8 bars long. bar 2'], ['Duplicates', 'Duplicates bar 2']] as const) { r.type(t); r.click(r.bars()[1]); await r.flush(); assert.equal(r.field().value, link, t); }
     assert.deepEqual(r.pins, []);
-    r.type(''); r.click(r.bars()[1]); await r.flush(); assert.equal(r.pins.length, 1, 'empty: pinned as ever');
+    r.type(''); r.click(r.bars()[1]); await r.flush(); assert.equal(r.pins.length, 1, 'empty: pinned as ever'); assert.equal(r.field().value, 'bar 2', 'and written (1034)');
     r.type('Extend'); r.click(r.bars()[2], { shiftKey: true }); r.click(r.bars()[4], { ctrlKey: true }); await r.flush();
     assert.equal(r.pins.length, 1); assert.equal(r.field().value, 'Extend', 'a selection gesture adds nothing');
   } finally { r.done(); }

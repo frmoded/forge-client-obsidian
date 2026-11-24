@@ -60,6 +60,22 @@ export function barInsertion(before: string, bar: number): string {
   return `${lead}${afterRef ? 'and ' : ''}bar ${bar}`;
 }
 
+/**
+ * 2026-11-24-1034 (the driver: "whatever bar I click in phrase_001 I see [[bar_007]]"): what a plain click on bar `bar` of a PHRASE Score writes at the caret, by what the text BEFORE the caret ends with (the last sentence of it decides).
+ *   after `bar ` / `bars `                      the NUMBER only (`Copy bar 6`); also after `bars 3 to ` (a range) and, in a Mix or a Morph, after `bars 2 and ` (`and 8` is not grammar for Keep, Delete, Copy and Move: they get `bar 8`)
+ *   after `replaced by`, after `Take`, and in a head sentence (Extend, Mix, Morph) while the phrase has no head line (`hasHead` false)    the SOURCE link of the bar (`[[bar_007]]`: the one thing a position cannot say)
+ *   anywhere else                               `bar 6` (`and bar 6` after a bar reference): the words the grammar itself uses
+ * One space before the text unless the caret follows white space, an opening bracket or the start of the text. Nothing is guessed: `{ need }` says which of the two the click could not give (a number the Score could not tell, a link the bar has none of).
+ */
+export function barClickText(before: string, bar: number | null | undefined, link: string | null, hasHead: boolean): { text: string } | { need: 'bar' | 'link' } {
+  const all = String(before ?? ''), seg = all.replace(/^[\s\S]*(?:[.!?]\s+|\n)/, ''), lead = all === '' || /[\s(\[{]$/.test(all) ? '' : ' ';
+  const num = /\bbars?\s*$/i.test(seg) || /\bbars?\s+\d+\s+to\s*$/i.test(seg) || (/^\s*(?:mix|morph)\b/i.test(seg) && /\bbars?\s+\d+\s+and\s*$/i.test(seg));
+  if (!num && (/\breplaced\s+by\s*$/i.test(seg) || /^\s*take\s*$/i.test(seg) || (!hasHead && /^\s*(?:extend|mix|morph)\b/i.test(seg)))) return link === null ? { need: 'link' } : { text: `${lead}[[${link}]]` };
+  if (typeof bar !== 'number' || !Number.isInteger(bar) || bar < 1) return { need: 'bar' };
+  const core = seg.trimEnd(), and = !num && !/(?:\band|,)$/i.test(core) && /(?:\bbars?\s+\d+|\bto\s+\d+|,\s*\d+|\band\s+\d+)$/i.test(core);
+  return { text: `${lead}${num ? '' : and ? 'and bar ' : 'bar '}${bar}` };
+}
+
 const WHAT = 'Duplicate what? Click a bar on the Score, or write its link, for example: Duplicate [[bar_007]].';
 const ALONE = 'Duplicate is not a step of the Description, so it has to be on its own: empty the box, then write Duplicate [[bar_007]]. by itself.';
 const ONE_AT_A_TIME = 'Duplicate takes one note at a time: write Duplicate [[bar_007]]. for one link.';
