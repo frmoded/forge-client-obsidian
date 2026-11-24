@@ -16,7 +16,8 @@ import { editionPlugin } from '../scripts/build-main.mjs';
 
 const SRC = path.join(process.cwd(), 'src');
 /** The cores behind the seam. A new core of the list model goes here AND gets its sentinel (see the cores' own line). */
-const CORES = ['bar-list-controller', 'bar-list-core', 'bar-grammar-core', 'bar-box-host-core', 'bar-list-note-core', 'duplicate-sentence-core', 'duplicate-note-core', 'duplicate-undo-core', 'phrase-steps-lineage-core', 'did-you-mean-core', 'typed-step-core', 'service-lines-core', 'failed-prompt-core', 'failed-prompt-store', 'failed-prompt-tab-dom', 'failed-prompt-setup-core', 'rename-follow-core', 'dialog-follow-core', 'waiting-line-core', 'script-edit-core', 'rename-description-core', 'undo-trace-core'];          // 2026-11-20-1002 (deliberate): the last two (did you mean, the typed Undo and Redo reader)          // 2026-11-20-1000 (deliberate): + phrase-steps-lineage-core (the Inspector through the step lines: a Score-only core, behind the seam so lean does not carry it)
+// 2026-11-23-1030 (deliberate): + melody-bar-core, melody-grammar-core, melody-list-core, melody-list-controller (pitch in bars, Stage 1a: a melody bar's data, its sentences, its list and its controller: music-composer code behind the seam, so lean does not carry them)
+const CORES = ['bar-list-controller', 'bar-list-core', 'bar-grammar-core', 'bar-box-host-core', 'bar-list-note-core', 'duplicate-sentence-core', 'duplicate-note-core', 'duplicate-undo-core', 'phrase-steps-lineage-core', 'did-you-mean-core', 'typed-step-core', 'service-lines-core', 'failed-prompt-core', 'failed-prompt-store', 'failed-prompt-tab-dom', 'failed-prompt-setup-core', 'rename-follow-core', 'dialog-follow-core', 'waiting-line-core', 'script-edit-core', 'rename-description-core', 'undo-trace-core', 'melody-bar-core', 'melody-grammar-core', 'melody-list-core', 'melody-list-controller']          // 2026-11-20-1002 (deliberate): the last two (did you mean, the typed Undo and Redo reader)          // 2026-11-20-1000 (deliberate): + phrase-steps-lineage-core (the Inspector through the step lines: a Score-only core, behind the seam so lean does not carry it)
 /** 2026-11-20-1004 (deliberate): modules that use the cores by value because they are reached ONLY from music-edition.full.ts (the Obsidian view of the failed-prompt review queue: ItemView, commands, the file adapter). The test below pins that nothing else imports them. */
 const MUSIC_ONLY = ['failed-prompt-view'];
 const read = (f: string): string => fs.readFileSync(path.join(SRC, f), 'utf8');
@@ -60,6 +61,7 @@ test('the lean stubs answer what lean answered before the list model: no action 
   assert.equal(d.barNumberOf({ bar: 2 }, false), null);
   assert.equal(d.idParts('bars/bar_007'), null);
   assert.equal(lean.createBarBoxHost({} as never, {} as never), null);
+  assert.equal(lean.melody.read('---\ntype: data\ncontent_type: json\n---\n'), null); assert.equal(lean.melody.template('bar_001'), '');          // 2026-11-23-1030: lean has no melody bar
   assert.equal(lean.withBarLines('---\ntype: data\n---\nbody', []), '---\ntype: data\n---\nbody');
   let writes = 0;
   const bar = lean.createBarList({ proc: async () => { writes++; }, say() {}, pb() {}, pbWarn() {}, trace() {}, setBoxNote() {}, endSuggestion() {}, basename: (p: string) => p });
@@ -85,6 +87,7 @@ test('the FULL model is the real thing (the stubs above would pass if both sides
   assert.deepEqual(d.readActionText('Undo 3'), { kind: 'undo', count: 3 });
   assert.equal(d.barWordVerb('Duplicate bar 3'), 'duplicate');
   assert.notEqual(full.createBarBoxHost, lean.createBarBoxHost);
+  assert.match(full.melody.template('bar_001'), /melody: true/); assert.equal(full.melody.read(full.melody.template('bar_001'))?.instrument, 'piano'); assert.equal(full.melody.read('---\ntype: data\ncontent_type: json\n---\n'), null);          // 2026-11-23-1030
   assert.match(full.withBarLines('---\ntype: data\n---\nbody', []), /lines: \[\]/);
   const said: unknown[] = [];
   const o = await full.repair.offer('Delet bar 2.', 'phrase', () => true, (ev) => { said.push(ev); });

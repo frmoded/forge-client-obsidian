@@ -6,6 +6,7 @@
 import { Notice, type App, type TFile, type WorkspaceLeaf } from 'obsidian';
 import { loggedNotice } from './logged-notice.ts';
 import { musicEdition } from './music-edition-selected.ts';
+import { listModel } from './list-model-selected.ts';
 import { readRhythmNote } from './rhythm-edit-core.ts';
 import { rhythmRefusalWords } from './note-score-core.ts';
 import { VIEW_TYPE_BY_MODE, transition, type ModeMark, type RhythmMode } from './rhythm-mode-core.ts';
@@ -23,8 +24,8 @@ export async function switchLeafToMode(
   const t = transition(musicEdition.id, from, to);
   if (t.ok === false) return;
   if (to !== 'json') {
-    const note = readRhythmNote(await app.vault.read(file));
-    if (note.ok === false) {
+    const text = await app.vault.read(file), note = readRhythmNote(text);
+    if (note.ok === false && !(to === 'beatbox' && listModel.melody.read(text) !== null)) {          // 2026-11-23-1030: a melody bar goes to its tab (the Score and the list); the Score VIEW is the rhythm bar's
       loggedNotice(rhythmRefusalWords(file.path, to === 'score' ? 'Score' : 'Edit rhythm', note.message), 8000);        // 2026-11-19-0990: a phrase, an arrangement or a composition is told what it is, never the bar gate's json-block sentence
       return;
     }

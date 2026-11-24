@@ -56,7 +56,7 @@ export async function musicTabsWorld(real: RealPlugin, extra: Record<string, str
     const t = store.get(p); const m = t === undefined ? null : /^---\r?\n([\s\S]*?)\r?\n---/.exec(t);
     if (!m) return undefined;
     const out: Record<string, unknown> = {};
-    for (const line of m[1].split(/\r?\n/)) { const kv = /^([A-Za-z_][\w-]*):\s*(.*)$/.exec(line); if (kv) out[kv[1]] = kv[2]; }
+    for (const line of m[1].split(/\r?\n/)) { const kv = /^([A-Za-z_][\w-]*):\s*(.*)$/.exec(line); if (kv) out[kv[1]] = kv[2] === 'true' ? true : kv[2] === 'false' ? false : kv[2]; }          // 2026-11-23-1030 (deliberate): Obsidian's metadata cache reads YAML, so `melody: true` is the boolean true (it was the string 'true' here, which no earlier note's front matter made a difference to)
     return out;
   };
 

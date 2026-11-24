@@ -151,7 +151,8 @@ test('no per-file memory: nothing in the view persists a view preference', () =>
 });
 
 test('the mode switch refuses (with a Notice naming why) before any pane switches: read_only, wrong type, wrong body', () => {
-  assert.match(switchSrc, /if \(to !== 'json'\) \{\s*const note = readRhythmNote\(await app\.vault\.read\(file\)\);\s*if \(note\.ok === false\) \{\s*loggedNotice\(rhythmRefusalWords\(file\.path, to === 'score' \? 'Score' : 'Edit rhythm', note\.message\), 8000\);[^\n]*\n\s*return;/);       // 2026-11-19-0990 (deliberate): a phrase, an arrangement or a composition is told what it is (note-score-core.ts rhythmRefusalWords); a bar keeps `Score: <the gate's words>` byte for byte
+  // 2026-11-23-1030 (deliberate): the check reads the text once and lets a MELODY bar through to its Beat Box tab (the Score and the list): `const text = ..., note = readRhythmNote(text); if (note.ok === false && !(to === 'beatbox' && listModel.melody.read(text) !== null)) {`; every other note is refused in the same words
+  assert.match(switchSrc, /if \(to !== 'json'\) \{\s*const text = await app\.vault\.read\(file\), note = readRhythmNote\(text\);\s*if \(note\.ok === false && !\(to === 'beatbox' && listModel\.melody\.read\(text\) !== null\)\) \{[^\n]*\n\s*loggedNotice\(rhythmRefusalWords\(file\.path, to === 'score' \? 'Score' : 'Edit rhythm', note\.message\), 8000\);[^\n]*\n\s*return;/);       // 2026-11-19-0990 (deliberate): a phrase, an arrangement or a composition is told what it is (note-score-core.ts rhythmRefusalWords); a bar keeps `Score: <the gate's words>` byte for byte
 });
 
 test('registration: main.ts registers the view, command and menus once, via registerRhythmEdit, lending it the setting and two vault-level actions', () => {

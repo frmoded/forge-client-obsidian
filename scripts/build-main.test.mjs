@@ -124,6 +124,7 @@ const LIST_MODEL_CORES = [
   "rename-follow-core", "dialog-follow-core", "waiting-line-core", "script-edit-core", "rename-description-core",  // 2026-11-20-1005 (deliberate): the description follows a rename (music-composer notes only)
   "failed-prompt-core", "failed-prompt-store", "failed-prompt-tab-dom", "failed-prompt-setup-core",  // 2026-11-20-1004 (deliberate): the failed-prompt review queue (the record, its store, the review tab's DOM, the setup): composer-only code
   "service-lines-core",  // 2026-11-20-1003 (deliberate): the sentence service as the fluent front end (the grammar table, the lines reader): composer-only code
+  "melody-bar-core", "melody-grammar-core", "melody-list-core", "melody-list-controller",  // 2026-11-23-1030 (deliberate): pitch in bars, Stage 1a: a melody bar's data, sentences, list and controller (music-composer code)
   "did-you-mean-core", "typed-step-core",  // 2026-11-20-1002 (deliberate): the repairs of a sentence the grammar cannot read, and the typed Undo / Redo reader (composer-only code)
 ];
 const sentinelOf = (core) => `forge-list-model-core:${core}`;

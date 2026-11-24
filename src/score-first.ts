@@ -36,6 +36,7 @@ import { openNewNoteNameDialog } from './new-note-name-modal.ts';
 import { onTitleClosed, type WrittenNote } from './new-note-cancel-core.ts';
 import { familyOfPath } from './description-apply-core.ts';
 import { SCORE_VIEW_TYPES, isScoreNotePath, scoreViewTypeOf } from './note-score-core.ts';
+import { listModel } from './list-model-selected.ts';          // 2026-11-23-1030: "New melody bar" is registered only where the list model is (the music edition)
 import { hasNoCacheFence } from './cache-fence-core.ts';
 import { repairForOpen } from './note-open-repair-core.ts';
 import { isCompositionPath } from './composition-core.ts';
@@ -128,7 +129,8 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
   }));
   plugin.register(() => installNotePreflight(null));
 
-  const createBar = (): Promise<unknown> => createNewBar<TFile>({
+  const createBar = (template?: (name: string) => string): Promise<unknown> => createNewBar<TFile>({
+    ...(template ? { template } : {}),
     folderExists: () => app.vault.getAbstractFileByPath(BAR_FOLDER) !== null,
     createFolder: async () => { await app.vault.createFolder(BAR_FOLDER); },
     listBarBasenames: () => app.vault.getFiles().filter((f) => f.path.startsWith(`${BAR_FOLDER}/`)).map((f) => f.basename),
@@ -284,6 +286,7 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
           return true;
         },
       });
+      if (listModel.present) plugin.addCommand({ id: 'new-melody-bar', name: 'New melody bar', checkCallback: (checking: boolean) => { if (!newBarAvailable(scoreFirst)) return false; if (!checking) void createBar(listModel.melody.template); return true; } });          // 2026-11-23-1030 (pitch in bars, Stage 1a): a melody bar is made here (one past the highest bar_NNN), never from a rhythm bar
       // 2026-11-16-0901: the four music buttons ("New phrase", "New arrangement", "New composition", "New bar") with icons of our own, registered ONCE here (only in a vault whose music tabs are on) and taken away when the plugin unloads.
       plugin.register(registerMusicIcons({ addIcon, removeIcon }));
       plugin.addCommand({
@@ -539,6 +542,7 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
         read: async (p) => app.vault.read(noteFile(p)),
         process: async (p, fn) => { await app.vault.process(noteFile(p), fn); },
         basenamesIn: (folder) => app.vault.getFiles().filter((f) => f.path.startsWith(`${folder}/`)).map((f) => f.basename),
+        melodyIn: (folder) => app.vault.getFiles().filter((f) => f.path.startsWith(`${folder}/`) && app.metadataCache?.getFileCache?.(f)?.frontmatter?.melody === true).map((f) => f.basename),          // 2026-11-23-1030: a melody bar says so in its front matter (the phrase sentences read it synchronously; a host without a metadata cache has no melody bars)
         setTimer: (fn, ms) => window.setTimeout(fn, ms), clearTimer: (h) => window.clearTimeout(h as number),
         trace: (line) => { console.info(line); },
         warn: (line) => { console.warn(line); },

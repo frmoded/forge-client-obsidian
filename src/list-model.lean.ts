@@ -21,6 +21,7 @@ export const listModel: ListModel = {
     dispose() {},
   }),
   createBarBoxHost: () => null,
+  melody: { read: () => null, template: () => '' },          // 2026-11-23-1030: lean has no melody bar
   withBarLines: (text) => text,
   duplicate: {
     readActionText: () => ({ kind: 'none' }),

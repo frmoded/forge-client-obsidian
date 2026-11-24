@@ -252,5 +252,5 @@ test('WIRING: the plugin\'s description controller is given the service-version 
   const src = fs.readFileSync(path.resolve(import.meta.dirname, 'score-first.ts'), 'utf8');
   const at = src.indexOf('createDescriptionController(descriptionPortsFor(');
   assert.ok(at > 0, 'score-first.ts builds the controller through descriptionPortsFor');
-  assert.match(src.slice(at, at + 4000), /\}, \{\s*\.\.\.hooks, showBoxStatus: /, 'and hands it the plugin\'s hooks (2026-11-15-1217: plus the status-line switch; 2026-11-17-2001: and the composer\'s)');          // 2026-11-23-1023 (deliberate): the window is 4000 characters (the `redraw` port of the Forge button sits before the hooks)
+  assert.match(src.slice(at, at + 4800), /\}, \{\s*\.\.\.hooks, showBoxStatus: /, 'and hands it the plugin\'s hooks (2026-11-15-1217: plus the status-line switch; 2026-11-17-2001: and the composer\'s)');          // 2026-11-23-1023 (deliberate): the window is 4000 characters (the `redraw` port of the Forge button sits before the hooks); 2026-11-23-1030 (deliberate): 4800 (the `melodyIn` port of the melody bars sits there too)
 });

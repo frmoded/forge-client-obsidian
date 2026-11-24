@@ -1,7 +1,10 @@
 // FULL implementation of the list-model seam (see ListModel in music-edition.ts): the real cores. Bundled by the music edition and by every unbundled test (the committed selector points here); the lean build never
 // reaches this module, so none of the cores is in lean's main.js.
 import type { ListModel } from './music-edition.ts';
-import { createBarList } from './bar-list-controller.ts';
+import { createBarListWithMelody, LIST_MODEL_SENTINEL_MELODY_LIST_CONTROLLER } from './melody-list-controller.ts';
+import { LIST_MODEL_SENTINEL_MELODY_BAR_CORE, melodyNoteTemplate, readMelodyNote } from './melody-bar-core.ts';
+import { LIST_MODEL_SENTINEL_MELODY_GRAMMAR_CORE } from './melody-grammar-core.ts';
+import { LIST_MODEL_SENTINEL_MELODY_LIST_CORE } from './melody-list-core.ts';
 import { createBarBoxHost } from './bar-box-host-core.ts';
 import { withBarLines } from './bar-list-note-core.ts';
 import { barInsertion, barNumberOf, barWordVerb, duplicatePreviewLine, idParts, linkInsertion, readActionText, resolveDuplicateTarget } from './duplicate-sentence-core.ts';
@@ -33,12 +36,14 @@ import { LIST_MODEL_SENTINEL_SERVICE_LINES_CORE, LINES_SERVICE_VERSION, askLines
 export const listModel: ListModel = {
   present: true,
   cores: [
+    LIST_MODEL_SENTINEL_MELODY_BAR_CORE, LIST_MODEL_SENTINEL_MELODY_GRAMMAR_CORE, LIST_MODEL_SENTINEL_MELODY_LIST_CORE, LIST_MODEL_SENTINEL_MELODY_LIST_CONTROLLER,          // 2026-11-23-1030 (pitch in bars, Stage 1a)
     LIST_MODEL_SENTINEL_BAR_LIST_CONTROLLER, LIST_MODEL_SENTINEL_BAR_LIST_CORE, LIST_MODEL_SENTINEL_BAR_GRAMMAR_CORE, LIST_MODEL_SENTINEL_BAR_BOX_HOST_CORE, LIST_MODEL_SENTINEL_BAR_LIST_NOTE_CORE,
     LIST_MODEL_SENTINEL_DUPLICATE_SENTENCE_CORE, LIST_MODEL_SENTINEL_DUPLICATE_NOTE_CORE, LIST_MODEL_SENTINEL_DUPLICATE_UNDO_CORE,
     LIST_MODEL_SENTINEL_PHRASE_STEPS_LINEAGE_CORE, LIST_MODEL_SENTINEL_DID_YOU_MEAN_CORE, LIST_MODEL_SENTINEL_TYPED_STEP_CORE, LIST_MODEL_SENTINEL_SERVICE_LINES_CORE, LIST_MODEL_SENTINEL_UNDO_TRACE_CORE, LIST_MODEL_SENTINEL_RENAME_FOLLOW_CORE, LIST_MODEL_SENTINEL_DIALOG_FOLLOW_CORE, LIST_MODEL_SENTINEL_WAITING_LINE_CORE, LIST_MODEL_SENTINEL_SCRIPT_EDIT_CORE, LIST_MODEL_SENTINEL_RENAME_DESCRIPTION_CORE, LIST_MODEL_SENTINEL_FAILED_PROMPT_CORE, LIST_MODEL_SENTINEL_FAILED_PROMPT_STORE, LIST_MODEL_SENTINEL_FAILED_PROMPT_TAB_DOM, LIST_MODEL_SENTINEL_FAILED_PROMPT_SETUP_CORE,
   ],
-  createBarList,
+  createBarList: createBarListWithMelody,          // 2026-11-23-1030: the rhythm bar's controller, untouched, and the melody bar's, each call sent to the kind the note is
   createBarBoxHost,
+  melody: { read: (text) => { const r = readMelodyNote(text); return r.ok ? r.value.data : null; }, template: melodyNoteTemplate },          // 2026-11-23-1030
   withBarLines,
   duplicate: { readActionText, barWordVerb, barNumberOf, barInsertion, linkInsertion, idParts, resolveDuplicateTarget, duplicatePreviewLine, copyNoteText, createdLine, duplicateNote, undoCopy },
   steps: { annotate: annotateWithSteps, lineageOf: stepLineageOf },

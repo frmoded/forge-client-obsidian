@@ -12,6 +12,8 @@ export interface DescriptionEnv {
   /** basenames of the files under a vault folder (no README is removed here: the wiring does that, as it always did) */
   basenamesIn(folder: string): string[];
   panes: DescriptionPorts['panes'];
+  /** 2026-11-23-1030: the basenames in a folder whose note says `melody: true` (a melody bar), read synchronously from the metadata cache; absent = the vault names no melody bar */
+  melodyIn?(folder: string): string[];
   /** 2026-11-23-1023: draw a note's Score again (the Forge button) */
   redraw?: DescriptionPorts['redraw'];
   setTimer: DescriptionPorts['setTimer'];
@@ -49,7 +51,7 @@ export interface DescriptionHooks {
 
 export function descriptionPortsFor(env: DescriptionEnv, hooks: DescriptionHooks): DescriptionPorts {
   const folderNames = (folder: string): string[] => env.basenamesIn(folder).filter((n) => n !== 'README');
-  const vault = () => ({ bars: folderNames(BAR_FOLDER_NAME), phrases: folderNames(PHRASE_FOLDER), arrangements: folderNames('arrangements'), compositions: folderNames('compositions'), kits: folderNames('kits') });
+  const vault = () => ({ bars: folderNames(BAR_FOLDER_NAME), phrases: folderNames(PHRASE_FOLDER), arrangements: folderNames('arrangements'), compositions: folderNames('compositions'), kits: folderNames('kits'), ...(env.melodyIn ? { melody: env.melodyIn(BAR_FOLDER_NAME) } : {}) });
   const { create, exists, isAlreadyExists } = env;
   return {
     read: (p) => env.read(p),

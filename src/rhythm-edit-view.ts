@@ -52,6 +52,7 @@ import { headerResync } from './header-resync.ts';
 import { scorePanelPlan, widgetFillsPane, type ScorePanelPlan } from './score-first-core.ts';
 import { attachScoreArea, type ScoreArea } from './live-score-dom.ts';
 import { computeRhythmScoreViaEngine } from './rhythm-score-engine.ts';
+import { computeScore } from './rhythm-score-core.ts';
 import {
   RHYTHM_BOX_WIDGET_PATH,
   RHYTHM_EDIT_VIEW_TYPE,
@@ -244,6 +245,8 @@ export class RhythmEditView extends EditableFileView {
 
   private async mount(file: TFile): Promise<void> {
     const text = await this.app.vault.read(file);
+    const melody = listModel.melody.read(text);
+    if (melody !== null) return this.mountMelody(file, melody);          // 2026-11-23-1030: a MELODY bar is this tab too: its list (the composer) and its Score, no Beat Box
     const note = readRhythmNote(text);
     if (note.ok === false) return this.showRefusal(`Edit rhythm: ${note.message}`);
     // Drain 2026-10-10-2100 (a): root-relative vault file → the same path under each bundled-vault folder → the plugin's own inlined
@@ -275,8 +278,14 @@ export class RhythmEditView extends EditableFileView {
     this.mountScore(plan, file, note.value.data);
   }
 
+  /** 2026-11-23-1030 (pitch in bars, Stage 1a): a melody bar's tab is the Score alone (one staff) with the composer under it: no widget, no session, no autosave. A tab that already shows its Score only draws it again (the composer in the tab stays). */
+  private mountMelody(file: TFile, data: unknown): void {
+    if (this.iframe !== null || this.scoreArea === null) { this.releaseIframe(); this.contentEl.empty(); this.mountScore('score', file, data, true); return; }
+    this.scoreArea.showNow(data);
+  }
+
   /** Score-first vaults only: the Score above the grid / circle (music edition; 2026-11-03-1155-93: it was under it), or the lean edition's one line. Plan 'none' attaches nothing (live-score-dom.ts#attachScoreArea). */
-  private mountScore(plan: ScorePanelPlan, file: TFile, data: unknown): void {
+  private mountScore(plan: ScorePanelPlan, file: TFile, data: unknown, melody = false): void {
     this.scoreArea = attachScoreArea(this.contentEl, plan, {
       first: true,                                 // 2026-11-03-1155-93 (R6): the Score is the first thing in the tab; the Beat Box (already mounted by now) goes under it
       renderInto: (host, payload) => musicEdition.renderTaggedMusicXML(host, payload, file.basename, { clickToPlay: scoreClickPlays, compact: true }),      // 2026-11-05-1189: this panel exists only in a score-first vault
@@ -302,6 +311,7 @@ export class RhythmEditView extends EditableFileView {
       } : undefined,
       onProvenanceMs: (ms) => console.debug(`Forge: provenance map built in ${(Math.round(ms * 10) / 10).toFixed(1)} ms`),
       messages: messageDelivery,                   // M4: the message line (this is the score panel, so only a score-first vault gets here)
+      ...(melody ? { inspector: undefined, produce: (d: unknown, t: string) => computeScore(computeRhythmScoreViaEngine, d as RhythmData, t) } : {}),          // 2026-11-23-1030: a melody bar has no Inspector (it maps channels), and its data is not rhythm data: no validation as one, straight to the engine (which dispatches on `notes`)
     });
     this.scoreArea?.showNow(data);
   }
@@ -508,7 +518,9 @@ export function registerRhythmEdit(plugin: Plugin, base: Pick<RhythmEditHooks, '
     describe: (leaf) => describeLeaf(app, leaf),
     readBodyIsRhythm: async (_leaf, path) => {
       const f = app.vault.getAbstractFileByPath(path);
-      return f instanceof TFile && readRhythmNote(await app.vault.read(f)).ok === true;
+      if (!(f instanceof TFile)) return false;
+      const text = await app.vault.read(f);
+      return readRhythmNote(text).ok === true || listModel.melody.read(text) !== null;          // 2026-11-23-1030: a melody bar opens in its tab by default
     },
     swapTo: async (leaf, path, target: SwapTarget) => {
       // keep focus where it is: only the already-active leaf is re-activated by the swap

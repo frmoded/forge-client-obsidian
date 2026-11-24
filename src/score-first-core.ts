@@ -35,13 +35,13 @@ export type NewBarPlan = { ok: true; name: string; path: string; content: string
 /** A new bar: the next free name, its path, and the SAME starter content "New Forge note -> Rhythm (Beat Box)" writes (one decision function, `dataNoteContent`).
  *  `exists` is the vault lookup. The name is chosen free, so a collision can only be a race (another bar created in the same instant); then the next number is tried, up to
  *  `attempts` times, rather than a dialog asking a person to name a bar. */
-export function planNewBar(input: { existingBasenames: Iterable<string>; exists: (path: string) => boolean; attempts?: number }): NewBarPlan {
+export function planNewBar(input: { existingBasenames: Iterable<string>; exists: (path: string) => boolean; attempts?: number; template?: (name: string) => string }): NewBarPlan {
   const taken = new Set(input.existingBasenames);
   const attempts = input.attempts ?? 3;
   for (let i = 0; i < attempts; i++) {
     const name = nextBarName(taken);
     const path = barPath(name);
-    if (!input.exists(path)) return { ok: true, name, path, content: listModel.withBarLines(withBarProvenance(dataNoteContent(name, RHYTHM_CHOICE), { kind: 'beatbox' }, RHYTHM_STARTER), []) };      // 2026-11-19-0993: a new bar starts with an EMPTY list (`lines: []`) and the groove it has always had
+    if (!input.exists(path)) return { ok: true, name, path, content: input.template !== undefined ? input.template(name) : listModel.withBarLines(withBarProvenance(dataNoteContent(name, RHYTHM_CHOICE), { kind: 'beatbox' }, RHYTHM_STARTER), []) };      // 2026-11-19-0993: a new bar starts with an EMPTY list (`lines: []`) and the groove it has always had
     taken.add(name);
   }
   return { ok: false, message: `Could not find a free bar name in ${BAR_FOLDER}/ — try again.` };
@@ -61,6 +61,8 @@ export interface NewBarPorts<F> {
   exists(path: string): boolean;
   create(path: string, content: string): Promise<F>;
   open(file: F): Promise<void>;
+  /** 2026-11-23-1030: the text of the new bar by name (a MELODY bar's template); absent = the rhythm bar's starter, as always */
+  template?(name: string): string;
   notify(message: string): void;
 }
 
@@ -76,7 +78,7 @@ export async function createNewBar<F>(ports: NewBarPorts<F>): Promise<NewBarResu
       try { await ports.createFolder(); } catch (e) { if (!isFileExistsError(e)) throw e; }     // someone made it in the same instant: fine
     }
     for (let attempt = 0; attempt < 3; attempt++) {
-      const plan = planNewBar({ existingBasenames: ports.listBarBasenames(), exists: (p) => ports.exists(p) });
+      const plan = planNewBar({ existingBasenames: ports.listBarBasenames(), exists: (p) => ports.exists(p), ...(ports.template ? { template: ports.template } : {}) });
       if (plan.ok === false) return fail(plan.message);
       let file: F;
       try {

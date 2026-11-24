@@ -24,7 +24,7 @@ import { STYLE_WORDS, canonical, complementOf100, describe, link, noNegZero, ord
 export { canonical, complementOf100, describe, orderWords, plain, shiftDecimal, type GrammarParams } from './phrase-describe-core.ts';
 
 /** The notes of the vault a description may name (basenames, no folder, no .md). `arrangements` and `kits` are optional: a list that is not given is not checked (names are then only checked for their spelling). */
-export interface GrammarVault { bars: readonly string[]; phrases: readonly string[]; arrangements?: readonly string[]; compositions?: readonly string[]; kits?: readonly string[] }
+export interface GrammarVault { bars: readonly string[]; phrases: readonly string[]; arrangements?: readonly string[]; compositions?: readonly string[]; kits?: readonly string[]; melody?: readonly string[] }
 /** `code` says WHY for the few refusals a caller must tell from the rest (2026-11-19-0980): `order` = a structure step after a Thin out or a Double up; `head` = a line the grammar understood but the phrase's head cannot take (a tempo after a Morph, a Thin out after an Extend), or a step with no head yet; `refused` (2026-11-19-0996b) = a line the grammar read and will not do ("Move bar 3 two bars left.").
  *  The sentence service cannot fix either: the person changes the order or the head. */
 export interface GrammarError { message: string; line: number; column: number; code?: 'order' | 'head' | 'refused' }
@@ -153,6 +153,7 @@ export function note(sc: Scan, vault: GrammarVault, kinds: NoteKind[], what: str
   const unchecked = kinds.find((k) => LIST_OF[k](vault) === undefined);
   const hits = named.length > 0 || unchecked === undefined ? named : [unchecked];
   if (hits.length === 0) sc.failAt(`Expected ${kinds.length > 2 ? `${kinds.slice(0, -1).map((k) => KIND_WORDS[k]).join(', ')} or ${KIND_WORDS[kinds[kinds.length - 1]]}` : kinds.map((k) => KIND_WORDS[k]).join(' or ')} of this vault for ${what}, but "${name}" is not one.`, at);
+  if (hits[0] === 'bar' && vault.melody?.includes(name) === true) sc.failAt('A melody bar cannot be used in a phrase yet.', at);          // 2026-11-23-1030: a melody bar (the vault's `melody` names) is refused HERE, in words about melodies, not at draw time in the Beat Box's
   if (hits.length > 1) sc.failAt(`Expected one note for ${what}, but "${name}" is both ${KIND_WORDS[hits[0]]} and ${KIND_WORDS[hits[1]]}; rename one of them.`, at);
   return { name, kind: hits[0] };
 }
