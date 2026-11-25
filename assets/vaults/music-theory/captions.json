@@ -13,7 +13,7 @@
   },
   "circle_of_fifths/resources/html/circle_exercise_outer_ring.html": {
     "title": "Exercise: build the outer ring",
-    "line": "Tap the keys a fifth apart, clockwise from the given key, to fill the outer ring"
+    "line": "Tap the keys a fifth apart, clockwise from C, to fill the outer ring"
   },
   "circle_of_fifths/resources/html/circle_exercise_signature_counts.html": {
     "title": "Exercise: add the sharps and flats",

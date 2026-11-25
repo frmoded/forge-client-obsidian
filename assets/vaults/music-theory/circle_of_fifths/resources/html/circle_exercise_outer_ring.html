@@ -58,15 +58,8 @@
   .seg { cursor: default; }
   .seg.empty path { fill: #FBFAF6; stroke-dasharray: 2 3; }
   .seg.minor.empty path { fill: #F4F2EC; }
-  .seg.hint path { fill: #DCE7F6; }
   .seg.empty.lit path { fill: var(--highlight); stroke: var(--ink); stroke-width: 2; stroke-dasharray: none; }
-  #prompt { min-height: 92px; }
-  .score { display: flex; align-items: center; gap: 10px; margin: 3px 0 0; min-height: 22px; font-size: 12px; }
-  #counter { color: var(--ink); }
-  #hint { color: var(--ink); font-size: 12px; }
-  .linkbtn { background: none; border: 0; padding: 0; min-height: 0; color: var(--muted); text-decoration: underline; cursor: pointer; font-size: 12px; }
-  #board { margin: 1px 0 0; min-height: 18px; font-size: 12px; color: var(--muted); white-space: nowrap; }
-  #board b { color: var(--ink); }
+  #prompt { min-height: 92px; margin-top: 0; }                                                        /* the first thing on the page: a margin on it would collapse through the body and add a scroll */
   .wrongbtn { background: #F6C9CB; border-color: var(--wrong); }
   input { font: inherit; color: var(--ink); background: #fff; border: 1px solid var(--axis); border-radius: 6px; padding: 4px 8px; min-height: 30px; width: 130px; }
   input:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; }
@@ -76,14 +69,10 @@
 </head>
 <body>
 <div class="wrap">
-<div class="row" id="levels" role="group" aria-label="Choose a level"></div>
-<div class="row" id="choose"><label for="start">Start at</label><select id="start" aria-label="The key that is given"></select><button type="button" id="random">Random</button></div>
 <div id="prompt" aria-live="off"></div>
 <div class="wheelbox"><svg id="wheel" role="group" aria-label="The circle of fifths: twelve slots on the outer ring for the major keys, twelve on the inner ring for their relative minors"></svg></div>
 <div id="bank" role="group" aria-label="The twelve major keys: tap the one that goes in the lit slot"></div>
-<div class="row"><button type="button" id="again">New exercise</button><span id="hint"></span></div>
-<div class="score"><span id="counter"></span><button id="reset" class="linkbtn" type="button">Reset</button></div>
-<div id="board" aria-label="Score of each level"></div>
+<div class="row"><button type="button" id="startover">Start over</button></div>
 <span id="sr" class="sr" role="status" aria-live="polite"></span>
 </div>
 <!-- caption BEGIN -->
@@ -92,15 +81,14 @@
   .fig-cap .t { font-size: 15px; line-height: 19px; font-weight: 600; color: #2B2B2B; }
   .fig-cap .l { font-size: 12px; line-height: 17px; margin-top: 2px; color: #555555; }
 </style>
-<div class="fig-cap"><div class="t">Exercise: build the outer ring</div><div class="l">Tap the keys a fifth apart, clockwise from the given key, to fill the outer ring</div></div>
+<div class="fig-cap"><div class="t">Exercise: build the outer ring</div><div class="l">Tap the keys a fifth apart, clockwise from C, to fill the outer ring</div></div>
 <!-- caption END -->
 <script>
 (function () {
   "use strict";
-  // 2026-11-23-1025 - the CIRCLE EXERCISE "build the outer ring": an empty wheel and a bank of the twelve major keys. The key you start at is given (C at the top; choose another, or Random); the next slot clockwise is lit, and you tap the key a fifth above the last one.
-  // A wrong key costs one of the level's wrong taps and says in words why ("D is a fifth above G, not a fourth"). Easy: the bank is in order and the key at six o'clock is shown to you. Medium: the bank is shuffled. Hard: the bank is shuffled, the start is random, and at six o'clock you also
-  // name the other name of the key (F-sharp and G-flat are one key). An exercise, never a test: when it ends the answer is said in words. It shares its blocks with the other circle gadgets, byte for byte (pinned by a test): the scale core, the circle core, the exercise core and the wheel;
-  // the ring core and the ring page are shared with the other two ring exercises. Memory only; no sound.
+  // 2026-11-23-1025 - the CIRCLE EXERCISE "build the outer ring"; 2026-11-24-1038: ONE level, the only goal is to build the circle of fifths. An empty wheel and a bank of the twelve major keys, shuffled. C is given at the top; the next slot clockwise is lit, and you tap the key
+  // a fifth above the last one. A wrong key says in words why ("D is a whole step above C, not a fifth") and costs nothing: there is no limit and no way to give up. F-sharp and G-flat are one tile at six o'clock. The exercise ends when the ring is built, and then the ring is said in words.
+  // Start over clears the ring and shuffles the tiles again. It shares its blocks with the other circle gadgets, byte for byte (pinned by a test): the scale core, the circle core and the wheel; the ring core and the ring page are shared with the other two ring exercises. Memory only; no sound.
   // ---- pure functions (no DOM; the node harness exports them) ------------------------------------------------------------------------------------------
     var BASE = 60, LOW = 60, HIGH = 84, A4_HZ = 440, STEP_SECONDS = 0.45, NOTE_LEN = 0.7;                 // the strip is C4..C6; a scale sits on the tonic's pitch class in the octave from C4 (so the staff and the strip agree)
   function midiToHz(m) { return A4_HZ * Math.pow(2, (m - 69) / 12); }
@@ -264,36 +252,13 @@
     return [{ role: "ccw", sector: nb[0], alt: nb[0] === 6, shared: ciShared(i, nb[0]) }, { role: "cw", sector: nb[1], alt: false, shared: ciShared(i, nb[1]) }, { role: "opposite", sector: op, alt: op === 6 ? !alt : false, shared: ciShared(i, op) }];
   }
   // ==== circle core END ============================================================================================================================
-  // ==== circle exercise core BEGIN (2026-11-19-0900) ================================================================================================
-  // The SAME block is in the three circle exercise gadgets (a test pins them identical). Pure. The levels and the scores of the Scales exercises (src/scale-build-exercise.test.ts pins the same numbers there): the level sets how many wrong taps an exercise allows
-  // (easy 5, medium 3, hard 1); the score counts exercises done right per level; memory only (the sandboxed page has no storage). An exercise, never a test: the words are "exercise" and "wrong taps".
-  var EX_LEVELS = ["easy", "medium", "hard"], EX_ATTEMPTS = { easy: 5, medium: 3, hard: 1 }, EX_DEFAULT_LEVEL = "medium";
-  function exLevelName(l) { return l.charAt(0).toUpperCase() + l.slice(1); }
-  function exAttempts(level) { return EX_ATTEMPTS.hasOwnProperty(level) ? EX_ATTEMPTS[level] : EX_ATTEMPTS[EX_DEFAULT_LEVEL]; }
-  function exCopy(s, patch) { var o = {}, k; for (k in s) o[k] = s[k]; for (k in patch) o[k] = patch[k]; return o; }
-  function exEmptyScores() { var s = {}; EX_LEVELS.forEach(function (l) { s[l] = { score: 0, tried: 0 }; }); return s; }
-  function exBump(scores, level, dScore, dTried) { var out = {}; EX_LEVELS.forEach(function (l) { out[l] = { score: scores[l].score, tried: scores[l].tried }; }); out[level].score += dScore; out[level].tried += dTried; return out; }
-  function exTried(scores, level) { return exBump(scores, level, 0, 1); }
-  function exBuilt(scores, level) { return exBump(scores, level, 1, 0); }
-  function exCounterText(scores, level) { var c = scores[level]; return exLevelName(level) + ": score " + c.score + " of " + c.tried + (c.tried === 1 ? " exercise" : " exercises"); }
-  function exBoardText(scores) { return EX_LEVELS.map(function (l) { return exLevelName(l) + " " + scores[l].score + "/" + scores[l].tried; }); }
-  function exLeftText(left) { return left + (left === 1 ? " wrong tap left" : " wrong taps left"); }
-  // A random key (a sector, and for sector 6 either spelling), never the one on screen (`not` = its sector, or null).
-  function exRandomKey(rng, not) {
-    var i, tries = 0;
-    do { i = Math.min(11, Math.floor(rng() * 12)); tries++; } while (not !== null && not !== undefined && i === not && tries < 50);
-    return { i: i, alt: i === 6 && rng() < 0.5 };
-  }
-  // ==== circle exercise core END ===================================================================================================================
-  // ==== circle ring core BEGIN (2026-11-23-1025) ====================================================================================================
-  // The SAME block is in the three ring exercises (circle_exercise_outer_ring, _inner_ring and _signature_counts; a test pins them identical). Pure: no DOM. The helpers they share: the order of the climb (twelve sectors clockwise from the start),
-  // a shuffle and a random start that take the page's random source (so a test can inject one), the sector names the wheel prints (both names at six o'clock), and the words for how far one key is above another. Names come from the circle core above.
+  // ==== circle ring core BEGIN (2026-11-23-1025, one level 2026-11-24-1038) ======================================================================
+  // The SAME block is in the three ring exercises (circle_exercise_outer_ring, _inner_ring and _signature_counts; a test pins them identical). Pure: no DOM. The helpers they share: a copy of a state with a change, a shuffle that takes the page's random source
+  // (so a test can inject one), the sector names the wheel prints (both names at six o'clock), and the words for how far one key is above another. Names come from the circle core above. The climb is always the twelve sectors clockwise from C.
   var RG_UP_WORDS = ["", "a half step", "a whole step", "a minor third", "a major third", "a fourth", "a tritone", "a fifth", "a minor sixth", "a major sixth", "a minor seventh", "a major seventh"];
   var RG_NUMBER_WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven"];
-  function rgOrder(start) { var out = [], k; for (k = 0; k < 12; k++) out.push(ciSector(start + k)); return out; }
+  function rgCopy(s, patch) { var o = {}, k; for (k in s) o[k] = s[k]; for (k in patch) o[k] = patch[k]; return o; }
   function rgShuffle(list, rng) { var a = list.slice(), i, j, t; for (i = a.length - 1; i > 0; i--) { j = Math.min(i, Math.floor(rng() * (i + 1))); t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
-  // A start sector, never the one on screen (`not`, or null); in hard never the sector at six o'clock (the hand-off is part of the climb there, not its start).
-  function rgPickStart(rng, hard, not) { var pool = [], k; for (k = 0; k < 12; k++) if (k !== not && !(hard && k === 6)) pool.push(k); return pool[Math.min(pool.length - 1, Math.floor(rng() * pool.length))]; }
   function rgUp(from, to) { return scMod(ciPc(to) - ciPc(from), 12); }                                           // half steps from the key of sector `from` up to the key of sector `to`
   function rgIntervalWords(n) { return RG_UP_WORDS[n] || "the same note"; }
   function rgSlotName(k) { return k === 6 ? ciName(6, false) + "/" + ciName(6, true) : ciName(k, false); }       // "F♯/G♭" at six o'clock
@@ -302,70 +267,54 @@
   function rgMinorTitle(k) { return k === 6 ? ciMinorName(6, false) + "/" + ciMinorName(6, true) + " minor" : ciMinorTitle(k, false); }
   function rgHalfSteps(n) { return RG_NUMBER_WORDS[n] + (n === 1 ? " half step" : " half steps"); }
   // ==== circle ring core END =======================================================================================================================
-  // ==== outer ring core BEGIN (2026-11-23-1025) ======================================================================================================
-  // One exercise, pure. The climb is the twelve sectors clockwise from the start (seq); a sector is "placed" when its key is on the wheel (the given start, the slot shown on easy, the keys you tapped). The tiles are the sector numbers 0..11 (the one at six o'clock reads
-  // F-sharp/G-flat; in hard it reads F-sharp) and, in hard only, tile 12 = G-flat. In hard the slot at six o'clock takes two taps: F-sharp (hand "pending"), then G-flat (hand "done"). A right tile is free; a wrong tile uses one of the level's wrong taps (once per slot) and says why;
-  // the last wrong tap ends the exercise ("gaveup"); every slot (and the hand-off in hard) placed = "built".
-  var O1_HINT_INDEX = 6, O1_FLAT_TILE = 12;
-  function o1Start(start, level, rng) {
-    var seq = rgOrder(start), hard = level === "hard", easy = level === "easy", placed = [], ids = [], k;
-    for (k = 0; k < 12; k++) { placed.push(false); ids.push(k); }
-    if (hard) ids.push(O1_FLAT_TILE);
-    placed[start] = true; var hinted = easy ? seq[O1_HINT_INDEX] : -1; if (hinted >= 0) placed[hinted] = true;
-    return { start: start, level: level, left: exAttempts(level), seq: seq, placed: placed, hinted: hinted, hand: placed[6] ? "done" : "none", bank: easy ? ids : rgShuffle(ids, rng), wrong: [], taps: 0, mine: 0, note: "", phase: "playing", outcome: null };
+  // ==== outer ring core BEGIN (2026-11-23-1025, one level 2026-11-24-1038) =======================================================================
+  // One exercise, pure. The climb is the twelve sectors clockwise from C (sector 0 to 11); a sector is "placed" when its key is on the wheel (C, given, and the keys you tapped). The tiles are the sector numbers 0..11, shuffled (the one at six o'clock reads F-sharp/G-flat: one tile,
+  // one tap). A right tile is free; a wrong tile says why and costs nothing; every slot placed = "done".
+  function o1Start(rng) {
+    var placed = [], ids = [], k;
+    for (k = 0; k < 12; k++) { placed.push(k === 0); ids.push(k); }
+    return { placed: placed, bank: rgShuffle(ids, rng), wrong: [], mine: 0, note: "", phase: "playing" };
   }
-  function o1Next(s) { var i; if (s.hand === "pending") return 6; for (i = 1; i < 12; i++) if (!s.placed[s.seq[i]]) return s.seq[i]; return -1; }
-  function o1Used(s, tile) { return tile === O1_FLAT_TILE ? s.level !== "hard" || s.hand === "done" : s.placed[tile]; }
-  function o1TileName(s, tile) { return tile === O1_FLAT_TILE ? ciName(6, true) : tile === 6 ? (s.level === "hard" ? ciName(6, false) : rgSlotName(6)) : ciName(tile, false); }
-  function o1Before(s, c) { return s.seq[s.seq.indexOf(c) - 1]; }                                                   // the sector whose key a fifth is measured from
-  function o1LastName(s, c) { var p = o1Before(s, c); return p === 6 ? (s.level === "hard" ? ciName(6, true) : rgSlotName(6)) : ciName(p, false); }
-  function o1WrongWords(s, tile) {
-    var c = o1Next(s), last = o1LastName(s, c);
-    if (s.hand === "pending") return tile === 7 ? ciName(7, false) + " comes after " + ciName(6, true) + ": " + ciName(6, false) + " and " + ciName(6, true) + " are the same key, so name " + ciName(6, true) + " first." : "At six o'clock the key has two names: tap " + ciName(6, true) + ", the flat name of " + ciName(6, false) + ".";
-    if (tile === O1_FLAT_TILE && c === 6) return ciName(6, true) + " is the same key as " + ciName(6, false) + ": going clockwise from " + last + " you reach it by its sharp name, " + ciName(6, false) + ". Tap " + ciName(6, false) + " first.";
-    return o1TileName(s, tile) + " is " + rgIntervalWords(rgUp(o1Before(s, c), tile === O1_FLAT_TILE ? 6 : tile)) + " above " + last + ", not a fifth.";
-  }
+  function o1Next(s) { var i; for (i = 1; i < 12; i++) if (!s.placed[i]) return i; return -1; }
+  function o1Used(s, tile) { return s.placed[tile]; }
+  function o1TileName(tile) { return tile === 6 ? rgSlotName(6) : ciName(tile, false); }
+  function o1LastName(c) { return o1TileName(c - 1); }                                                              // the key a fifth is measured from: the one placed just before
+  function o1WrongWords(s, tile) { var c = o1Next(s); return o1TileName(tile) + " is " + rgIntervalWords(rgUp(c - 1, tile)) + " above " + o1LastName(c) + ", not a fifth."; }
   function o1Tap(s, tile) {
-    if (s.phase !== "playing" || o1Used(s, tile) || s.wrong.indexOf(tile) >= 0) return { state: s, event: "ignored", first: false };
-    var first = s.taps === 0, c = o1Next(s), hard = s.level === "hard", right = s.hand === "pending" ? tile === O1_FLAT_TILE : tile === c;
-    if (right) {
-      var placed = s.placed.slice(), hand = s.hand, handoff = false;
-      if (s.hand === "pending") hand = "done"; else { placed[c] = true; if (c === 6) { if (hard) { hand = "pending"; handoff = true; } else hand = "done"; } }
-      var ns = exCopy(s, { placed: placed, hand: hand, wrong: [], taps: s.taps + 1, mine: s.mine + 1, note: "" }), done = o1Next(ns) < 0;
-      return { state: exCopy(ns, { phase: done ? "done" : "playing", outcome: done ? "built" : null }), event: done ? "built" : handoff ? "handoff" : "right", first: first };
+    if (s.phase !== "playing" || o1Used(s, tile) || s.wrong.indexOf(tile) >= 0) return { state: s, event: "ignored" };
+    var c = o1Next(s);
+    if (tile === c) {
+      var placed = s.placed.slice(); placed[c] = true;
+      var ns = rgCopy(s, { placed: placed, wrong: [], mine: s.mine + 1, note: "" }), done = o1Next(ns) < 0;
+      return { state: rgCopy(ns, { phase: done ? "done" : "playing" }), event: done ? "built" : "right" };
     }
-    var left = s.left - 1;
-    return { state: exCopy(s, { phase: left <= 0 ? "done" : "playing", wrong: s.wrong.concat([tile]), left: Math.max(0, left), taps: s.taps + 1, note: o1WrongWords(s, tile), outcome: left <= 0 ? "gaveup" : null }), event: left <= 0 ? "gaveup" : "wrong", first: first };
+    return { state: rgCopy(s, { wrong: s.wrong.concat([tile]), note: o1WrongWords(s, tile) }), event: "wrong" };
   }
   function o1Answer() { var all = [], k; for (k = 0; k < 12; k++) all.push(rgSlotName(k)); return "The outer ring, clockwise from C: " + all.join(", ") + ". Each key is a fifth above the one before it, and " + ciName(6, false) + " and " + ciName(6, true) + " are one key under two names."; }
-  function o1Given(s) { return (s.start === 0 ? "C is given at the top." : rgSlotName(s.start) + " is given.") + (s.hinted >= 0 ? " " + rgSlotName(s.hinted) + " is shown to help you." : ""); }
   function o1Prompt(s) {
-    if (s.phase === "done") return (s.outcome === "built" ? "Exercise done. " : "Exercise over: out of wrong taps. ") + o1Answer();
-    var base = s.hand === "pending" ? "Exercise: " + ciName(6, false) + " is in. At six o'clock the same key has a second name: tap it." : "Exercise: build the outer ring. " + (s.mine === 0 ? o1Given(s) + " " : "") + "Tap the key a fifth above " + o1LastName(s, o1Next(s)) + ".";
-    return base + (s.note ? " " + s.note : "");
+    if (s.phase === "done") return "Exercise done. " + o1Answer();
+    return "Exercise: build the outer ring. " + (s.mine === 0 ? "C is given at the top. " : "") + "Tap the key a fifth above " + o1LastName(o1Next(s)) + "." + (s.note ? " " + s.note : "");
   }
-  function o1Hint(s) { return s.phase === "done" ? "Press New exercise for another start." : exLeftText(s.left); }
   function o1Announce(s, event) {
-    if (event === "start") return "New exercise: build the outer ring. " + o1Given(s) + " " + exLeftText(s.left) + ".";
-    if (event === "right") return "Right. Next: the key a fifth above " + o1LastName(s, o1Next(s)) + ".";
-    if (event === "handoff") return "Right. Now the second name of the key at six o'clock.";
-    if (event === "wrong") return "Not that one. " + s.note + " " + exLeftText(s.left) + ".";
+    var start = "Build the outer ring. C is given at the top. Tap the key a fifth above C.";
+    if (event === "start") return start;
+    if (event === "again") return "Started over. " + start;
+    if (event === "right") return "Right. Next: the key a fifth above " + o1LastName(o1Next(s)) + ".";
+    if (event === "wrong") return "Not that one. " + s.note;
     if (event === "built") return "Done. " + o1Answer();
-    if (event === "gaveup") return "Out of wrong taps. " + o1Answer();
     return "";
   }
   // ==== outer ring core END =========================================================================================================================
   if (typeof document === "undefined") {           // node test harness
     module.exports = { BASE: BASE, SC_SCALES: SC_SCALES, scaleNotes: scaleNotes, spellScale: spellScale, scHeptatonic: scHeptatonic, noteName: noteName, noteWords: noteWords,
       CIRCLE_TONICS: CIRCLE_TONICS, ciPc: ciPc, ciMinorPc: ciMinorPc, ciTonic: ciTonic, ciScale: ciScale, ciSigned: ciSigned, ciSignature: ciSignature, ciName: ciName, ciKeyTitle: ciKeyTitle, ciKeyWords: ciKeyWords,
-      EX_LEVELS: EX_LEVELS, EX_DEFAULT_LEVEL: EX_DEFAULT_LEVEL, exAttempts: exAttempts, exEmptyScores: exEmptyScores, exTried: exTried, exBuilt: exBuilt, exCounterText: exCounterText, exBoardText: exBoardText,
-      rgOrder: rgOrder, rgShuffle: rgShuffle, rgPickStart: rgPickStart, rgUp: rgUp, rgIntervalWords: rgIntervalWords, rgSlotName: rgSlotName, rgMinorSlotName: rgMinorSlotName,
-      o1Start: o1Start, o1Next: o1Next, o1Used: o1Used, o1TileName: o1TileName, o1Tap: o1Tap, o1Answer: o1Answer, o1Prompt: o1Prompt, o1Hint: o1Hint, o1Announce: o1Announce };
+      rgShuffle: rgShuffle, rgUp: rgUp, rgIntervalWords: rgIntervalWords, rgSlotName: rgSlotName, rgMinorSlotName: rgMinorSlotName,
+      o1Start: o1Start, o1Next: o1Next, o1Used: o1Used, o1TileName: o1TileName, o1Tap: o1Tap, o1Answer: o1Answer, o1Prompt: o1Prompt, o1Announce: o1Announce };
     return;
   }
   // ---- the page ---------------------------------------------------------------------------------------------------------------------------------------
   var rng = function () { return (window.__earRandom || Math.random)(); };                                   // an injected random source for tests
-  var level = EX_DEFAULT_LEVEL, scores = exEmptyScores(), state = null, chosen = 0;
+  var state = null;
   var NS = "http://www.w3.org/2000/svg";
   var $ = function (id) { return document.getElementById(id); };
   function el(tag, attrs, parent) { var n = document.createElementNS(NS, tag); for (var a in attrs) n.setAttribute(a, attrs[a]); if (parent) parent.appendChild(n); return n; }
@@ -408,31 +357,12 @@
     return segs;
   }
   // ==== circle wheel END ===========================================================================================================================
-  // ==== circle ring page BEGIN (2026-11-23-1025) ====================================================================================================
-  // The SAME block is in the three ring exercises (a test pins them identical). Browser only. What the three pages share: the level buttons, the start chooser (a select of the twelve sectors and Random; hard has a random start, so both are off there), New exercise and Reset,
-  // the score line and the board, the wheel made inert (a ring exercise is answered with the keys below the wheel, so a sector is not a button), and the labels of the wheel: a slot is empty until its key is placed. Nothing here reacts to the pointer resting on it.
-  function rgChrome(h) {
-    EX_LEVELS.forEach(function (l) {
-      var b = document.createElement("button"); b.type = "button"; b.id = "level-" + l; b.textContent = exLevelName(l); b.setAttribute("aria-description", exLevelName(l) + ": " + EX_ATTEMPTS[l] + (EX_ATTEMPTS[l] === 1 ? " wrong tap" : " wrong taps") + " allowed");
-      b.addEventListener("click", function () { h.onLevel(l); }); $("levels").appendChild(b);                   // a new level starts a fresh exercise; each level keeps its own score
-    });
-    var sel = $("start"), k;
-    for (k = 0; k < 12; k++) { var o = document.createElement("option"); o.value = String(k); o.textContent = rgSlotName(k); sel.appendChild(o); }
-    sel.addEventListener("change", function () { h.onStart(Number(sel.value)); });
-    $("random").addEventListener("click", function () { h.onRandom(); });
-    $("again").addEventListener("click", function () { h.onAgain(); });
-    $("reset").addEventListener("click", function () { h.onReset(); });
-  }
-  function rgBoard(scores, level) {
-    EX_LEVELS.forEach(function (l) { $("level-" + l).setAttribute("aria-pressed", l === level ? "true" : "false"); });
-    $("counter").textContent = exCounterText(scores, level);
-    var board = $("board"), parts = exBoardText(scores); board.textContent = "";
-    parts.forEach(function (p, idx) { var n = document.createElement(EX_LEVELS[idx] === level ? "b" : "span"); n.textContent = p; board.appendChild(n); if (idx < parts.length - 1) board.appendChild(document.createTextNode(" · ")); });
-    board.setAttribute("aria-label", "Score of each level: " + parts.join(", "));
-  }
-  function rgChooser(hard, start) { var sel = $("start"); sel.value = String(start); sel.disabled = hard; $("random").disabled = hard; }
+  // ==== circle ring page BEGIN (2026-11-23-1025, one level 2026-11-24-1038) ======================================================================
+  // The SAME block is in the three ring exercises (a test pins them identical). Browser only. What the three pages share: the one button, Start over, the wheel made inert (a ring exercise is answered with the keys below the wheel, so a sector is not a button),
+  // and the labels of the wheel: a slot is empty until its key is placed. Nothing here reacts to the pointer resting on it.
+  function rgStartOver(fn) { $("startover").addEventListener("click", fn); }
   function rgInert(segs) { ["major", "minor"].forEach(function (r) { segs[r].forEach(function (g) { g.removeAttribute("tabindex"); g.setAttribute("role", "img"); }); }); }
-  // The text of every slot, kept from the wheel's own drawing: name(ring, sector, "none" | "first" | "full") ("first" shows only the first of the two names at six o'clock), count(sector, shown).
+  // The text of every slot, kept from the wheel's own drawing: name(ring, sector, "none" | "full"), count(sector, shown).
   function rgLabels(segs) {
     var L = { major: [], minor: [] };
     ["major", "minor"].forEach(function (r) {
@@ -443,7 +373,7 @@
       });
     });
     return {
-      name: function (r, k, mode) { var e = L[r][k]; if (e.spans.length) e.spans.forEach(function (s, i) { s.textContent = mode === "full" || (mode === "first" && i === 0) ? e.full[i] : ""; }); else e.nm.textContent = mode === "full" ? e.full[0] : ""; },
+      name: function (r, k, mode) { var e = L[r][k]; if (e.spans.length) e.spans.forEach(function (s, i) { s.textContent = mode === "full" ? e.full[i] : ""; }); else e.nm.textContent = mode === "full" ? e.full[0] : ""; },
       count: function (k, shown) { var e = L.major[k]; if (e.ct) e.ct.textContent = shown ? e.ctFull : ""; }
     };
   }
@@ -452,35 +382,27 @@
   function drawBank() {
     var bank = $("bank"); bank.textContent = "";
     state.bank.forEach(function (id) {
-      var b = document.createElement("button"); b.type = "button"; b.id = "tile-" + id; b.textContent = o1TileName(state, id);
-      b.setAttribute("aria-label", id === O1_FLAT_TILE ? ciWords(6, true) + " major" : id === 6 ? (state.level === "hard" ? ciWords(6, false) + " major" : ciWords(6, false) + " or " + ciWords(6, true) + " major") : ciWords(id, false) + " major");
+      var b = document.createElement("button"); b.type = "button"; b.id = "tile-" + id; b.textContent = o1TileName(id);
+      b.setAttribute("aria-label", id === 6 ? ciWords(6, false) + " or " + ciWords(6, true) + " major" : ciWords(id, false) + " major");
       b.addEventListener("click", function () { apply(o1Tap(state, id)); }); bank.appendChild(b);
     });
   }
-  function apply(r) { if (r.event === "ignored") return; state = r.state; if (r.first) scores = exTried(scores, level); if (r.event === "built") scores = exBuilt(scores, level); render(o1Announce(state, r.event)); }
+  function apply(r) { if (r.event === "ignored") return; state = r.state; render(o1Announce(state, r.event)); }
   function render(announce) {
-    var done = state.phase === "done", next = o1Next(state), k, cls, shown, mode;
+    var done = state.phase === "done", next = o1Next(state), k, cls;
     for (k = 0; k < 12; k++) {
-      shown = state.placed[k] || (done && state.outcome === "gaveup"); mode = !shown ? "none" : k === 6 && state.level === "hard" && !done && state.hand !== "done" && state.placed[6] ? "first" : "full";
-      labels.name("major", k, mode); labels.name("minor", k, "none");
-      cls = "seg major" + (state.placed[k] ? " found" : " empty") + (k === state.start ? " tonic" : "") + (k === state.hinted ? " hint" : "") + (!done && k === next ? " lit" : "") + (done && !state.placed[k] ? " reveal" : "");
+      labels.name("major", k, state.placed[k] ? "full" : "none"); labels.name("minor", k, "none");
+      cls = "seg major" + (state.placed[k] ? " found" : " empty") + (k === 0 ? " tonic" : "") + (!done && k === next ? " lit" : "");
       segs.major[k].setAttribute("class", cls); segs.major[k].setAttribute("aria-label", state.placed[k] ? ciKeyTitle(k, false) : "Empty slot" + (!done && k === next ? ", next" : ""));
       segs.minor[k].setAttribute("class", "seg minor empty"); segs.minor[k].setAttribute("aria-label", "Inner ring, empty");
     }
     state.bank.forEach(function (id) { var b = $("tile-" + id); b.disabled = done || o1Used(state, id); b.setAttribute("class", state.wrong.indexOf(id) >= 0 ? "wrongbtn" : ""); });
-    $("prompt").textContent = o1Prompt(state); $("hint").textContent = o1Hint(state);
-    rgBoard(scores, level); rgChooser(level === "hard", state.start);
+    $("prompt").textContent = o1Prompt(state);
     if (announce !== undefined) $("sr").textContent = announce;
   }
-  function fresh(announce) { var start = level === "hard" ? rgPickStart(rng, true, state ? state.start : null) : chosen; state = o1Start(start, level, rng); drawBank(); render(announce === false ? undefined : o1Announce(state, "start")); }
-  rgChrome({
-    onLevel: function (l) { if (l === level) return; level = l; fresh(); },
-    onStart: function (k) { chosen = k; fresh(); },
-    onRandom: function () { chosen = rgPickStart(rng, false, chosen); fresh(); },
-    onAgain: function () { fresh(); },
-    onReset: function () { scores = exEmptyScores(); render("Score cleared."); }
-  });
-  fresh(false);
+  function fresh(event) { state = o1Start(rng); drawBank(); render(event ? o1Announce(state, event) : undefined); }
+  rgStartOver(function () { fresh("again"); });
+  fresh();
 })();
 </script>
 </body>

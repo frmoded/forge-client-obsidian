@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // 2026-11-19-0900 - build the circle of fifths gadgets (the FOUR of 2026-11-19, and from 2026-11-23-1025 the three ring exercises) from their templates (scripts/dev/templates/circle/*) and the shared blocks: the Scales player's scale core, piano voice and scale view (read from scale_player.html, byte for byte) and the circle blocks
-// (circle core, exercise core, wheel, staff; and for the three ring exercises the ring core, the ring page and the ring css), each written once here and copied into every file that uses it. src/circle-of-fifths-gadget.test.ts pins that the copies are identical, that the generator reproduces the files, and everything else.
+// (circle core, wheel, staff, and the exercise core of the three older exercises only; for the three ring exercises, which since 2026-11-24-1038 have one level and no scores, the ring core, the ring page and the ring css), each written once here and copied into every file that uses it. src/circle-of-fifths-gadget.test.ts pins that the copies are identical, that the generator reproduces the files, and everything else.
 //   node scripts/dev/make-circle-gadgets.mjs [--vault ~/projects/music-theory] [--also <another vault root, e.g. assets/vaults/music-theory>]...
 import fs from 'node:fs';
 import os from 'node:os';

@@ -2,50 +2,41 @@
 @@RING_CSS@@
   #counts { gap: 4px; }
   #counts button { padding: 4px 0; min-width: 31px; text-align: center; }
-  #nostaff { display: none; width: 100%; aspect-ratio: 460 / 88; align-items: center; justify-content: center; border: 1px dashed var(--axis); border-radius: 6px; color: var(--muted); font-size: 12px; }
 </style>
 </head>
 <body>
 <div class="wrap">
-<div class="row" id="levels" role="group" aria-label="Choose a level"></div>
-<div class="row" id="choose"><label for="start">Start at</label><select id="start" aria-label="The sector to start from"></select><button type="button" id="random">Random</button></div>
 <div id="prompt" aria-live="off"></div>
 <div class="row" id="counts" role="group" aria-label="How many sharps or flats?"></div>
 <div class="row" id="typedrow"><label for="typed">Or type it</label><input id="typed" type="text" autocomplete="off" maxlength="20" aria-label="Type the count, for example 3 sharps or 2 flats"><button type="button" id="typedgo">Enter</button></div>
 <svg id="strip" role="img" aria-label="Piano keys" aria-hidden="true" style="display:none"></svg>
 <svg id="staff" role="img" aria-label="Treble staff"></svg>
-<div id="nostaff">Hard: no staff. Work it out from the wheel.</div>
 <div class="wheelbox"><svg id="wheel" role="group" aria-label="The circle of fifths: major keys on the outer ring, their relative minors on the inner ring, and an empty count in each sector"></svg></div>
-<div class="row"><button type="button" id="again">New exercise</button><span id="hint"></span></div>
-<div class="score"><span id="counter"></span><button id="reset" class="linkbtn" type="button">Reset</button></div>
-<div id="board" aria-label="Score of each level"></div>
+<div class="row"><button type="button" id="startover">Start over</button></div>
 <span id="sr" class="sr" role="status" aria-live="polite"></span>
 </div>
 <script>
 (function () {
   "use strict";
-  // 2026-11-23-1025 - the CIRCLE EXERCISE "add the number of sharps or flats": the wheel is complete (both rings) and every sector has an empty count. The lit sector is asked: tap or type its count (0 at C, one more sharp per step clockwise up to 6 at F-sharp, one more flat per step
-  // counter-clockwise up to 6 at G-flat; 5 flats at D-flat). The staff shows the signature of the lit sector (easy and medium; hard shows no staff). A wrong count says in words which note changed, or which way round the wheel goes. Easy fills the first count in for you. Medium and easy
-  // start at the sector you choose (C by default) or at Random; hard starts at a random sector. An exercise, never a test: when it ends the answer is said in words. It shares its blocks with the other circle gadgets, byte for byte (pinned by a test): the scale core, the scale view and the
-  // staff block (the signature drawing of the key to signature exercise), the circle core, the exercise core and the wheel; the ring core and the ring page are shared with the other two ring exercises. Memory only; no sound.
+  // 2026-11-23-1025 - the CIRCLE EXERCISE "add the number of sharps or flats"; 2026-11-24-1038: ONE level, the only goal is to build the circle of fifths. The wheel is complete (both rings) and every sector has an empty count. The lit sector is asked, starting at C: tap or type its count
+  // (0 at C, one more sharp per step clockwise up to 6 at F-sharp, one more flat per step counter-clockwise up to 6 at G-flat; 5 flats at D-flat). The staff shows the signature of the lit sector. A wrong count says in words which note changed, or which way round the wheel goes, and costs
+  // nothing: there is no limit and no way to give up. The exercise ends when every count is in, and then the whole rule is said in words. Start over clears the counts. It shares its blocks with the other circle gadgets, byte for byte (pinned by a test): the scale core, the scale view and the
+  // staff block (the signature drawing of the key to signature exercise), the circle core and the wheel; the ring core and the ring page are shared with the other two ring exercises. Memory only; no sound.
   // ---- pure functions (no DOM; the node harness exports them) ------------------------------------------------------------------------------------------
   @@PRELUDE@@
 @@SCALE_CORE@@
 @@CIRCLE_CORE@@
-@@CIRCLE_EXERCISE_CORE@@
 @@RING_CORE@@
-  // ==== signature counts core BEGIN (2026-11-23-1025) ================================================================================================
-  // One exercise, pure. The slots are the twelve sectors clockwise from the start (seq); each takes a signed count (sharps positive, flats negative: 3 sharps is +3). A right count is free; a wrong count uses one of the level's wrong taps (once per count) and says in words which
-  // note changed or which way round the wheel goes; the last wrong tap ends the exercise ("gaveup"); every count in = "built". Six o'clock takes 6 sharps (F-sharp) or 6 flats (G-flat): one key, two names. On easy the first slot (the start) is filled in for you.
+  // ==== signature counts core BEGIN (2026-11-23-1025, one level 2026-11-24-1038) =================================================================
+  // One exercise, pure. The slots are the twelve sectors clockwise from C (0 to 11); each takes a signed count (sharps positive, flats negative: 3 sharps is +3). A right count is free; a wrong count says in words which note changed or which way round the wheel goes and costs nothing;
+  // every count in = "done". Six o'clock takes 6 sharps (F-sharp) or 6 flats (G-flat): one key, two names.
   var C3_COUNTS = [0, 1, 2, 3, 4, 5, 6, -1, -2, -3, -4, -5, -6], C3_WORDS = { zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7 };
-  function c3ShowsStaff(level) { return level !== "hard"; }
-  function c3Start(start, level) {
-    var counts = [], k, hinted = level === "easy" ? start : -1;
+  function c3Start() {
+    var counts = [], k;
     for (k = 0; k < 12; k++) counts.push(null);
-    if (hinted >= 0) counts[hinted] = ciSigned(hinted, false);
-    return { start: start, level: level, left: exAttempts(level), seq: rgOrder(start), counts: counts, hinted: hinted, wrong: [], taps: 0, mine: 0, note: "", say: "", phase: "playing", outcome: null };
+    return { counts: counts, wrong: [], note: "", say: "", phase: "playing" };
   }
-  function c3Next(s) { var i; for (i = 0; i < 12; i++) if (s.counts[s.seq[i]] === null) return s.seq[i]; return -1; }
+  function c3Next(s) { var i; for (i = 0; i < 12; i++) if (s.counts[i] === null) return i; return -1; }
   // What was typed, as a signed count: "3 sharps", "3#", "3♯", "2 flats", "2b", "0", "none", "three sharps"; null when it is not a count.
   function c3Parse(text) {
     var t = String(text).toLowerCase().replace(/\s+/g, " ").trim(), m, n;
@@ -67,14 +58,13 @@
     return ciKeyTitle(c, false) + " has " + ciCountWords(c, false) + ".";
   }
   function c3Tap(s, signed) {
-    if (s.phase !== "playing" || s.wrong.indexOf(signed) >= 0) return { state: s, event: "ignored", first: false };
-    var first = s.taps === 0, c = c3Next(s);
+    if (s.phase !== "playing" || s.wrong.indexOf(signed) >= 0) return { state: s, event: "ignored" };
+    var c = c3Next(s);
     if (c === 6 ? Math.abs(signed) === 6 : signed === ciSigned(c, false)) {
-      var counts = s.counts.slice(); counts[c] = signed; var ns = exCopy(s, { counts: counts, wrong: [], taps: s.taps + 1, mine: s.mine + 1, note: "", say: c3Said(c, signed) }), done = c3Next(ns) < 0;
-      return { state: exCopy(ns, { phase: done ? "done" : "playing", outcome: done ? "built" : null }), event: done ? "built" : "right", first: first };
+      var counts = s.counts.slice(); counts[c] = signed; var ns = rgCopy(s, { counts: counts, wrong: [], note: "", say: c3Said(c, signed) }), done = c3Next(ns) < 0;
+      return { state: rgCopy(ns, { phase: done ? "done" : "playing" }), event: done ? "built" : "right" };
     }
-    var left = s.left - 1;
-    return { state: exCopy(s, { phase: left <= 0 ? "done" : "playing", wrong: s.wrong.concat([signed]), left: Math.max(0, left), taps: s.taps + 1, note: c3Wrong(s, signed), say: "", outcome: left <= 0 ? "gaveup" : null }), event: left <= 0 ? "gaveup" : "wrong", first: first };
+    return { state: rgCopy(s, { wrong: s.wrong.concat([signed]), note: c3Wrong(s, signed), say: "" }), event: "wrong" };
   }
   function c3Answer() {
     var sharps = [], flats = [], k;
@@ -83,31 +73,28 @@
     return ciName(0, false) + " has no sharps or flats. Clockwise each step adds a sharp: " + sharps.join(", ") + ". Counter-clockwise each step adds a flat: " + flats.join(", ") + ". " + ciName(6, false) + " and " + ciName(6, true) + " are the same key.";
   }
   function c3Prompt(s) {
-    if (s.phase === "done") return (s.outcome === "built" ? "Exercise done. " : "Exercise over: out of wrong taps. ") + c3Answer();
-    var shown = s.mine === 0 && s.hinted >= 0 ? " The first count is filled in to help: " + c3Said(s.hinted, ciSigned(s.hinted, false)) : "";
-    return "Exercise: add the number of sharps or flats. " + rgMajorTitle(c3Next(s)) + " is lit: tap or type its count." + shown + (s.note ? " " + s.note : s.say ? " " + s.say : "");
+    if (s.phase === "done") return "Exercise done. " + c3Answer();
+    return "Exercise: add the number of sharps or flats. " + rgMajorTitle(c3Next(s)) + " is lit: tap or type its count." + (s.note ? " " + s.note : s.say ? " " + s.say : "");
   }
-  function c3Hint(s) { return s.phase === "done" ? "Press New exercise for another start." : exLeftText(s.left); }
   function c3Announce(s, event) {
-    if (event === "start") return "New exercise: add the number of sharps or flats. " + rgMajorTitle(c3Next(s)) + " is lit. " + exLeftText(s.left) + ".";
+    var start = "Add the number of sharps or flats. C major is lit.";
+    if (event === "start") return start;
+    if (event === "again") return "Started over. " + start;
     if (event === "right") return "Right. " + s.say + " Next: " + rgMajorTitle(c3Next(s)) + ".";
-    if (event === "wrong") return "Not that count. " + s.note + " " + exLeftText(s.left) + ".";
+    if (event === "wrong") return "Not that count. " + s.note;
     if (event === "built") return "Done. " + c3Answer();
-    if (event === "gaveup") return "Out of wrong taps. " + c3Answer();
     return "";
   }
   // ==== signature counts core END ===================================================================================================================
   if (typeof document === "undefined") {           // node test harness
     module.exports = { BASE: BASE, SC_SCALES: SC_SCALES, scaleNotes: scaleNotes, spellScale: spellScale, scHeptatonic: scHeptatonic, noteName: noteName, noteWords: noteWords,
       CIRCLE_TONICS: CIRCLE_TONICS, ciPc: ciPc, ciMinorPc: ciMinorPc, ciTonic: ciTonic, ciScale: ciScale, ciSigned: ciSigned, ciSignature: ciSignature, ciName: ciName, ciKeyTitle: ciKeyTitle, ciKeyWords: ciKeyWords, ciCountText: ciCountText, ciCountWords: ciCountWords,
-      EX_LEVELS: EX_LEVELS, EX_DEFAULT_LEVEL: EX_DEFAULT_LEVEL, exAttempts: exAttempts, exEmptyScores: exEmptyScores, exTried: exTried, exBuilt: exBuilt, exCounterText: exCounterText, exBoardText: exBoardText,
-      rgOrder: rgOrder, rgShuffle: rgShuffle, rgPickStart: rgPickStart, rgUp: rgUp, rgIntervalWords: rgIntervalWords, rgSlotName: rgSlotName, rgMinorSlotName: rgMinorSlotName,
-      C3_COUNTS: C3_COUNTS, c3ShowsStaff: c3ShowsStaff, c3Start: c3Start, c3Next: c3Next, c3Parse: c3Parse, c3Tap: c3Tap, c3Answer: c3Answer, c3Prompt: c3Prompt, c3Hint: c3Hint, c3Announce: c3Announce };
+      rgShuffle: rgShuffle, rgUp: rgUp, rgIntervalWords: rgIntervalWords, rgSlotName: rgSlotName, rgMinorSlotName: rgMinorSlotName,
+      C3_COUNTS: C3_COUNTS, c3Start: c3Start, c3Next: c3Next, c3Parse: c3Parse, c3Tap: c3Tap, c3Answer: c3Answer, c3Prompt: c3Prompt, c3Announce: c3Announce };
     return;
   }
   // ---- the page ---------------------------------------------------------------------------------------------------------------------------------------
-  var rng = function () { return (window.__earRandom || Math.random)(); };                                   // an injected random source for tests
-  var level = EX_DEFAULT_LEVEL, scores = exEmptyScores(), state = null, chosen = 0, soundingForm = null;
+  var state = null, soundingForm = null;
 @@SCALE_VIEW@@
 @@CIRCLE_STAFF@@
 @@CIRCLE_WHEEL@@
@@ -121,37 +108,29 @@
   function typedGo() {
     if (state.phase !== "playing") return;
     var n = c3Parse($("typed").value);
-    if (n === null) { state = exCopy(state, { note: "Type a number and sharps or flats, for example 3 sharps.", say: "" }); render("Type a number and sharps or flats, for example 3 sharps."); return; }
+    if (n === null) { state = rgCopy(state, { note: "Type a number and sharps or flats, for example 3 sharps.", say: "" }); render("Type a number and sharps or flats, for example 3 sharps."); return; }
     $("typed").value = ""; apply(c3Tap(state, n));
   }
   $("typedgo").addEventListener("click", typedGo);
   $("typed").addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); typedGo(); } });
-  function apply(r) { if (r.event === "ignored") return; state = r.state; if (r.first) scores = exTried(scores, level); if (r.event === "built") scores = exBuilt(scores, level); render(c3Announce(state, r.event)); }
+  function apply(r) { if (r.event === "ignored") return; state = r.state; render(c3Announce(state, r.event)); }
   function render(announce) {
-    var done = state.phase === "done", next = c3Next(state), k, cls, shown, staffOn = c3ShowsStaff(state.level);
+    var done = state.phase === "done", next = c3Next(state), k, cls;
     for (k = 0; k < 12; k++) {
-      shown = state.counts[k] !== null || (done && state.outcome === "gaveup"); labels.count(k, shown);
-      cls = (state.counts[k] !== null ? " found" : " empty") + (k === state.hinted ? " hint" : "") + (!done && k === next ? " lit" : "") + (done && state.counts[k] === null ? " reveal" : "");
+      labels.count(k, state.counts[k] !== null);
+      cls = (state.counts[k] !== null ? " found" : " empty") + (!done && k === next ? " lit" : "");
       segs.major[k].setAttribute("class", "seg major" + cls); segs.minor[k].setAttribute("class", "seg minor" + cls);
       segs.major[k].setAttribute("aria-label", ciKeyTitle(k, false) + (state.counts[k] !== null ? ", " + (k === 6 ? "6 sharps or 6 flats" : ciCountWords(k, false)) : ", empty count")); segs.minor[k].setAttribute("aria-label", ciMinorTitle(k, false));
     }
-    $("staff").style.display = staffOn ? "" : "none"; $("nostaff").style.display = staffOn ? "none" : "flex";
-    if (staffOn) { if (done || next < 0) { ciStaffBase(); staff.setAttribute("aria-label", "Treble staff, empty"); } else ciDrawSignature(next, false, "Treble staff: the key signature of the lit sector (count its sharps or flats)"); }
+    if (done || next < 0) { ciStaffBase(); staff.setAttribute("aria-label", "Treble staff, empty"); } else ciDrawSignature(next, false, "Treble staff: the key signature of the lit sector (count its sharps or flats)");
     C3_COUNTS.forEach(function (n) { var b = countBtns[n]; b.disabled = done; b.setAttribute("class", state.wrong.indexOf(n) >= 0 ? "wrongbtn" : ""); });
     $("typed").disabled = done; $("typedgo").disabled = done;
-    $("prompt").textContent = c3Prompt(state); $("hint").textContent = c3Hint(state);
-    rgBoard(scores, level); rgChooser(level === "hard", state.start);
+    $("prompt").textContent = c3Prompt(state);
     if (announce !== undefined) $("sr").textContent = announce;
   }
-  function fresh(announce) { var start = level === "hard" ? rgPickStart(rng, false, state ? state.start : null) : chosen; state = c3Start(start, level); $("typed").value = ""; render(announce === false ? undefined : c3Announce(state, "start")); }
-  rgChrome({
-    onLevel: function (l) { if (l === level) return; level = l; fresh(); },
-    onStart: function (k) { chosen = k; fresh(); },
-    onRandom: function () { chosen = rgPickStart(rng, false, chosen); fresh(); },
-    onAgain: function () { fresh(); },
-    onReset: function () { scores = exEmptyScores(); render("Score cleared."); }
-  });
-  fresh(false);
+  function fresh(event) { state = c3Start(); $("typed").value = ""; render(event ? c3Announce(state, event) : undefined); }
+  rgStartOver(function () { fresh("again"); });
+  fresh();
 })();
 </script>
 </body>
