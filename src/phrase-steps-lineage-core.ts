@@ -40,7 +40,7 @@ export function traceSteps(headBars: number, ops: readonly StructureOp[]): StepO
       const seen = new Set<number>();
       const moved = new Set<number>();
       const placed = op.op === 'copy' && op.after !== undefined ? new Set(Array.from({ length: r.items.length - cur.length }, (_, i) => (op.after === 'end' ? cur.length : op.after as number) + i)) : null;          // 2026-11-24-1036: a copy put in a gap: the bars of THAT block are the copies (the originals keep their places, wherever the gap is)
-      if (op.op === 'move') for (const [a, b] of op.runs) { for (let i = a - 1; i < b; i++) moved.add(i); moved.add(op.by === -1 ? a - 2 : b); }          // a Move swaps each run with the ONE bar next to it: both are moved
+      if (op.op === 'move') for (const [a, b] of op.runs) { for (let i = a - 1; i < b; i++) moved.add(i); if (op.after === undefined) moved.add(op.by === -1 ? a - 2 : b); }          // a Move swaps each run with the ONE bar next to it: both are moved
       cur = r.items.map((at, k) => {
         const copy = placed !== null ? placed.has(k) : seen.has(at); seen.add(at);                          // a position seen again is a COPY (the original comes first); with a place the block of copies says it
         if (!copy && !moved.has(at)) return cur[at];

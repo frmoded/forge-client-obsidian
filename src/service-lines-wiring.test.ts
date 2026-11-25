@@ -59,10 +59,13 @@ test('`put bar 4 in front of bar 2` (the grammar cannot read it) becomes two can
 });
 
 // 2026-11-21-1015 (deliberate): it pinned the 1002 order (the repair FIRST, the service NOT asked). The driver chose "service first" for place words ("[7]"): the service is asked first when it is set up, and the repair is the fallback (src/service-first-place-words.test.ts pins both orders).
-test('`Move bar 4 before bar 2.` goes to the service FIRST when it is set up; the 1002 "did you mean" is the fallback (here the service answers no usable plan: the person sees the repair)', async () => {
+// 2026-11-24-1040 (deliberate): `Move bar 4 before bar 2.` is READ by the grammar now (the service is not asked, no repair card); a Move to a place the grammar still cannot read (a reversed range) goes to the service first and, when it gives no plan, is kept waiting (the chain repair is retired)
+test('`Move bars 4 to 2 before bar 1.` (a place the grammar cannot read) goes to the service FIRST when it is set up; when the service answers no usable plan the sentence is kept waiting, no repair is offered', async () => {
   const r = await phraseWithHead(async () => ({ status: 200, json: { ok: false, error: 'no plan' } }));
-  await r.say('Move bar 4 before bar 2.');
-  assert.equal(r.requests.length, 1); assert.match(r.texts().join('\n'), /Did you mean: Move bar 4 one bar left/);
+  await r.say('Move bars 4 to 2 before bar 1.');
+  assert.equal(r.requests.length, 1); assert.doesNotMatch(r.texts().join('\n'), /Did you mean/); assert.deepEqual(r.list(), [EXTEND, 'Waiting: Move bars 4 to 2 before bar 1.']);
+  const g = await phraseWithHead(async () => ({ status: 200, json: { ok: false, error: 'no plan' } })); await g.say('Move bar 4 before bar 2.');
+  assert.equal(g.requests.length, 0, 'the grammar reads it'); assert.deepEqual(g.list(), [EXTEND, 'Move bar 4 after bar 1.']);
 });
 
 test('`swap the second and third bars` becomes the right move; Esc drops the plan and writes nothing', async () => {

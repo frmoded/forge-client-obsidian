@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { applyTyped, previewTyped, readStepText, stepForms, MAX_STEPS, type StepPorts } from './typed-step-core.ts';
-import { closeLinks, didYouMeanQuestion, moveRepair, offerRepair, typoOfVerb, verbsOf } from './did-you-mean-core.ts';
+import { closeLinks, didYouMeanQuestion, offerRepair, typoOfVerb, verbsOf } from './did-you-mean-core.ts';
 import { Window } from 'happy-dom';
 import { dialogEntries, dialogLast } from './test-support/dialog-view.ts';
 import { createDescriptionController } from './description-apply.ts';
@@ -172,27 +172,6 @@ test('closeLinks: a one-letter name with its one bracket is closed (the empty-li
   // 2026-11-20-1002 mutation survivor: src/did-you-mean-core.ts:62 number+1#2 (rest.slice(0, one) -> slice(1, one))
   assert.equal(closeLinks('Play [[x]'), 'Play [[x]]'); assert.equal(closeLinks('Play [[x] now.'), 'Play [[x]] now.'); assert.equal(closeLinks('Take [[]'), 'Take [[]');
 });
-test('moveRepair: places are counted exactly (one, two, three and more; before and after; left and right) and the hint says them exactly', () => {
-  // 2026-11-20-1002 mutation survivor: src/did-you-mean-core.ts:75 (place arithmetic) - the equal-bar case is an equivalent mutant (boundary#1), pinned here as null
-  // 2026-11-23-1027 (deliberate): the repair is the whole CHAIN (one sentence per place, each for the bar where it now sits) and the hint says what it did; was ONE sentence and "say it twice (the second time for bar N)"
-  const chain = (a: number, dir: 'left' | 'right', n: number): string => Array.from({ length: n }, (_, i) => `Move bar ${a + (dir === 'left' ? -i : i)} one bar ${dir}.`).join(' ');
-  const cases: Array<[string, string, string]> = [
-    ['Move bar 4 before bar 2.', chain(4, 'left', 2), 'Bar 4 before bar 2 is 2 places left: both moves are written.'],
-    ['Move bar 4 before bar 3.', chain(4, 'left', 1), 'Bar 4 before bar 3 is 1 place left.'],
-    ['Move bar 5 before bar 2.', chain(5, 'left', 3), 'Bar 5 before bar 2 is 3 places left: all 3 moves are written.'],
-    ['Move bar 4 after bar 2.', chain(4, 'left', 1), 'Bar 4 after bar 2 is 1 place left.'],
-    ['Move bar 5 after bar 2.', chain(5, 'left', 2), 'Bar 5 after bar 2 is 2 places left: both moves are written.'],
-    ['Move bar 6 after bar 2.', chain(6, 'left', 3), 'Bar 6 after bar 2 is 3 places left: all 3 moves are written.'],
-    ['Move bar 2 before bar 4.', chain(2, 'right', 1), 'Bar 2 before bar 4 is 1 place right.'],
-    ['Move bar 2 before bar 5.', chain(2, 'right', 2), 'Bar 2 before bar 5 is 2 places right: both moves are written.'],
-    ['Move bar 2 before bar 6.', chain(2, 'right', 3), 'Bar 2 before bar 6 is 3 places right: all 3 moves are written.'],
-    ['Move bar 2 after bar 3.', chain(2, 'right', 1), 'Bar 2 after bar 3 is 1 place right.'],
-    ['Move bar 2 after bar 4.', chain(2, 'right', 2), 'Bar 2 after bar 4 is 2 places right: both moves are written.'],
-    ['Move bar 2 after bar 6.', chain(2, 'right', 4), 'Bar 2 after bar 6 is 4 places right: all 4 moves are written.'],
-  ];
-  for (const [t, sentence, hint] of cases) assert.deepEqual(moveRepair(t), { sentence, hint }, t);
-  for (const t of ['Move bar 3 before bar 3.', 'Move bar 3 after bar 3.', 'Move bar 4 after bar 3.', 'Move bar 4 before bar 5.', 'Move bar 4 before bar 4.']) assert.equal(moveRepair(t), null, t);
-});
 test('offerRepair: no repair says nothing and gives null; a repair the grammar reads is SAID as a question with its hint and handed back as the proposal', async () => {
   // 2026-11-20-1002 mutation survivor: src/did-you-mean-core.ts:117 (fix === null: if-false, if-true, eq-flip, early-return), :118 (say, 'suggestion', 'repair'), :119 (return, ok, 'grammar')
   const said: unknown[] = []; const say = (ev: unknown) => { said.push(ev); };
@@ -202,10 +181,10 @@ test('offerRepair: no repair says nothing and gives null; a repair the grammar r
   assert.deepEqual(res, { ok: true, proposal: { description: 'Delete bar 2.', via: 'grammar', instead: 'Delete bar 2.' } });
   assert.deepEqual(said, [{ type: 'suggestion', description: 'Delete bar 2.', recipe: '', via: 'repair', question: 'Did you mean: Delete bar 2?' }]);
   said.length = 0;
-  const mv = await offerRepair('Move bar 4 before bar 2.', 'phrase', async () => true, say as never);
-  // 2026-11-23-1027 (deliberate): the whole chain, not its first sentence
-  assert.deepEqual(mv, { ok: true, proposal: { description: 'Move bar 4 one bar left. Move bar 3 one bar left.', via: 'grammar', instead: 'Move bar 4 one bar left. Move bar 3 one bar left.' } });
-  assert.deepEqual(said, [{ type: 'suggestion', description: 'Move bar 4 one bar left. Move bar 3 one bar left.', recipe: '', via: 'repair', question: 'Did you mean: Move bar 4 one bar left. Move bar 3 one bar left? Bar 4 before bar 2 is 2 places left: both moves are written.' }]);
+  // 2026-11-24-1040 (deliberate): the question with a HINT was the Move chain's (`Bar 4 before bar 2 is 2 places left: ...`, retired: the grammar reads a Move to a place); the hint is now the copy-by-link's (1033, 1036)
+  const mv = await offerRepair('Make a copy of [[bar_006]] at the end of the score.', 'phrase', async () => true, say as never, undefined, ['bar_001', 'bar_002', 'bar_003', 'bar_004', 'bar_005', 'bar_006']);
+  assert.deepEqual(mv, { ok: true, proposal: { description: 'Copy bar 6 and put it at the end.', via: 'grammar', instead: 'Copy bar 6 and put it at the end.' } });
+  assert.deepEqual(said, [{ type: 'suggestion', description: 'Copy bar 6 and put it at the end.', recipe: '', via: 'repair', question: 'Did you mean: Copy bar 6 and put it at the end? bar_006 is bar 6 of this phrase.' }]);
   assert.equal(didYouMeanQuestion({ sentence: 'Play [[a]].' }), 'Did you mean: Play [[a]]?');
 });
 

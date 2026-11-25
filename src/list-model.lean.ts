@@ -38,7 +38,7 @@ export const listModel: ListModel = {
   },
   steps: { annotate: () => null, lineageOf: () => [] },          // 2026-11-20-1000: lean has no Score: nothing is tied through steps
   typed: { preview: () => null, apply: () => null },     // 2026-11-20-1002: lean reads no step sentence (Undo is the grammar's to refuse, as before) and offers no "did you mean" (the bare message stays)
-  repair: { offer: async () => null, placeWords: () => false, placeRefusal: () => null, notAsked: () => '', duplicate: () => null, names: () => null, paintNames: () => 0 },
+  repair: { offer: async () => null, placeWords: () => false, notAsked: () => '', duplicate: () => null, names: () => null, paintNames: () => 0 },
   trace: { create: () => ({ record() {}, entries: () => [] }) },          // 2026-11-20-1004z: lean keeps no trace
   renamed: { follow: async () => {} },          // 2026-11-20-1005: lean has none of these notes
   waiting: { line: () => null, words: () => null, translate: () => null, kept: () => '', is: () => false, already: () => '', blocked: () => '', tail: () => '' },          // 2026-11-21-1015: lean makes and reads no waiting line

@@ -22,7 +22,7 @@ export const LINES_INSTRUCTION = 'Answer only with canonical sentences from the 
 
 /** The verbs of the grammar a family can say (generated from VERBS: a verb with a kind belongs to that kind's family; the rest are listed by name, and a test fails when a new verb belongs to no family). */
 const PHRASE_KINDS = new Set(['extend', 'mix', 'morph', 'transform']);
-const PHRASE_VERBS = new Set(['thin out', 'double up', 'keep', 'delete', 'copy', 'copy to a place', 'move', 'bar replaced', 'threshold', 'ghost notes', 'make it']);
+const PHRASE_VERBS = new Set(['thin out', 'double up', 'keep', 'delete', 'copy', 'copy to a place', 'move', 'move to a place', 'bar replaced', 'threshold', 'ghost notes', 'make it']);
 const ARRANGEMENT_VERBS = new Set(['volume', 'mute', 'only', 'together']);
 const COMPOSITION_VERBS = new Set(['then play', 'repeat that']);
 const inFamily = (f: Exclude<LinesFamily, 'bar'>, v: (typeof VERBS)[number]): boolean => f === 'phrase' ? (v.kind !== null && PHRASE_KINDS.has(v.kind)) || PHRASE_VERBS.has(v.verb)

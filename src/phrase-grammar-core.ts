@@ -15,7 +15,7 @@ import {
   MORPH_ORDERS, NOTE_NAME, REPEAT_STYLE, STRUCTURE_RUNS_MAX, PHRASE_BARS_MAX, PHRASE_BARS_MIN, PHRASE_DEFAULTS, PHRASE_PCT_MAX, PHRASE_PCT_MIN, PHRASE_STYLES, MIX_DEFAULTS, MORPH_DEFAULTS, TRANSFORM_DEFAULTS, TRANSFORM_KEEPS, TRANSFORM_OPS_MAX, validatePhrase,
   type ExtendPhrase, type MixPhrase, type BarRun, type MorphOrder, type MorphPhrase, type PhraseParams, type StructureOp, type PhraseStyle, type TransformOp, type TransformPhrase,
 } from './phrase-core.ts';
-import { isRunsOp, isStructureOp, runsWords } from './bar-structure-core.ts';
+import { isRunsOp, isStructureOp, movePlaceProblem, runsWords } from './bar-structure-core.ts';
 import { validateArrangement, type ArrangementParams, type ArrangementTrack } from './arrangement-core.ts';
 import { COMPOSITION_LENGTH_MAX, COMPOSITION_REPEAT_MAX, validateComposition, type CompositionParams, type CompositionSection } from './composition-core.ts';
 import { STYLE_WORDS, canonical, complementOf100, describe, link, noNegZero, orderWords, percentOf, plain, shiftDecimal, sortedOverrides, type GrammarParams } from './phrase-describe-core.ts';
@@ -47,6 +47,7 @@ export const VERBS: ReadonlyArray<{ verb: string; kind: 'extend' | 'mix' | 'morp
   { verb: 'copy', kind: null, example: 'Copy bars 3 to 5.' },
   { verb: 'copy to a place', kind: null, example: 'Copy bar 6 and put it at the end.' },
   { verb: 'move', kind: null, example: 'Move bars 3 to 5 one bar left.' },
+  { verb: 'move to a place', kind: null, example: 'Move bar 1 after bar 5.' },
   { verb: 'bar replaced', kind: null, example: 'Bar 9 is replaced by [[bar_009]].' },
   { verb: 'threshold', kind: null, example: 'Threshold 40 percent.' },
   { verb: 'ghost notes', kind: null, example: 'With ghost notes.' },
@@ -239,6 +240,7 @@ function addRun(runs: BarRun[], first: number, last: number): void {
  * sentence starts with none of the verbs. The ranges are said in any order and kept ascending and apart, touching or overlapping ones merged (`addRun`: 2026-11-19-0999, 2026-11-20-1001); a structure step may not come after a Thin out or a Double up (it changes WHICH bars there are, and those two have already counted them).
  * 2026-11-19-0996b (the driver's words, read and written as the canonical ones): "Duplicate" is Copy, "Remove" is Delete, "Move bar 3 back / left / earlier" and "forward / right / later" (with or without "one bar", also "to the left") are one bar left / right and
  * several places ("two bars left") are READ and refused in words (code `refused`: the service cannot fix them), and "Morph bars 2 and 3 across 5 bars ..." is a step of its own (`readMorphBetween`); a Morph that is followed by a note ("Morph [[a]] into [[b]]") is a head, not a step: null.
+ * 2026-11-24-1040: "Move bar 1 after bar 5." / "Move bars 3 to 5 to the end." / "Move bar 4 to the start." (also "and put it after bar 5", "before bar N" = after bar N - 1) is ONE op with `after` (no `by`); a place inside the moved bars or one that goes nowhere is refused in words (code `refused`: `movePlaceProblem`); the Morph, Mix and Extend steps take "and place after bar 5" / "put them ..." / "place it ..." (one `PUT` word list).
  * 2026-11-19-0999b: "Mix bars 2 and 3 ..." (`readMixBars`: ONE new bar, in a gap) and "Extend bar 2 to 4 bars ..." (`readExtendBar`: bar 2 REPLACED by 4 bars, or with a place word the bar stays and they are inserted) are steps of their own too; a Mix or an Extend followed by a note is a head: null.
  */
 const STEP_VERBS: ReadonlyArray<readonly [string, 'keep' | 'delete' | 'copy' | 'move' | 'morph' | 'mix' | 'extend']> = [['keep', 'keep'], ['delete', 'delete'], ['remove', 'delete'], ['copy', 'copy'], ['duplicate', 'copy'], ['move', 'move'], ['morph', 'morph'], ['mix', 'mix'], ['extend', 'extend']];
@@ -260,19 +262,20 @@ export function readStructureStep(f: Scan, afterDensity: boolean): StructureOp |
     if (runs.length > STRUCTURE_RUNS_MAX) f.failAt(`Expected at most ${STRUCTURE_RUNS_MAX} ranges of bars, but found more.`, at);
     const more = f.comma();
     const here = f.i;
-    if (verb === 'copy' && placeSegment(f, () => {}).read()) { f.i = here; break; }          // 2026-11-24-1036: `and put it at the end` / `after bar 4` starts here, not another bar
+    if (verb !== 'keep' && verb !== 'delete' && placeSegment(f, () => {}).read()) { f.i = here; break; }          // 2026-11-24-1036: `and put it at the end` / `after bar 4` starts here, not another bar (2026-11-24-1040: a Move's too)
     if (f.kw('and')) continue;
     if (more) continue;
     break;
   }
-  if (verb === 'copy') {                                                                                // 2026-11-24-1036: Copy takes the place words of Extend, Mix and Morph (`and put it at the end`); no place = the copy goes right after each original, as before
-    let after: number | 'end' | null = null;
-    placeSegment(f, (p) => { after = p; }).read();
-    f.end();
-    return { op: 'copy', runs, ...(after !== null ? { after } : {}) };
-  }
-  if (verb !== 'move') { f.end(); return { op: verb, runs }; }
-  return readMoveDirection(f, runs);
+  let after: number | 'end' | null = null;
+  const placeAt = f.at;
+  if (verb === 'copy' || verb === 'move') placeSegment(f, (p) => { after = p; }).read();                // 2026-11-24-1036: Copy takes the place words of Extend, Mix and Morph (`and put it at the end`); no place = the copy goes right after each original, as before. 2026-11-24-1040: Move takes them too (`Move bar 1 after bar 5.`)
+  if (verb === 'move' && after === null) return readMoveDirection(f, runs);
+  f.end();
+  if (verb !== 'move') return verb === 'copy' ? { op: 'copy', runs, ...(after !== null ? { after } : {}) } : { op: verb, runs };
+  const bad = movePlaceProblem(runs, after as unknown as number | 'end');
+  if (bad !== null) f.failAt(bad, placeAt, 'refused');
+  return { op: 'move', runs, after: after as unknown as number | 'end' };
 }
 
 /** "one bar left" / "left" / "back" / "earlier" / "to the left" -> -1 and the right-hand words -> 1; a number of places other than one is read and refused with the sentence to say instead. */
@@ -296,8 +299,8 @@ function readMoveDirection(f: Scan, runs: BarRun[]): StructureOp {
 
 /** The place words of a Morph-between: "at the start", "at the end", "after bar 3", "before bar 2", "between bars 2 and 3" (the two bars must be neighbours); the gap after bar K (0 = the start) or the end. Null when none starts here. */
 function readPlace(f: Scan): number | 'end' | null {
-  if (f.kw('at the start') || f.kw('at the beginning') || f.kw('at the front')) return 0;
-  if (f.kw('at the end') || f.kw('at the back')) return 'end';
+  if (f.kw('(?:at|to) the (?:start|beginning|front)')) return 0;          // 2026-11-24-1040: `kw` builds a regular expression from the words, so a group of alternatives is a word list (`to the start` is Move's)
+  if (f.kw('(?:at the (?:end|back)|to the end)')) return 'end';
   if (f.kw('after')) { f.kw('bars') || f.kw('bar'); return f.whole('a bar number ("after bar N")', 1); }
   if (f.kw('before')) { f.kw('bars') || f.kw('bar'); return f.whole('a bar number ("before bar N")', 1) - 1; }
   if (f.kw('in between') || f.kw('between')) {
@@ -313,9 +316,11 @@ function readPlace(f: Scan): number | 'end' | null {
 }
 
 /** 2026-11-19-0999b: the place segment of a step that makes new bars (Morph-between, Mix, Extend), in the one set of words: an optional "and", an optional "put them" / "put it" / "place them", then `readPlace`. `set` gets the gap (0 = the start, 'end', or the bar it follows). */
+// 2026-11-24-1040: `and place after bar 5`, `put it ...`, `place them ...`: put or place, then optionally them / it / those / these (a group of alternatives in `kw` is a word list)
+const PUT = '(?:put|place)(?: (?:them|it|those|these))?';
 const PLACE_EXPECTED = 'a place ("after bar N", "before bar N", "between bars N and M", "at the start" or "at the end")';
 function placeSegment(f: Scan, set: (place: number | 'end') => void): { name: string; read: () => boolean } {
-  return { name: 'the place', read: () => { const s = f.i; f.kw('and'); const put = f.kw('put them') || f.kw('put it') || f.kw('put those') || f.kw('place them') || f.kw('place it'); const p = readPlace(f); if (p === null) { if (put) f.fail(PLACE_EXPECTED); f.i = s; return false; } set(p); return true; } };
+  return { name: 'the place', read: () => { const s = f.i; f.kw('and'); const put = f.kw(PUT); const p = readPlace(f); if (p === null) { if (put) f.fail(PLACE_EXPECTED); f.i = s; return false; } set(p); return true; } };
 }
 
 /** "Morph bars 2 and 3 across 5 bars, in seeded order, seed 7, and put them after bar 3." (the verb is eaten): the two bars of the phrase as it is before the step, the number of NEW bars between them, the order, the seed (only with the seeded order) and the place; the place defaults to between two neighbouring bars, else after the later one. */
@@ -433,7 +438,7 @@ function segments(sc: Scan, tries: Array<{ name: string; read: () => boolean }>,
     const at = sc.at;
     let hit: string | null = null;
     for (const t of tries) { if (t.read()) { hit = t.name; break; } }
-    if (hit === null) sc.fail(expected);
+    if (hit === null) { if (tries[0].name === 'the place' && sc.kw('and')) { sc.kw(PUT); sc.fail(PLACE_EXPECTED); } sc.fail(expected); }          // 2026-11-24-1040: an `and` that no place follows says what is missing: the place
     if (seen.has(hit)) sc.failAt(`Expected ${hit} to be said once, but it is said twice.`, at);
     seen.add(hit);
   }

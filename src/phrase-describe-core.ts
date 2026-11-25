@@ -37,9 +37,9 @@ export const sortedOverrides = (o: Record<string, string> | undefined): { overri
   return { overrides: out };
 };
 function canonicalOp(o: TransformOp): TransformOp {
-  if (o.op === 'copy' && o.after !== undefined) return { op: 'copy', runs: o.runs.map(([a, b]): [number, number] => [a, b]), after: o.after };          // 2026-11-24-1036
+  if ((o.op === 'copy' || o.op === 'move') && o.after !== undefined) return { op: o.op, runs: o.runs.map(([a, b]): [number, number] => [a, b]), after: o.after };          // 2026-11-24-1036 (a copy), 2026-11-24-1040 (a move to a place)
   if (o.op === 'keep' || o.op === 'delete' || o.op === 'copy') return { op: o.op, runs: o.runs.map(([a, b]): [number, number] => [a, b]) };
-  if (o.op === 'move') return { op: 'move', runs: o.runs.map(([a, b]): [number, number] => [a, b]), by: o.by };
+  if (o.op === 'move') return { op: 'move', runs: o.runs.map(([a, b]): [number, number] => [a, b]), by: o.by as -1 | 1 };
   if (o.op === 'morph_between') return { op: 'morph_between', a: o.a, b: o.b, bars: o.bars, order: o.order, seed: o.order === 'seeded' ? o.seed : 0, after: o.after };       // 2026-11-19-0996b
   if (o.op === 'mix_bars') {                                                                                                                                                  // 2026-11-19-0999b: a path says its order and seed (0 unless seeded), a vote neither
     const base = { op: 'mix_bars' as const, a: o.a, b: o.b, weight: o.weight, threshold: o.threshold, ghost: o.ghost, mode: o.mode };

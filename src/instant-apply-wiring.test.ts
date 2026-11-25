@@ -289,13 +289,12 @@ test('a one-letter typo of a verb: `Delet bar 2.` -> `Did you mean: Delete bar 2
   assert.equal(r.writes.length, w); assert.equal(r.entries().filter((e) => e.kind === 'suggestion').pop()!.text, 'Did you mean: Delete bar 2?'); assert.equal(r.suggestion(), 'Delete bar 2.');
   await r.enter(); assert.deepEqual(unsaid(r.list()), ['Take [[phrase_003]].', 'Delete bar 2.']); assert.equal(r.writes.length, w + 1);
 });
-test('Move with place words: `Move bar 4 before bar 2.` -> the CHAIN `Move bar 4 one bar left. Move bar 3 one bar left.` and the hint that says what it did; Enter applies BOTH moves (2026-11-23-1027 (deliberate): it was ONE move and the hint said "say it twice")', async () => {
+// 2026-11-24-1040 (deliberate): the CHAIN card (`Did you mean: Move bar 4 one bar left. Move bar 3 one bar left? ...`) is retired: the grammar READS `Move bar 4 before bar 2.` (one op, the canonical `Move bar 4 after bar 1.`), so it is applied at once, with one write
+test('Move with place words: `Move bar 4 before bar 2.` is READ by the grammar, applied at once as the canonical `Move bar 4 after bar 1.` (one write, no card)', async () => {
   const r = rig(); await r.ready(); await r.say('Take [[phrase_003]].'); const w = r.writes.length;
   r.type('Move bar 4 before bar 2.'); await r.enter();
-  assert.equal(r.writes.length, w);
-  assert.equal(r.entries().filter((e) => e.kind === 'suggestion').pop()!.text, 'Did you mean: Move bar 4 one bar left. Move bar 3 one bar left? Bar 4 before bar 2 is 2 places left: both moves are written.');
-  assert.equal(r.suggestion(), 'Move bar 4 one bar left. Move bar 3 one bar left.');
-  await r.enter(); assert.deepEqual(unsaid(r.list()), ['Take [[phrase_003]].', 'Move bar 4 one bar left.', 'Move bar 3 one bar left.']); assert.equal(r.writes.length, w + 1, 'one write for the whole chain');
+  assert.equal(r.writes.length, w + 1, 'one write'); assert.deepEqual(unsaid(r.list()), ['Take [[phrase_003]].', 'Move bar 4 after bar 1.']);
+  assert.ok(!r.entries().some((e) => e.kind === 'suggestion' && /^Did you mean/.test(e.text)), 'no card');
 });
 test('a typo and an unclosed link in different sentences of one text: one suggestion for the whole text', async () => {
   const r = rig(); await r.ready();

@@ -19,7 +19,7 @@ import { LIST_MODEL_SENTINEL_DUPLICATE_SENTENCE_CORE } from './duplicate-sentenc
 import { LIST_MODEL_SENTINEL_DUPLICATE_NOTE_CORE } from './duplicate-note-core.ts';
 import { LIST_MODEL_SENTINEL_DUPLICATE_UNDO_CORE } from './duplicate-undo-core.ts';
 import { LIST_MODEL_SENTINEL_PHRASE_STEPS_LINEAGE_CORE, annotateWithSteps, stepLineageOf } from './phrase-steps-lineage-core.ts';
-import { LIST_MODEL_SENTINEL_DID_YOU_MEAN_CORE, drawnBarNames, duplicateByLink, notAskedNote, offerRepair, placeRefusal, placeWordSentence } from './did-you-mean-core.ts';
+import { LIST_MODEL_SENTINEL_DID_YOU_MEAN_CORE, drawnBarNames, duplicateByLink, notAskedNote, offerRepair, placeWordSentence } from './did-you-mean-core.ts';
 import { LIST_MODEL_SENTINEL_TYPED_STEP_CORE, applyTyped, previewTyped } from './typed-step-core.ts';
 import { LIST_MODEL_SENTINEL_UNDO_TRACE_CORE, createUndoTrace } from './undo-trace-core.ts';
 import { LIST_MODEL_SENTINEL_RENAME_FOLLOW_CORE, followRenamedDescription } from './rename-follow-core.ts';
@@ -49,7 +49,7 @@ export const listModel: ListModel = {
   duplicate: { readActionText, barNumberOf, barClickText, linkInsertion, idParts, resolveDuplicateTarget, duplicatePreviewLine, copyNoteText, createdLine, duplicateNote, undoCopy },
   steps: { annotate: annotateWithSteps, lineageOf: stepLineageOf },
   typed: { preview: previewTyped, apply: applyTyped },
-  repair: { offer: offerRepair, placeWords: placeWordSentence, placeRefusal, notAsked: notAskedNote, duplicate: duplicateByLink, names: drawnBarNames, paintNames: paintBarNotes },
+  repair: { offer: offerRepair, placeWords: placeWordSentence, notAsked: notAskedNote, duplicate: duplicateByLink, names: drawnBarNames, paintNames: paintBarNotes },
   trace: { create: createUndoTrace },          // 2026-11-20-1004z
   renamed: { follow: followRenamedDescription },          // 2026-11-20-1005 (F9)
   waiting: { line: waitingLine, words: waitingWords, translate: translateRequest, kept: keptMessage, is: isWaitingLine, already: alreadyWaiting, blocked: blockedMessage, tail: blockedTail },          // 2026-11-21-1015 (Part C)

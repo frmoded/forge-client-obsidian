@@ -1,8 +1,7 @@
 // 2026-11-20-1002 (DID YOU MEAN) - the deterministic repairs of a sentence the grammar cannot read, the pure part (no obsidian, no DOM, no model call). When the grammar rejects a typed text and ONE of these repairs makes it readable, the composer shows
-// `Did you mean: <sentence>?` with a button and Enter applies the SUGGESTION (never silently). Three repairs, each a small pure function:
+// `Did you mean: <sentence>?` with a button and Enter applies the SUGGESTION (never silently). Two repairs, each a small pure function (and the copy said by a bar's link, below):
 //   closeLinks   an unclosed link: `Play [[phrase_001]` -> `Play [[phrase_001]]` (one bracket, none and a name cut by the full stop; a name with a space needs its one bracket)
 //   typoOfVerb   a one-letter typo of a verb (Damerau distance 1: one letter added, dropped, changed or two neighbours swapped) against the verbs of the grammar's OWN tables (VERBS, the structure words, the bar forms); a UNIQUE match only
-//   moveRepair   `Move bar 4 before bar 2.` -> the CHAIN of one-place moves, `Move bar 4 one bar left. Move bar 3 one bar left.` (2026-11-23-1027: it said only the first sentence before), with the hint that says what it did
 // The missing full stop needs no repair of its own (the grammar's splitter adds it): every suggestion is shown WITH its stop. `suggestRepair` offers a candidate ONLY when the caller's reader says the grammar reads it: a guess is never shown.
 import { VERBS } from './phrase-grammar-core.ts';
 import { STRUCTURE_WORDS, structureSentence } from './bar-structure-core.ts';
@@ -68,32 +67,7 @@ export function closeLinks(sentence: string): string {
   return out;
 }
 
-/** 2026-11-23-1027: `Move bar A before bar M.` / `... after bar M.` in words and numbers: how many places the bar moves and which way (n = 0 or less: it stays where it is, or it is asked to go before or after itself). null = not this shape. */
-export function movePlaces(sentence: string): { a: number; m: number; rel: 'before' | 'after'; n: number; dir: 'left' | 'right' } | null {
-  const x = /^\s*move\s+bar\s+(\d+)\s+(before|after)\s+bar\s+(\d+)\s*\.?\s*$/i.exec(String(sentence ?? ''));
-  if (x === null) return null;
-  const a = Number(x[1]), m = Number(x[3]), rel = x[2].toLowerCase() as 'before' | 'after', left = m < a;
-  return { a, m, rel, n: rel === 'before' ? (left ? a - m : m - 1 - a) : (left ? a - m - 1 : m - a), dir: left ? 'left' : 'right' };
-}
-
-/** `Move bar 4 before bar 2.` / `... after bar 6.`: the bar's way there is some places left or right, and Move takes one bar ONE place at a time, so the way is the CHAIN of one-place moves, each sentence for the bar where the moving bar NOW sits (2026-11-23-1027: the repair says them ALL,
- *  `Move bar 4 one bar left. Move bar 3 one bar left.`, joined as the repair joins sentences, with the hint that says what it did). null = not this shape, or the bar would stay where it is (`placeRefusal` says that in words). */
-export function moveRepair(sentence: string): { sentence: string; hint: string } | null {
-  const p = movePlaces(sentence);
-  if (p === null || !(p.n >= 1)) return null;
-  const { a, m, rel, n, dir } = p, step = dir === 'left' ? -1 : 1;
-  return {
-    sentence: Array.from({ length: n }, (_, i) => `Move bar ${a + step * i} one bar ${dir}.`).join(' '),
-    hint: `Bar ${a} ${rel} bar ${m} is ${n} place${n === 1 ? '' : 's'} ${dir}${n === 1 ? '' : n === 2 ? ': both moves are written' : `: all ${n} moves are written`}.`,
-  };
-}
-
-/** 2026-11-23-1027: a move to the place the bar already is in (`Move bar 2 before bar 3.`) or before or after itself is a plain refusal in words, never a question and never asked of the service; null = it is a move, or not this shape. */
-export function placeRefusal(sentence: string): string | null {
-  const p = movePlaces(sentence);
-  if (p === null || p.n >= 1) return null;
-  return p.a === p.m ? `Bar ${p.a} cannot go ${p.rel} itself.` : `Bar ${p.a} is already ${p.rel} bar ${p.m}: nothing to move.`;
-}
+/** 2026-11-24-1040: `Move bar A before bar M.` / `... after bar M.` were mended here into the CHAIN of one-place moves (2026-11-23-1027) and a move that goes nowhere was refused here; the GRAMMAR reads a Move to a place itself now (one sentence, one op), and says those refusals (`Bar 3 is part of the bars you are moving.`, `Bar 5 is already at the end.`): both are gone from this file. */
 
 /** 2026-11-23-1027: the repair that follows a place-word sentence is not the service's answer: the dialog says the service was NOT asked, and why. */
 export const notAskedNote = (noService: boolean): string => (noService ? 'The sentence service is not available in this build, so it was not asked.' : 'The sentence service is not set up in this vault, so it was not asked. Add its URL and token in Settings → Forge Actions (Beta).');
@@ -204,26 +178,21 @@ function copyInPlace(text: string, names: readonly string[] | null): DuplicateBy
   return { kind: 'copy', sentence, ...(hint !== undefined ? { hint } : {}), message: hint === undefined ? `It would write: ${sentence}` : `${hint.slice(0, -1)}, so it would write: ${sentence}` };
 }
 
-/** The repaired text, or null when no repair applies: each sentence on its own (a Move with place words; else its links closed and a typo of its first word mended), every sentence with its full stop. The FIRST hint is kept. */
+/** The repaired text, or null when no repair applies: each sentence on its own (its links closed and a typo of its first word mended), every sentence with its full stop.  */
 export function repairCandidate(text: string, family: RepairFamily, names?: readonly string[] | null): Repair | null {
   const copy = family === 'phrase' ? duplicateByLink(text, names ?? null) : null;          // 2026-11-24-1033: a copy said by its link is the grammar's `Copy bar K.` for the position the drawn Score gives it
   if (copy !== null) return copy.kind === 'copy' ? { sentence: copy.sentence, ...(copy.hint !== undefined ? { hint: copy.hint } : {}) } : null;
   const sentences = String(text ?? '').trim().split(/(?<=[.!?])\s+|\n+/).map((x) => x.trim()).filter((x) => x !== '');
   if (sentences.length === 0) return null;
-  const verbs = verbsOf(family); let changed = false, hint: string | undefined;
+  const verbs = verbsOf(family); let changed = false;
   const out = sentences.map((s) => {
-    const move = family === 'phrase' ? moveRepair(s) : null;
-    let r = s;
-    if (move !== null) { r = move.sentence; hint ??= move.hint; }
-    else {
-      r = closeLinks(s);
-      const w = /^([A-Za-z]+)/.exec(r), fix = w === null ? null : typoOfVerb(w[1], verbs);
-      if (fix !== null) r = fix + r.slice(w![1].length);
-    }
+    let r = closeLinks(s);
+    const w = /^([A-Za-z]+)/.exec(r), fix = w === null ? null : typoOfVerb(w[1], verbs);
+    if (fix !== null) r = fix + r.slice(w![1].length);
     if (r !== s) changed = true;
     return /[.!?]$/.test(r) ? r : `${r}.`;
   });
-  return changed ? { sentence: out.join(' '), ...(hint !== undefined ? { hint } : {}) } : null;
+  return changed ? { sentence: out.join(' ') } : null;
 }
 
 /** The repair, if there is one AND `reads` says the grammar reads the repaired text; a reader that throws is a no. */
