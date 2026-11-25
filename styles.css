@@ -2665,6 +2665,11 @@ button.forge-chat-link:not(.clickable-icon) {
 }
 .forge-chat-suggestion-description { margin-top: 2px; padding: 6px 10px; border-left: 2px solid var(--background-modifier-border); color: var(--text-normal); white-space: pre-wrap; }
 .forge-chat-msg pre { margin: 4px 0 0; padding: 4px 6px; white-space: pre-wrap; background: var(--background-secondary); color: var(--text-normal); border-radius: var(--radius-s, 4px); }
+/* 2026-11-24-1039: the dialog's one `Copy` (chat-panel-dom.ts): a quiet underlined word under the log, not Obsidian's grey button (the same two selectors as the link above beat its button rules). */
+button.forge-chat-copy,
+button.forge-chat-copy:not(.clickable-icon) { align-self: flex-end; appearance: none; background: none; background-color: transparent; box-shadow: none; border: 0; padding: 0 2px; margin: 0; height: auto; font: inherit; font-size: var(--font-ui-smaller); color: var(--text-muted); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+button.forge-chat-copy:focus-visible { color: var(--text-normal); outline: 2px solid var(--interactive-accent); outline-offset: 2px; }
+.forge-chat-copy[hidden] { display: none; }
 .forge-chat-chosen { margin-top: 2px; font-size: var(--font-ui-smaller); color: var(--text-muted); }
 .forge-prompt-box.forge-composer {
   flex: 0 0 auto;
@@ -2763,6 +2768,8 @@ button.forge-chat-link:not(.clickable-icon) {
 .forge-composer-error::before { content: "!"; content: "!" / ""; display: inline-flex; align-items: center; justify-content: center; width: 1.25em; height: 1.25em; margin-right: 0.5em; border: 1px solid var(--text-muted); border-radius: 50%; color: var(--text-muted); font-size: 0.85em; font-weight: 600; line-height: 1; vertical-align: 0.05em; }
 .forge-composer-error.is-empty::before { content: none; }
 .forge-composer-error.is-empty { display: none; }
+/* 2026-11-24-1039: the long refusal under the card wraps inside the tab (a word longer than the line breaks anywhere); its selection and the busy line's are the opt-in list above. */
+.forge-composer-error { overflow-wrap: anywhere; }
 .forge-composer-sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 /* 2026-11-19-0925: the accessible name of a control, with no tooltip. Obsidian draws a tooltip from any aria-label, so a control names itself with aria-labelledby pointing at this span (src/sr-label-core.ts).
    The standard clip pattern, NOT display:none or visibility:hidden (those would hide the name from a screen reader too): 1 px, clipped away, out of the flow so it adds no gap, no row and no scroll. */
@@ -2776,6 +2783,8 @@ button.forge-chat-link:not(.clickable-icon) {
 
 /* 2026-11-03-1155-9 (PRIORITY, driver: "make all the text tags selectable and copyable so I can copy them to you"): EVERY message the plugin draws is selectable text. Obsidian's leaf container inherits `user-select: none` from its chrome, so the
    messages opt in one by one (the Forge output panel did in v0.2.178). Only TEXT: buttons, chips, drag handles and the engraving (`.forge-rhythm-score-host svg`, whose drag selects bars) stay as they were. */
+.forge-composer-error,
+.forge-prompt-box-state,
 .forge-description-message,
 .forge-description-preview pre,
 .forge-phrase-status,

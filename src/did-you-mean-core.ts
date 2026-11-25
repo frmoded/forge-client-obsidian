@@ -142,12 +142,12 @@ function spans(at: number[]): string {
   return and(out);
 }
 /**
- * The question for a bar the Score holds at several positions (`total`: the bars of the phrase). 4 positions or fewer: the plain list, with each answer in the grammar's words. More: `bar_007 is every bar of this phrase (1 to 13)` when it is every bar,
- * else `bar_005 is bars 1 to 3 and 7 and 8 ...` as ranges; then the one pattern (`Say Copy bar N.`). The link is written as it is in the note (`bar_007`, never `Bar 007`).
+ * The question for a bar the Score holds at several positions (`total`: the bars of the phrase). The plain list, with each answer in the grammar's words, when there are 4 positions or fewer and no run of 3 (2026-11-24-1039: a run of 3 or more consecutive positions is `a to b`
+ * at any count, `bars 1 to 3 and 7`). Otherwise `bar_007 is every bar of this phrase (1 to 13)` when it is every bar of a phrase of more than 4, else `bar_005 is bars 1 to 3 and 7 ...` as ranges; then the one pattern (`Say Copy bar N.`). The link is written as it is in the note (`bar_007`, never `Bar 007`).
  */
 function which(name: string, at: number[], total: number, say: (k: number) => string, generic: string): DuplicateByLink {
-  if (at.length <= 4) { const list = at.map(say); return { kind: 'which', message: `${name} is bars ${and(at)} of this phrase: which one? Say ${list.slice(0, -1).join(', ')} or ${list[list.length - 1]}` }; }
-  const where = at.length === total ? `every bar of this phrase (1 to ${total})` : `bars ${spans(at)} of this phrase`;
+  if (at.length <= 4 && !at.some((v, i) => i >= 2 && at[i - 2] === v - 2 && at[i - 1] === v - 1)) { const list = at.map(say); return { kind: 'which', message: `${name} is bars ${and(at)} of this phrase: which one? Say ${list.slice(0, -1).join(', ')} or ${list[list.length - 1]}` }; }
+  const where = at.length === total && total > 4 ? `every bar of this phrase (1 to ${total})` : `bars ${spans(at)} of this phrase`;
   return { kind: 'which', message: `${name} is ${where}: which one? Say ${generic}` };
 }
 /** The bar name a link says (`bar_007`, `bars/bar_007`, `bar_007.md`); null for a link into another folder or an empty one. */

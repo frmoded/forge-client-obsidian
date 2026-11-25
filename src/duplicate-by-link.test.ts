@@ -36,7 +36,7 @@ test('B: SEVERAL positions: it asks which, in words, and never guesses (no sente
   const r = duplicateByLink('please duplicate [[bar_005]]', NAMES);
   assert.deepEqual(r, { kind: 'which', message: 'bar_005 is bars 1 and 3 of this phrase: which one? Say Copy bar 1. or Copy bar 3.' });
   const three = duplicateByLink('Copy [[bar_005]].', ['bar_005', 'bar_005', 'bar_005']);
-  assert.deepEqual(three, { kind: 'which', message: 'bar_005 is bars 1, 2 and 3 of this phrase: which one? Say Copy bar 1., Copy bar 2. or Copy bar 3.' });
+  assert.deepEqual(three, { kind: 'which', message: 'bar_005 is bars 1 to 3 of this phrase: which one? Say Copy bar N.' });          // 2026-11-24-1039 (deliberate): a run of 3 is `a to b` whatever the count (was 'bars 1, 2 and 3 ... Say Copy bar 1., Copy bar 2. or Copy bar 3.')
   const many = duplicateByLink('Copy [[bar_005]].', Array.from({ length: 9 }, () => 'bar_005'));
   assert.equal(many?.kind, 'which'); assert.match((many as { message: string }).message, /^bar_005 is every bar of this phrase \(1 to 9\): which one\? Say Copy bar N\.$/);
 });
@@ -51,8 +51,9 @@ test('1037 D: a PARTIAL set of more than 4 positions is said as ranges (a run of
   const spread = ['bar_005', 'bar_006', 'bar_005', 'bar_005', 'bar_006', 'bar_005', 'bar_005', 'bar_005', 'bar_005', 'bar_006'];
   assert.deepEqual(duplicateByLink('Copy [[bar_005]].', spread), { kind: 'which', message: 'bar_005 is bars 1, 3, 4 and 6 to 9 of this phrase: which one? Say Copy bar N.' });
 });
-test('1037 D: 4 positions or fewer keep the plain position list and the answers, even when they are every bar of a small phrase; a name that is not bar_N is said as it is', () => {
-  assert.deepEqual(duplicateByLink('Copy [[bar_005]].', ['bar_005', 'bar_005', 'bar_005', 'bar_005']), { kind: 'which', message: 'bar_005 is bars 1, 2, 3 and 4 of this phrase: which one? Say Copy bar 1., Copy bar 2., Copy bar 3. or Copy bar 4.' });
+// 2026-11-24-1039 (deliberate): the title said "4 positions or fewer keep the plain list ... even when every bar of a small phrase"; now a RUN of 3 or more is `a to b` at any count, and the plain list stays for runs shorter than 3.
+test('1037 D / 1039: runs shorter than 3 keep the plain position list and the answers; a run of 3 or 4 in a small phrase is `a to b`; a name that is not bar_N is said as it is', () => {
+  assert.deepEqual(duplicateByLink('Copy [[bar_005]].', ['bar_005', 'bar_005', 'bar_005', 'bar_005']), { kind: 'which', message: 'bar_005 is bars 1 to 4 of this phrase: which one? Say Copy bar N.' });
   assert.deepEqual(duplicateByLink('Copy [[bar_005]].', ['bar_005', 'bar_005']), { kind: 'which', message: 'bar_005 is bars 1 and 2 of this phrase: which one? Say Copy bar 1. or Copy bar 2.' });
   assert.deepEqual(duplicateByLink('Copy [[kick_pattern]].', ['kick_pattern', 'bar_001', 'kick_pattern']), { kind: 'which', message: 'kick_pattern is bars 1 and 3 of this phrase: which one? Say Copy bar 1. or Copy bar 3.' });
 });
@@ -61,6 +62,24 @@ test('1037 D: the place questions (1036) say it the same way: every bar and rang
   assert.deepEqual(duplicateByLink('Copy bar 3 after [[bar_005]].', nine), { kind: 'which', message: 'bar_005 is every bar of this phrase (1 to 9): which one? Say after bar N.' });
   assert.deepEqual(duplicateByLink('Copy [[bar_007]] before [[bar_005]].', [...nine, 'bar_007']), { kind: 'which', message: 'bar_005 is bars 1 to 9 of this phrase: which one? Say before bar N.' });
   assert.deepEqual(duplicateByLink('Copy [[bar_007]] after [[bar_005]].', ['bar_005', 'bar_007', 'bar_005']), { kind: 'which', message: 'bar_005 is bars 1 and 3 of this phrase: which one? Say after bar 1 or after bar 3' });
+});
+// 2026-11-24-1039: ranges at 3 (the driver's 1037 question 1, forge-core's answer): a run of 3 or more consecutive positions is `a to b` whatever the total; a run shorter than 3 is listed. Written BEFORE the code, seen red.
+test('1039: `bars 1 to 3 and 7` (4 positions, one run of 3): the range and the one pattern, not the list of answers', () => {
+  const names = ['bar_005', 'bar_005', 'bar_005', 'bar_006', 'bar_006', 'bar_006', 'bar_005'];
+  assert.deepEqual(duplicateByLink('Copy [[bar_005]].', names), { kind: 'which', message: 'bar_005 is bars 1 to 3 and 7 of this phrase: which one? Say Copy bar N.' });
+  assert.deepEqual(duplicateByLink('Copy [[bar_005]].', ['bar_006', 'bar_005', 'bar_005', 'bar_005']), { kind: 'which', message: 'bar_005 is bars 2 to 4 of this phrase: which one? Say Copy bar N.' });
+  assert.deepEqual(duplicateByLink('Copy [[bar_005]].', ['bar_005', 'bar_006', 'bar_005', 'bar_005', 'bar_005']), { kind: 'which', message: 'bar_005 is bars 1 and 3 to 5 of this phrase: which one? Say Copy bar N.' });
+});
+test('1039: no run of 3 stays the list with its answers (bars 1, 3, 5 and 7: 4 positions; 1 and 2: a run of 2); more than 4 positions without a run are listed position by position with the one pattern (as built)', () => {
+  const at = (ps: number[], n = 9): string[] => Array.from({ length: n }, (_, i) => (ps.includes(i + 1) ? 'bar_005' : 'bar_006'));
+  assert.deepEqual(duplicateByLink('Copy [[bar_005]].', at([1, 3, 5, 7])), { kind: 'which', message: 'bar_005 is bars 1, 3, 5 and 7 of this phrase: which one? Say Copy bar 1., Copy bar 3., Copy bar 5. or Copy bar 7.' });
+  assert.deepEqual(duplicateByLink('Copy [[bar_005]].', at([1, 2, 4, 5])), { kind: 'which', message: 'bar_005 is bars 1, 2, 4 and 5 of this phrase: which one? Say Copy bar 1., Copy bar 2., Copy bar 4. or Copy bar 5.' });
+  assert.deepEqual(duplicateByLink('Copy [[bar_005]].', at([1, 3, 5, 7, 9])), { kind: 'which', message: 'bar_005 is bars 1, 3, 5, 7 and 9 of this phrase: which one? Say Copy bar N.' });
+});
+test('1039: every bar of a phrase of 3 or 4 bars is `bars 1 to 3` / `bars 1 to 4` (`every bar` is for more than 4); the place questions say a run the same way: `Say after bar N.`', () => {
+  assert.deepEqual(duplicateByLink('Copy [[bar_005]].', ['bar_005', 'bar_005', 'bar_005']), { kind: 'which', message: 'bar_005 is bars 1 to 3 of this phrase: which one? Say Copy bar N.' });
+  assert.deepEqual(duplicateByLink('Copy [[bar_007]] after [[bar_005]].', ['bar_005', 'bar_005', 'bar_005', 'bar_007', 'bar_005']), { kind: 'which', message: 'bar_005 is bars 1 to 3 and 5 of this phrase: which one? Say after bar N.' });
+  assert.deepEqual(duplicateByLink('Copy [[bar_007]] before [[bar_005]].', ['bar_005', 'bar_007', 'bar_005']), { kind: 'which', message: 'bar_005 is bars 1 and 3 of this phrase: which one? Say before bar 1 or before bar 3' });
 });
 // 2026-11-24-1037 (deliberate): ONE wording for a link that is not in the phrase, for 1033 and 1036 alike (`Bar 007 is not in this phrase.` and `[[kick_pattern]] is not in this phrase.` are retired).
 test('B: the bar is NOT in the phrase: `There is no bar named bar_007 in this phrase.`, nothing to write; a name that is not `bar_N` is said with its link', () => {

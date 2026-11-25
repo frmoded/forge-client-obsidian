@@ -64,7 +64,9 @@ export function mountChatPanel(host: HTMLElement, ports: ChatPanelPorts, initial
   while (host.firstChild) body.appendChild(host.firstChild);                      // everything the tab drew goes into the body that scrolls
   const panel = doc.createElement('div'); panel.className = 'forge-chat-panel'; panel.setAttribute('role', 'group'); setSrLabel(panel, 'Composer and dialog');
   const log = doc.createElement('div'); log.className = 'forge-chat-log is-empty'; log.setAttribute('role', 'log'); log.setAttribute('aria-live', 'polite'); setSrLabel(log, 'What happened to this Description', { host: panel, key: 'log' });   // the name sits in the panel, not in the log: the log is redrawn and its children are the entries
-  panel.append(log);
+  // 2026-11-24-1039: ONE `Copy` for the whole dialog (the driver could not select the grammar's long refusal to paste it): the dialog's lines, in order, and the line under the card when the dialog holds only a cut of it. Hidden while the dialog is empty.
+  const copy = doc.createElement('button'); copy.type = 'button'; copy.className = 'forge-chat-copy'; copy.textContent = 'Copy'; copy.hidden = true;
+  panel.append(log, copy);
   host.append(body, panel);
   host.classList.add(CHAT_HOST_CLASS);
 
@@ -122,12 +124,23 @@ export function mountChatPanel(host: HTMLElement, ports: ChatPanelPorts, initial
     }
     return out;
   };
+  let shown: readonly DialogEntry[] = [], copyTimer: unknown = null;
+  const said = (t: string): void => { copy.textContent = t; if (copyTimer !== null) disarm(copyTimer); copyTimer = arm(() => { copyTimer = null; if (!disposed) copy.textContent = 'Copy'; }, 2000); };
+  copy.addEventListener('click', () => {
+    const under = (panel.querySelector('.forge-composer-error')?.textContent ?? '').trim();
+    const lines = shown.flatMap((e) => [`${LABEL[e.kind]}: ${e.text}`, ...(e.suggestion ? [e.suggestion.description, ...(e.suggestion.recipe === '' ? [] : [e.suggestion.recipe])] : [])]);
+    if (under !== '' && !shown.some((e) => e.text === under || (e.text.endsWith('…') && under.startsWith(e.text.slice(0, -1))))) lines.push(`Under the box: ${under}`);
+    const clip = (doc.defaultView as unknown as { navigator?: { clipboard?: { writeText?(t: string): Promise<void> } } } | null)?.navigator?.clipboard;
+    if (clip?.writeText === undefined) { said('Could not copy'); return; }
+    void clip.writeText(lines.join('\n')).then(() => said('Copied'), () => said('Could not copy'));
+  });
   let drawnNewest = -1;                                                                                         // 2026-11-19-0992b: the id of the newest entry the last draw showed
   const render = (entries: readonly DialogEntry[], _cur: string): void => {
     if (disposed) return;
     const atEnd = log.scrollHeight - log.scrollTop - (log.clientHeight || 0) < 40 || log.childElementCount === 0;
     while (log.firstChild) log.removeChild(log.firstChild);
     log.classList.toggle('is-empty', entries.length === 0);
+    shown = entries; copy.hidden = entries.length === 0;
     for (const e of entries) {
       const m = doc.createElement('div'); m.className = `forge-chat-msg is-${e.kind}${e.kind === 'you' ? ' is-you' : ' is-forge'}`; m.setAttribute('data-id', String(e.id)); m.setAttribute('data-kind', e.kind);
       const meta = doc.createElement('div'); meta.className = 'forge-chat-meta';
@@ -202,7 +215,7 @@ export function mountChatPanel(host: HTMLElement, ports: ChatPanelPorts, initial
     refreshTimes,
     dispose() {
       if (disposed) return;
-      disposed = true; if (timer !== null) disarm(timer); timer = null; layoutWatch?.disconnect(); divider.dispose(); watch?.disconnect(); host.removeEventListener('keydown', onKey); box.dispose();
+      disposed = true; if (timer !== null) disarm(timer); timer = null; if (copyTimer !== null) disarm(copyTimer); copyTimer = null; layoutWatch?.disconnect(); divider.dispose(); watch?.disconnect(); host.removeEventListener('keydown', onKey); box.dispose();
       if (body.parentElement === host) while (body.firstChild) host.insertBefore(body.firstChild, body);                // the tab's content goes back where it was
       body.remove(); panel.remove();
       host.classList.remove(CHAT_HOST_CLASS, CHAT_WIDE_CLASS, 'forge-chat-stacked');

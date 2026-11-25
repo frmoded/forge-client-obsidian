@@ -138,12 +138,13 @@ export function mountPromptBox(parent: HTMLElement, ports: PromptBoxPorts, initi
     el.classList.toggle('is-edited', edited); el.classList.toggle('has-conflict', s.conflict); el.classList.toggle('is-previewing', c.phase === 'previewing');
     el.classList.toggle('is-busy', working); el.classList.toggle('can-send', edited && canSubmit(c) && remote === null);
     text.readOnly = working;
-    state.textContent = remote ?? (c.phase === 'working' ? WORKING_TEXT : '');
+    const put = (e: Element, t: string): void => { if (e.textContent !== t) e.textContent = t; };          // 2026-11-24-1039: the same words are not written again (a new text node ends a selection made in them)
+    put(state, remote ?? (c.phase === 'working' ? WORKING_TEXT : ''));
     send.disabled = false; send.setAttribute('aria-disabled', edited && canSubmit(c) && remote === null ? 'false' : 'true');
     conflict.style.display = s.conflict ? '' : 'none';
     const line = errorLine(c) || note || '';
-    errorEl.textContent = line; errorEl.classList.toggle('is-empty', line === '');
-    live.textContent = announcement(c) || (note ?? '');
+    put(errorEl, line); errorEl.classList.toggle('is-empty', line === '');
+    put(live, announcement(c) || (note ?? ''));
   };
 
   // ---- the state machine and its effects -------------------------------------------------------------------------------------------------------------------------------------------
