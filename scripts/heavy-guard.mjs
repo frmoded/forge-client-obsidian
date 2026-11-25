@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 // 2026-11-20-1001z - the guard behind scripts/heavy-guard.sh (read its header: what it does, the numbers, the exit codes). This file is the part that runs a command: it refuses to start it on a machine under memory pressure, and while it runs
 // kills its WHOLE process tree when the tree, the memory compressor or the swap pass their limits. The lock is taken by heavy-guard.sh (scripts/dev/heavy-lock.mjs), not here.
-//   node scripts/heavy-guard.mjs [--what <label>] [--rss-mb <n>] -- <command...>
+//   node scripts/heavy-guard.mjs [--what <label>] [--rss-mb <n>] [--wait-minutes <n>] -- <command...>
 //   node scripts/heavy-guard.mjs --limits       the limits in force (defaults and what the environment changes), one per line
 // As a module it gives the in-process tools (the real-Chrome helper, `npm test`'s runner, the mutation runner) the same three questions: `guardEnabled`, `checkStart`, and `createGuard` (heavy-mem-core.mjs) fed with a process table they already have.
 import { spawn } from 'node:child_process';
 import os from 'node:os';
 import { pathToFileURL } from 'node:url';
 import { killTree } from './dev/proc-tree.mjs';
-import { EXIT_REFUSED, EXIT_STOPPED, alsoRunning, alsoRunningLine, createGuard, limitsFromEnv, refusalReasons, refusalText, treeRows } from './heavy-mem-core.mjs';
+import { EXIT_REFUSED, EXIT_STOPPED, alsoRunning, alsoRunningLine, createGuard, limitsFromEnv, refusalReasons, refusalText, treeRows, waitingLine } from './heavy-mem-core.mjs';
 import { readMachine, readProcesses, readProcessesForNaming } from './heavy-mem-read.mjs';
 
 /**
@@ -35,6 +35,35 @@ export function checkStart({ env = process.env, what = 'heavy run', rssMb, readM
   if (reasons.length === 0) return { refuse: false, limits };
   const also = alsoRunningLine(alsoRunning(readRows(), { minMb: limits.alsoRunningMb, exclude }));
   return { refuse: true, limits, reasons, text: refusalText({ reasons, also, what }) };
+}
+
+/**
+ * 2026-11-24-1037: how many minutes a start may WAIT for memory. `flag` (--wait-minutes, or the number a caller passes for itself) wins over FORGE_HEAVY_WAIT_MIN; neither, or anything that is not a number above 0, is 0 = refuse at once, as always.
+ */
+export function waitMinutesFrom(env = process.env, flag) {
+  const pos = (v) => { const n = Number(v); return v !== undefined && v !== null && String(v).trim() !== '' && Number.isFinite(n) && n > 0 ? n : 0; };
+  return flag !== undefined && flag !== null ? pos(flag) : pos(env.FORGE_HEAVY_WAIT_MIN);
+}
+/** How often a waiting start looks again: 30 s (FORGE_HEAVY_WAIT_POLL_MS changes it, for tests). */
+export function waitIntervalMs(env = process.env) { const n = Number(env.FORGE_HEAVY_WAIT_POLL_MS); return env.FORGE_HEAVY_WAIT_POLL_MS !== undefined && env.FORGE_HEAVY_WAIT_POLL_MS !== '' && Number.isFinite(n) && n > 0 ? n : 30_000; }
+
+/**
+ * The start check that may WAIT (2026-11-24-1037): checkStart; when it refuses and `waitMinutes` is above 0, print one `waiting for memory: ...` line (waitingLine), sleep `intervalMs`, read again, for up to `waitMinutes` minutes in all; the first
+ * reading under the limits starts the job ({ refuse: false }); when the minutes are over, the answer is the last refusal, the same text as always (the caller exits 75). The limits are the ones checkStart uses: waiting never lowers or raises one.
+ * `readMem`, `sleep` and `print` are injectable (the tests wait for nothing).
+ */
+export async function startOrWait({ env = process.env, what = 'heavy run', rssMb, waitMinutes = 0, intervalMs = waitIntervalMs(env), readMem = () => readMachine(env), readRows = () => readProcessesForNaming(env), exclude = new Set([process.pid]), sleep = (ms) => new Promise((r) => setTimeout(r, ms)), print = (l) => console.error(l) } = {}) {
+  let mem = null;
+  const look = () => checkStart({ env, what, rssMb, readMem: () => (mem = readMem()), readRows, exclude });
+  let start = look();
+  const totalMs = waitMinutes * 60_000;
+  for (let waitedMs = 0; start.refuse && waitedMs < totalMs;) {
+    print(`${waitingLine({ mem, limits: start.limits, elapsedMin: waitedMs / 60_000, totalMin: waitMinutes })}`);
+    const step = Math.min(intervalMs, totalMs - waitedMs);
+    await sleep(step); waitedMs += step;
+    start = look();
+  }
+  return start;
 }
 
 /**
@@ -71,7 +100,8 @@ function parseArgs(argv) {
   const dash = argv.indexOf('--');
   const opts = dash >= 0 ? argv.slice(0, dash) : argv, command = dash >= 0 ? argv.slice(dash + 1) : [];
   const get = (k) => { const i = opts.indexOf(k); return i >= 0 ? opts[i + 1] : undefined; };
-  return { command, what: get('--what'), rssMb: get('--rss-mb') !== undefined ? Number(get('--rss-mb')) : undefined, limitsOnly: opts.includes('--limits') };
+  const waitRaw = get('--wait-minutes');
+  return { command, waitRaw, waitBad: opts.includes('--wait-minutes') && !(waitRaw !== undefined && waitRaw.trim() !== '' && Number.isFinite(Number(waitRaw)) && Number(waitRaw) >= 0), what: get('--what'), rssMb: get('--rss-mb') !== undefined ? Number(get('--rss-mb')) : undefined, limitsOnly: opts.includes('--limits') };
 }
 
 export async function main(argv, env = process.env) {
@@ -80,9 +110,10 @@ export async function main(argv, env = process.env) {
     for (const [k, v] of Object.entries(limitsFromEnv(env, { rssMb: a.rssMb }))) console.log(`${k} ${v}`);
     return 0;
   }
-  if (a.command.length === 0) { console.error('usage: heavy-guard.mjs [--what label] [--rss-mb n] -- <command...>'); return 2; }
+  if (a.waitBad) { console.error('heavy-guard: --wait-minutes needs a number (0 or more)'); return 2; }
+  if (a.command.length === 0) { console.error('usage: heavy-guard.mjs [--what label] [--rss-mb n] [--wait-minutes n] -- <command...>'); return 2; }
   const what = a.what ?? a.command.find((c) => !c.startsWith('-') && c !== 'node' && c !== 'bash') ?? a.command[0];
-  const start = checkStart({ env, what, rssMb: a.rssMb });
+  const start = await startOrWait({ env, what, rssMb: a.rssMb, waitMinutes: waitMinutesFrom(env, a.waitRaw) });   // 2026-11-24-1037: waits up to --wait-minutes / FORGE_HEAVY_WAIT_MIN (default 0: refuses at once)
   if (start.refuse) { console.error(start.text); return EXIT_REFUSED; }
   const { limits } = start;
   console.error(`heavy-guard: ${what}: stops its whole tree over ${limits.rssMb} MB, or at compressed memory ${limits.compressedKillMb} MB, or swap ${limits.swapKillMb} MB (node scripts/heavy-guard.mjs --limits)`);

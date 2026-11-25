@@ -89,17 +89,18 @@ test('end to end: the tab paints the note of every bar; `please duplicate [[bar_
   assert.ok(r.entries().map((e: any) => e.text).includes('Did you mean: Copy bar 6? bar_002 is bar 6 of this phrase.'), r.entries().map((e: any) => e.text).join(' | '));
   r.done();
 });
+// 2026-11-24-1037 (deliberate): the one wording (`There is no bar named bar_007 in this phrase.`) and the which-question said as `bar_005 is bars ...: which one? Say Copy bar N.` (no `for the one you mean`).
 test('end to end: a bar the phrase does not hold is refused in words; a bar it holds at several positions is asked about (never guessed); nothing is written', async () => {
   const r = await rig(FORKED); const before = r.files.get(r.notePath);
   r.type('please duplicate [[bar_007]]'); await r.press({ key: 'Enter' });
   r.type('please duplicate [[bar_005]]'); await r.press({ key: 'Enter' });
   const t = r.entries().map((e: any) => e.text);
-  assert.ok(t.includes('Bar 007 is not in this phrase.'), t.join(' | ')); assert.ok(t.includes('Bar 005 is bars 1, 2, 4, 5, 7 and 8 of this phrase: which one? Say Copy bar N. for the one you mean.'), t.join(' | '));
+  assert.ok(t.includes('There is no bar named bar_007 in this phrase.'), t.join(' | ')); assert.ok(t.includes('bar_005 is bars 1, 2, 4, 5, 7 and 8 of this phrase: which one? Say Copy bar N.'), t.join(' | '));
   assert.equal(r.files.get(r.notePath), before, 'the note is not written'); r.done();
 });
 test('end to end: a transform\'s bars have no bar note: the Score says nothing, so the sentence is not read here (the old path)', async () => {
   const r = await rig(TRANSFORM);
   assert.ok(r.bars().length > 0); assert.ok(r.bars().every((g: any) => g.getAttribute('data-forge-bar-note') === null));
   r.type('please duplicate [[bar_009]]'); await r.press({ key: 'Enter' });
-  assert.ok(!r.entries().some((e: any) => /^Did you mean: Copy bar|is not in this phrase/.test(e.text)), r.entries().map((e: any) => e.text).join(' | ')); r.done();
+  assert.ok(!r.entries().some((e: any) => /^Did you mean: Copy bar|There is no bar named/.test(e.text)), r.entries().map((e: any) => e.text).join(' | ')); r.done();
 });

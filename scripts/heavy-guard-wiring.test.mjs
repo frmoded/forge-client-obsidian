@@ -21,7 +21,7 @@ const until = async (cond, ms = 8000) => { const t0 = Date.now(); while (Date.no
 /** The environment of a guarded tool: the guard ON, not in a test run, not under another guard, the machine faked from `mem` (a file), a lock of its own, the mutation runner's own memory gate told the machine has room. */
 function envFor(dir, mem, extra = {}) {
   const e = { ...process.env };
-  for (const k of ['NODE_TEST_CONTEXT', 'FORGE_HEAVY_GUARDED', 'FORGE_HEAVY_LOCK_HELD', 'FORGE_HEAVY_RSS_MB']) delete e[k];
+  for (const k of ['NODE_TEST_CONTEXT', 'FORGE_HEAVY_GUARDED', 'FORGE_HEAVY_LOCK_HELD', 'FORGE_HEAVY_RSS_MB', 'FORGE_HEAVY_WAIT_MIN', 'FORGE_MATRIX_WAIT_MIN', 'FORGE_MEASURE_WAIT_MIN']) delete e[k];   // 2026-11-24-1037: the wait variables of the driver's shell never reach a test
   const room = path.join(dir, 'room.json'); fs.writeFileSync(room, JSON.stringify({ availableMb: 9000, freePercent: 60 }));
   return { ...e, FORGE_HEAVY_GUARD: 'on', FORGE_HEAVY_FAKE_MEM: mem, FORGE_HEAVY_LOCK: path.join(dir, 'forge-heavy.lock'), FORGE_HEAVY_SYS_MS: '100', FORGE_HEAVY_POLL_MS: '100', FORGE_MEM_READ_FILE: room, FORGE_MEM_BUDGET_MB: '', FORGE_TEST_HEAP_MB: '', ...extra };
 }
@@ -120,7 +120,7 @@ test('cdp.mjs openPage: REFUSES before Chrome starts (75); STOPPED when the mach
     fs.writeFileSync(fakeChrome, `#!/bin/bash\necho $$ > ${JSON.stringify(path.join(dir, 'chrome.pid'))}\nexec sleep 30\n`, { mode: 0o755 });
     const script = path.join(dir, 'measure.mjs');
     fs.writeFileSync(script, `import { openPage } from ${JSON.stringify(path.join(SCRIPTS, 'dev', 'cdp.mjs'))};\nawait openPage({ dir: ${JSON.stringify(dir)}, pageHtml: '<p>x</p>' });\n`);
-    const refused = spawnSync(process.execPath, [script], { encoding: 'utf8', timeout: 60_000, env: envFor(dir, writeMem(dir, BAD), { CHROME: fakeChrome }) });
+    const refused = spawnSync(process.execPath, [script], { encoding: 'utf8', timeout: 60_000, env: envFor(dir, writeMem(dir, BAD), { CHROME: fakeChrome, FORGE_MEASURE_WAIT_MIN: '0' }) });   // 2026-11-24-1037: a measure waits 20 minutes by default now; this test is the refusal
     assert.equal(refused.status, 75, refused.stdout + refused.stderr);
     assert.match(refused.stderr, /memory pressure high, wait \(real-Chrome measure\)/);
     assert.ok(!fs.existsSync(path.join(dir, 'chrome.pid')), 'Chrome was never started');
@@ -141,7 +141,8 @@ test('cdp.mjs openPage: REFUSES before Chrome starts (75); STOPPED when the mach
 // ---- the matrix --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 test('the matrix starts through heavy-guard.sh with its own tree cap (FORGE_MATRIX_RSS_MB, default 12288) and keeps the lock it always took; the guard script is where the lock is taken, and it falls back to the plain lock inside a test run', () => {
   const m = fs.readFileSync(path.join(SCRIPTS, 'drain-matrix.sh'), 'utf8');
-  assert.match(m, /exec bash "\$SCRIPT_DIR\/heavy-guard\.sh" --what drain-matrix --rss-mb "\$\{FORGE_MATRIX_RSS_MB:-12288\}" -- bash "\$0" "\$@"/);
+  // 2026-11-24-1037 (deliberate): the matrix start now also passes --wait-minutes (20 unless FORGE_MATRIX_WAIT_MIN says otherwise): it waits for memory instead of refusing
+  assert.match(m, /exec bash "\$SCRIPT_DIR\/heavy-guard\.sh" --what drain-matrix --rss-mb "\$\{FORGE_MATRIX_RSS_MB:-12288\}" --wait-minutes "\$\{FORGE_MATRIX_WAIT_MIN:-20\}" -- bash "\$0" "\$@"/);
   assert.match(m, /\[ -z "\$\{FORGE_HEAVY_LOCK_HELD:-\}" \] && \[ "\$\{FORGE_HEAVY_LOCK:-\}" != "off" \]/, 'the same condition as before: not when a holder started it, not with the lock off');
   const g = fs.readFileSync(path.join(SCRIPTS, 'heavy-guard.sh'), 'utf8');
   assert.match(g, /exec node "\$DIR\/dev\/heavy-lock\.mjs" run --what "\$WHAT" -- "\$\{CMD\[@\]\}"/, 'the SAME lock, scripts/dev/heavy-lock.mjs');
@@ -153,7 +154,7 @@ test('the matrix, fake bad machine, outside a test run: REFUSED at once with exi
   try {
     // a scratch copy of scripts/ and a PROJECTS directory with nothing in it: if the guard let the run start, it would die on "repo ... is missing" instead of refusing, which is how the test tells the two apart
     const scripts = path.join(fs.realpathSync(dir), 'scripts'); fs.cpSync(SCRIPTS, scripts, { recursive: true });
-    const base = envFor(dir, writeMem(dir, BAD), { PROJECTS: path.join(dir, 'projects'), TMPDIR: dir, FORGE_POWER_GUARD: 'off', FORGE_CAFFEINATE: 'off', FORGE_MATRIX_SELF_COPY: 'off' });
+    const base = envFor(dir, writeMem(dir, BAD), { PROJECTS: path.join(dir, 'projects'), TMPDIR: dir, FORGE_POWER_GUARD: 'off', FORGE_CAFFEINATE: 'off', FORGE_MATRIX_SELF_COPY: 'off', FORGE_MATRIX_WAIT_MIN: '0' });   // 2026-11-24-1037: the default wait is 20 minutes; 0 is the refusal at once
     const refused = spawnSync('bash', [path.join(scripts, 'drain-matrix.sh'), '--no-forge'], { encoding: 'utf8', timeout: 60_000, env: base });
     assert.equal(refused.status, 75, refused.stdout + refused.stderr);
     assert.match(refused.stderr, /memory pressure high, wait \(drain-matrix\)/);
@@ -161,5 +162,42 @@ test('the matrix, fake bad machine, outside a test run: REFUSED at once with exi
     const inTest = spawnSync('bash', [path.join(scripts, 'drain-matrix.sh'), '--no-forge'], { encoding: 'utf8', timeout: 60_000, env: { ...base, NODE_TEST_CONTEXT: 'child-v8', FORGE_HEAVY_GUARD: 'auto' } });
     assert.notEqual(inTest.status, 75, 'inside a test run the guard does not refuse');
     assert.match(inTest.stderr, /repo .* is missing/, inTest.stderr);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+// ---- 2026-11-24-1037 Part A: the matrix and the real-Chrome helper WAIT for memory (20 minutes by default) instead of refusing -----------------------------------------------------------------------------------------------
+test('1037 A: the matrix waits for memory (a fake bad machine, FORGE_MATRIX_WAIT_MIN a few seconds, a 40 ms look): prints the waiting lines, and with the machine bad the whole time refuses 75 at the end with the same message; before any worktree exists', () => {
+  const dir = mk();
+  try {
+    const scripts = path.join(fs.realpathSync(dir), 'scripts'); fs.cpSync(SCRIPTS, scripts, { recursive: true });
+    const base = envFor(dir, writeMem(dir, BAD), { PROJECTS: path.join(dir, 'projects'), TMPDIR: dir, FORGE_POWER_GUARD: 'off', FORGE_CAFFEINATE: 'off', FORGE_MATRIX_SELF_COPY: 'off', FORGE_MATRIX_WAIT_MIN: '0.02', FORGE_HEAVY_WAIT_POLL_MS: '40' });
+    const r = spawnSync('bash', [path.join(scripts, 'drain-matrix.sh'), '--no-forge'], { encoding: 'utf8', timeout: 60_000, env: base });
+    assert.equal(r.status, 75, r.stdout + r.stderr);
+    assert.match(r.stderr, /waiting for memory: compressor 10\.7 GB, limit 8 GB, \S+ of 0\.02 minutes/);
+    assert.match(r.stderr, /memory pressure high, wait \(drain-matrix\)/);
+    assert.ok(!fs.readdirSync(dir).some((n) => n.startsWith('drain-matrix.')), 'no worktree directory was made');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('1037 A: cdp.mjs openPage waits for memory (the measure scripts: 20 minutes by default, FORGE_MEASURE_WAIT_MIN changes it): bad, then fine after 0.4 s: Chrome starts after the waiting lines; the default is 20 in the source', async () => {
+  const src = fs.readFileSync(path.join(SCRIPTS, 'dev', 'cdp.mjs'), 'utf8');
+  assert.match(src, /FORGE_MEASURE_WAIT_MIN \?\? 20/, 'the measure scripts pass 20');
+  const dir = mk();
+  try {
+    const fakeChrome = path.join(dir, 'fake-chrome.sh');
+    fs.writeFileSync(fakeChrome, `#!/bin/bash\necho $$ > ${JSON.stringify(path.join(dir, 'chrome.pid'))}\nexec sleep 30\n`, { mode: 0o755 });
+    const script = path.join(dir, 'measure.mjs');
+    fs.writeFileSync(script, `import { openPage } from ${JSON.stringify(path.join(SCRIPTS, 'dev', 'cdp.mjs'))};\nawait openPage({ dir: ${JSON.stringify(dir)}, pageHtml: '<p>x</p>' });\n`);
+    const mem = writeMem(dir, BAD);
+    const child = spawn(process.execPath, [script], { env: envFor(dir, mem, { CHROME: fakeChrome, FORGE_MEASURE_WAIT_MIN: '1', FORGE_HEAVY_WAIT_POLL_MS: '40' }), stdio: ['ignore', 'pipe', 'pipe'] });
+    const o = collect(child);
+    await new Promise((r) => setTimeout(r, 400));
+    assert.ok(!fs.existsSync(path.join(dir, 'chrome.pid')), 'Chrome waits while the machine is bad');
+    writeMem(dir, FINE);
+    assert.ok(await until(() => fs.existsSync(path.join(dir, 'chrome.pid'))), `the Chrome stand-in started once the machine was fine: ${o.err}`);
+    assert.match(o.err, /waiting for memory: compressor 10\.7 GB, limit 8 GB, \S+ of 1 minutes/);
+    const chromePid = Number(fs.readFileSync(path.join(dir, 'chrome.pid'), 'utf8'));
+    child.kill('SIGKILL');
+    try { process.kill(chromePid, 'SIGKILL'); } catch { /* gone */ }
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });

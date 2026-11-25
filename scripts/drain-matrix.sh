@@ -59,8 +59,9 @@ if [ "${FORGE_MATRIX_COPY:-}" = "$0" ]; then SCRIPT_DIR="$FORGE_MATRIX_SCRIPT_DI
 # 2026-11-20-1001z: the same start now goes through scripts/heavy-guard.sh, which takes THAT lock exactly as before and adds the memory guard around the whole matrix (the legs, the hygiene step and the pytest leg are all in its process tree, so
 # `--quiet-only` is covered too): it REFUSES to start (exit 75, "memory pressure high, wait") while the memory compressor holds more than 8 GB or more than 2 GB of swap is used, and it KILLS the whole tree (exit 76, "stopped by the memory guard") when the tree
 # passes FORGE_MATRIX_RSS_MB (default 12288: two legs at their budget; FORGE_HEAVY_RSS_MB wins) or the compressor passes 10 GB. Inside a test run, and with FORGE_HEAVY_GUARD=off, it is only the lock. The numbers and variables: the header of scripts/heavy-guard.sh.
+# 2026-11-24-1037: it WAITS up to FORGE_MATRIX_WAIT_MIN minutes (default 20) for the memory to come under the limits, one `waiting for memory: ...` line per 30 s, instead of refusing at once; after that it refuses as above (exit 75).
 if [ -z "${FORGE_HEAVY_LOCK_HELD:-}" ] && [ "${FORGE_HEAVY_LOCK:-}" != "off" ]; then
-  exec bash "$SCRIPT_DIR/heavy-guard.sh" --what drain-matrix --rss-mb "${FORGE_MATRIX_RSS_MB:-12288}" -- bash "$0" "$@"
+  exec bash "$SCRIPT_DIR/heavy-guard.sh" --what drain-matrix --rss-mb "${FORGE_MATRIX_RSS_MB:-12288}" --wait-minutes "${FORGE_MATRIX_WAIT_MIN:-20}" -- bash "$0" "$@"
 fi
 
 PROJECTS="${PROJECTS:-$HOME/projects}"
@@ -154,6 +155,12 @@ if [ "$QUIET_ONLY" != "1" ] && [ "$CLEANUP_ONLY" != "1" ]; then
   COMPRESSOR_SAYS="$(node "$SCRIPT_DIR/dev/mem-plan.mjs" compressor 2>/dev/null || true)"
   if [ -n "$COMPRESSOR_SAYS" ]; then printf '%s\n' "$COMPRESSOR_SAYS"; SERIAL=1; [ -z "${FORGE_MATRIX_FILE_CONC:-}" ] && export FORGE_MATRIX_FILE_CONC=2; fi
 fi
+# 2026-11-24-1037: the START of every run (after the compressor sentence, which stays the FIRST line) takes back what a killed one left: count the worktrees registered under a drain-matrix.* directory (the number a drain reports), `git worktree prune` (records whose directory is gone), then the --cleanup-worktrees
+# behaviour for the rest. Only when the heavy lock is ours (a lock that is off cannot tell a killed matrix's worktrees from a live one's): then it only counts.
+stale0=0; for r in "${REPOS[@]}"; do [ -e "$PROJECTS/$r/.git" ] && stale0=$(( stale0 + $(matrix_worktrees "$r" | grep -c . || true) )); done
+for r in "${REPOS[@]}"; do [ -e "$PROJECTS/$r/.git" ] && git -C "$PROJECTS/$r" worktree prune >/dev/null 2>&1; done
+if [ "${FORGE_HEAVY_LOCK:-}" = "off" ] && [ -z "${FORGE_HEAVY_LOCK_HELD:-}" ]; then echo "stale worktrees found: $stale0 (not removed: the heavy lock is off)"
+else echo "stale worktrees found: $stale0"; [ "$stale0" -eq 0 ] || cleanup_worktrees || true; fi
 
 # ---- 0. preconditions: loud, before anything is built --------------------------------------------------------------------------------------------------------------
 # 2026-11-18-1200 (rule changed by the driver 2026-11-18): the power guard (see the header): refuse only on battery below 20 % charge, hold the Mac awake, and say how many worktrees an earlier KILLED matrix left registered.

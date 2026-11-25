@@ -1,6 +1,6 @@
 // 2026-11-24-1033 - `please duplicate [[bar_007]]` in a phrase composer: the pure parts. The sentence says a bar by its LINK; the grammar says it by NUMBER (`Copy bar 3.`); the drawn Score is what ties the two (the note name each bar of it was made from).
 //   A  what the client knows and what the service was sent (the grammar table has a Copy row and no Duplicate row; the request carried no name per position)
-//   B  the deterministic reading: one position -> `Copy bar K.`, several -> ask which in words, none -> `Bar 007 is not in this phrase.`
+//   B  the deterministic reading: one position -> `Copy bar K.`, several -> ask which in words, none -> `There is no bar named bar_007 in this phrase.`
 //   C  the request's optional `bar_names` (same length as `bar_numbers`; absent when unknown; an old request is unchanged)
 //   and the DOM: the phrase tab writes the name on each drawn measure, the composer reads it back.
 import assert from 'node:assert/strict';
@@ -31,17 +31,41 @@ test('B: one position -> `Copy bar K.` for the position the Score gives the bar;
     assert.equal((r as { hint: string }).hint, 'bar_007 is bar 2 of this phrase.');
   }
 });
+// 2026-11-24-1037 (deliberate): the link is written `bar_005` (not `Bar 005`); a set of every bar is said `every bar of this phrase (1 to N)`.
 test('B: SEVERAL positions: it asks which, in words, and never guesses (no sentence)', () => {
   const r = duplicateByLink('please duplicate [[bar_005]]', NAMES);
-  assert.deepEqual(r, { kind: 'which', message: 'Bar 005 is bars 1 and 3 of this phrase: which one? Say Copy bar 1. or Copy bar 3.' });
+  assert.deepEqual(r, { kind: 'which', message: 'bar_005 is bars 1 and 3 of this phrase: which one? Say Copy bar 1. or Copy bar 3.' });
   const three = duplicateByLink('Copy [[bar_005]].', ['bar_005', 'bar_005', 'bar_005']);
-  assert.deepEqual(three, { kind: 'which', message: 'Bar 005 is bars 1, 2 and 3 of this phrase: which one? Say Copy bar 1., Copy bar 2. or Copy bar 3.' });
+  assert.deepEqual(three, { kind: 'which', message: 'bar_005 is bars 1, 2 and 3 of this phrase: which one? Say Copy bar 1., Copy bar 2. or Copy bar 3.' });
   const many = duplicateByLink('Copy [[bar_005]].', Array.from({ length: 9 }, () => 'bar_005'));
-  assert.equal(many?.kind, 'which'); assert.match((many as { message: string }).message, /^Bar 005 is bars 1, 2, 3, 4, 5, 6, 7, 8 and 9 of this phrase: which one\? Say Copy bar N\. for the one you mean\.$/);
+  assert.equal(many?.kind, 'which'); assert.match((many as { message: string }).message, /^bar_005 is every bar of this phrase \(1 to 9\): which one\? Say Copy bar N\.$/);
 });
-test('B: the bar is NOT in the phrase: `Bar 007 is not in this phrase.`, nothing to write; a name that is not `bar_N` is said with its link', () => {
-  assert.deepEqual(duplicateByLink('please duplicate [[bar_007]]', ['bar_005', 'bar_005']), { kind: 'absent', message: 'Bar 007 is not in this phrase.' });
-  assert.deepEqual(duplicateByLink('Copy [[kick_pattern]].', ['bar_005']), { kind: 'absent', message: '[[kick_pattern]] is not in this phrase.' });
+// 2026-11-24-1037: Part D (written BEFORE the code, seen red): a set said as RANGES, `every bar` when it is every bar, the plain list for 4 positions or fewer; the same words for the 1036 place questions.
+test('1037 D: a bar that is EVERY bar of a 13-bar phrase (the driver\'s one Extend of bar_007): `bar_007 is every bar of this phrase (1 to 13): which one? Say Copy bar N.`', () => {
+  const r = duplicateByLink('please duplicate [[bar_007]]', Array.from({ length: 13 }, () => 'bar_007'));
+  assert.deepEqual(r, { kind: 'which', message: 'bar_007 is every bar of this phrase (1 to 13): which one? Say Copy bar N.' });
+});
+test('1037 D: a PARTIAL set of more than 4 positions is said as ranges (a run of 3 or more is `a to b`): bars 1 to 3, 7 and 8; single positions stay single', () => {
+  const names = ['bar_005', 'bar_005', 'bar_005', 'bar_006', 'bar_006', 'bar_006', 'bar_005', 'bar_005', 'bar_009'];
+  assert.deepEqual(duplicateByLink('Copy [[bar_005]].', names), { kind: 'which', message: 'bar_005 is bars 1 to 3, 7 and 8 of this phrase: which one? Say Copy bar N.' });
+  const spread = ['bar_005', 'bar_006', 'bar_005', 'bar_005', 'bar_006', 'bar_005', 'bar_005', 'bar_005', 'bar_005', 'bar_006'];
+  assert.deepEqual(duplicateByLink('Copy [[bar_005]].', spread), { kind: 'which', message: 'bar_005 is bars 1, 3, 4 and 6 to 9 of this phrase: which one? Say Copy bar N.' });
+});
+test('1037 D: 4 positions or fewer keep the plain position list and the answers, even when they are every bar of a small phrase; a name that is not bar_N is said as it is', () => {
+  assert.deepEqual(duplicateByLink('Copy [[bar_005]].', ['bar_005', 'bar_005', 'bar_005', 'bar_005']), { kind: 'which', message: 'bar_005 is bars 1, 2, 3 and 4 of this phrase: which one? Say Copy bar 1., Copy bar 2., Copy bar 3. or Copy bar 4.' });
+  assert.deepEqual(duplicateByLink('Copy [[bar_005]].', ['bar_005', 'bar_005']), { kind: 'which', message: 'bar_005 is bars 1 and 2 of this phrase: which one? Say Copy bar 1. or Copy bar 2.' });
+  assert.deepEqual(duplicateByLink('Copy [[kick_pattern]].', ['kick_pattern', 'bar_001', 'kick_pattern']), { kind: 'which', message: 'kick_pattern is bars 1 and 3 of this phrase: which one? Say Copy bar 1. or Copy bar 3.' });
+});
+test('1037 D: the place questions (1036) say it the same way: every bar and ranges, `Say after bar N.`; 4 or fewer keep their answers', () => {
+  const nine = Array.from({ length: 9 }, () => 'bar_005');
+  assert.deepEqual(duplicateByLink('Copy bar 3 after [[bar_005]].', nine), { kind: 'which', message: 'bar_005 is every bar of this phrase (1 to 9): which one? Say after bar N.' });
+  assert.deepEqual(duplicateByLink('Copy [[bar_007]] before [[bar_005]].', [...nine, 'bar_007']), { kind: 'which', message: 'bar_005 is bars 1 to 9 of this phrase: which one? Say before bar N.' });
+  assert.deepEqual(duplicateByLink('Copy [[bar_007]] after [[bar_005]].', ['bar_005', 'bar_007', 'bar_005']), { kind: 'which', message: 'bar_005 is bars 1 and 3 of this phrase: which one? Say after bar 1 or after bar 3' });
+});
+// 2026-11-24-1037 (deliberate): ONE wording for a link that is not in the phrase, for 1033 and 1036 alike (`Bar 007 is not in this phrase.` and `[[kick_pattern]] is not in this phrase.` are retired).
+test('B: the bar is NOT in the phrase: `There is no bar named bar_007 in this phrase.`, nothing to write; a name that is not `bar_N` is said with its link', () => {
+  assert.deepEqual(duplicateByLink('please duplicate [[bar_007]]', ['bar_005', 'bar_005']), { kind: 'absent', message: 'There is no bar named bar_007 in this phrase.' });
+  assert.deepEqual(duplicateByLink('Copy [[kick_pattern]].', ['bar_005']), { kind: 'absent', message: 'There is no bar named kick_pattern in this phrase.' });
 });
 test('B: not this shape, or the Score does not say: null (the sentence goes the way it always went)', () => {
   assert.equal(duplicateByLink('please duplicate [[bar_007]]', null), null, 'the Score gives no names: unknown, not "absent"');

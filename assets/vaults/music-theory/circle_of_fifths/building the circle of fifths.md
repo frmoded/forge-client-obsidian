@@ -1,16 +1,15 @@
 ---
 description: "See why twelve stacked fifths close into a ring that brings you back to C, and where the sharp keys hand off to the flat keys."
 ---
-Start on C and go up a fifth. You land on G. Go up another fifth from G and you're on D. Keep climbing and something odd happens: you never run out of new keys, and then, suddenly, you're home.
+Pick a note. Count five letters up, counting the one you start on: C D E F G. That distance, C to G, is a fifth. It's seven half steps, and it's the same distance whatever note you start on.
 
-A fifth is seven half steps, or five letters counting both ends: C D E F G. Stack them and you get C, G, D, A, E, B, F♯, then D♭, A♭, E♭, B♭, F, and the next fifth up from F is C again. Twelve steps, twelve keys, one loop.
+Start on C and go up a fifth. You land on G. Go up another from G and you're on D. Keep climbing and something odd happens: you never run out of new keys, and then, suddenly, you're home.
+
+Stack those fifths and you get C, G, D, A, E, B, F♯, then D♭, A♭, E♭, B♭, F, and the next fifth up from F is C again. Twelve steps, twelve keys, one loop.
 
 Now fold that line onto a clock face. C sits at twelve o'clock, G at one, D at two, and so on clockwise. Every neighbour is a fifth away. At six o'clock you hit F♯ and G♭, the same key under two names. That's the hand-off: the sharp keys end there and the flat keys begin, which is why the major keys on this wheel never need a double sharp.
 
 Try it: press clockwise on the wheel twelve times and watch it come home.
-
-> [!note]- Structural formula
-> Each step up a fifth adds 7 half steps. Twelve steps add 7 × 12 = 84 half steps, which is seven octaves (7 × 12), so you land on C again.
 
 ```html-embed
 circle_of_fifths/resources/html/circle_of_fifths.html

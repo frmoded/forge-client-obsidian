@@ -183,20 +183,22 @@ test('D: the sentence the repair writes is the one the grammar READS, and the ca
   assert.equal(repairCandidate('Make a copy of [[bar_006]] at the end of the score.', 'arrangement', NAMES), null, 'a phrase only (P3)');
   assert.equal(repairCandidate('Make a copy of [[bar_006]] at the end of the score.', 'phrase', null), null, 'a link and a Score that does not say: unknown, the sentence goes the old way');
 });
+// 2026-11-24-1037 (deliberate): the sentence is `There is no bar named bar_0012 in this phrase.` (it said `There is no bar named bar_0012.`).
 test('D: a link the phrase does not hold is REFUSED in words naming it (the driver\'s `[[bar_0012]]`), whatever else the sentence says; nothing to write', () => {
-  assert.equal(said('Make a copy of [[bar_006]] at the end of score (after [[bar_0012]]'), 'absent: There is no bar named bar_0012.', 'the driver\'s own sentence (the missing bracket and parenthesis do not matter: the link is named)');
-  assert.equal(said('Make a copy of [[bar_006]] at the end of score (after [[bar_0012]])'), 'absent: There is no bar named bar_0012.');
-  assert.equal(said('Make a copy of [[bar_999]] at the end of the score.'), 'absent: There is no bar named bar_999.');
-  assert.equal(said('Copy [[bar_006]] after [[bar_999]].'), 'absent: There is no bar named bar_999.'); assert.equal(said('Copy [[bar_999]] after bar 3.'), 'absent: There is no bar named bar_999.');
-  assert.equal(said('Make a copy of [[kick_pattern]] at the end.'), 'absent: There is no bar named kick_pattern.');
+  assert.equal(said('Make a copy of [[bar_006]] at the end of score (after [[bar_0012]]'), 'absent: There is no bar named bar_0012 in this phrase.', 'the driver\'s own sentence (the missing bracket and parenthesis do not matter: the link is named)');
+  assert.equal(said('Make a copy of [[bar_006]] at the end of score (after [[bar_0012]])'), 'absent: There is no bar named bar_0012 in this phrase.');
+  assert.equal(said('Make a copy of [[bar_999]] at the end of the score.'), 'absent: There is no bar named bar_999 in this phrase.');
+  assert.equal(said('Copy [[bar_006]] after [[bar_999]].'), 'absent: There is no bar named bar_999 in this phrase.'); assert.equal(said('Copy [[bar_999]] after bar 3.'), 'absent: There is no bar named bar_999 in this phrase.');
+  assert.equal(said('Make a copy of [[kick_pattern]] at the end.'), 'absent: There is no bar named kick_pattern in this phrase.');
   assert.equal(said('Make a copy of [[phrases/phrase_006]] at the end.'), null, 'a link into another folder is not a bar: not ours');
   assert.equal(repairCandidate('Make a copy of [[bar_006]] at the end of score (after [[bar_0012]]', 'phrase', NAMES), null, 'no repair is offered for it');
 });
+// 2026-11-24-1037 (deliberate): `bar_005`, not `Bar 005`; every bar is `every bar of this phrase (1 to 9)`; the generic answer is `Say Copy bar N.`.
 test('D: a bar at SEVERAL positions: ask which, in words, with the sentences that answer; never guess', () => {
   const two = ['bar_005', 'bar_007', 'bar_005', 'bar_012'];
-  assert.equal(said('Make a copy of [[bar_005]] at the end of the score.', two), 'which: Bar 005 is bars 1 and 3 of this phrase: which one? Say Copy bar 1. or Copy bar 3.');
-  assert.equal(said('Copy [[bar_007]] after [[bar_005]].', two), 'which: Bar 005 is bars 1 and 3 of this phrase: which one? Say after bar 1 or after bar 3');
-  assert.equal(said('Make a copy of [[bar_005]] at the end.', Array.from({ length: 9 }, () => 'bar_005')), 'which: Bar 005 is bars 1, 2, 3, 4, 5, 6, 7, 8 and 9 of this phrase: which one? Say Copy bar N. for the one you mean.');
+  assert.equal(said('Make a copy of [[bar_005]] at the end of the score.', two), 'which: bar_005 is bars 1 and 3 of this phrase: which one? Say Copy bar 1. or Copy bar 3.');
+  assert.equal(said('Copy [[bar_007]] after [[bar_005]].', two), 'which: bar_005 is bars 1 and 3 of this phrase: which one? Say after bar 1 or after bar 3');
+  assert.equal(said('Make a copy of [[bar_005]] at the end.', Array.from({ length: 9 }, () => 'bar_005')), 'which: bar_005 is every bar of this phrase (1 to 9): which one? Say Copy bar N.');
 });
 test('D: not ours: the sentence goes the way it always went (the service handles the rest)', () => {
   for (const s of ['Copy bar 3.', 'Copy bars 3 to 5.', 'Make a copy of bar 6 at the end of the score and then delete bar 1.', 'Make a copy of the kick at the end.', 'Make two copies of bar 6 at the end.', 'Make a copy of bar 6 somewhere in the middle.', 'Make a copy of [[bar_006]] and [[bar_007]] at the end.',
@@ -204,9 +206,10 @@ test('D: not ours: the sentence goes the way it always went (the service handles
     assert.equal(said(s), null, s);
   assert.equal(said('Make a copy of [[bar_006]] at the end of the score.', []), null, 'no drawn bar: unknown');
 });
+// 2026-11-24-1037 (deliberate): an unknown link says `There is no bar named bar_999 in this phrase.` (`Bar 999 is not in this phrase.` is retired).
 test('D: the 1033 reading is untouched: a copy by link with NO place is `Copy bar K.` as before, and an unknown link says what it said', () => {
   assert.equal(said('please duplicate [[bar_006]]'), 'Copy bar 6.'); assert.equal(said('Copy [[bar_006]].'), 'Copy bar 6.');
-  assert.equal(said('please duplicate [[bar_999]]'), 'absent: Bar 999 is not in this phrase.');
+  assert.equal(said('please duplicate [[bar_999]]'), 'absent: There is no bar named bar_999 in this phrase.');
 });
 
 // ---- E: the table sent to the service ------------------------------------------------------------------------------------------------------------------------------------------------------------------

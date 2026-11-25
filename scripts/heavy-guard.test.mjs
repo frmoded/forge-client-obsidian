@@ -15,7 +15,7 @@ const FINE = JSON.stringify({ compressedMb: 1000, swapUsedMb: 0, freePct: 80 });
 const envFor = (dir, extra = {}) => {
   const e = { ...process.env, FORGE_HEAVY_GUARD: 'on', FORGE_HEAVY_LOCK: path.join(dir, 'forge-heavy.lock'), FORGE_HEAVY_LOCK_HELD: '', FORGE_HEAVY_FAKE_MEM: FINE, FORGE_HEAVY_POLL_MS: '100', FORGE_HEAVY_SYS_MS: '100' };
   delete e.NODE_TEST_CONTEXT;
-  for (const k of Object.keys(e)) if (/^FORGE_HEAVY_(RSS|COMPRESSED|SWAP|FREE|KILL|ALSO)/.test(k)) delete e[k];
+  for (const k of Object.keys(e)) if (/^FORGE_HEAVY_(RSS|COMPRESSED|SWAP|FREE|KILL|ALSO|WAIT)/.test(k)) delete e[k];
   return { ...e, ...extra };
 };
 const sh = (dir, args, extra = {}) => { const r = spawnSync('bash', [GUARD, ...args], { encoding: 'utf8', env: envFor(dir, extra), timeout: 60_000 }); return { status: r.status, out: r.stdout, err: r.stderr }; };
@@ -192,5 +192,93 @@ test('--limits prints the limits in force (the defaults, and what the environmen
     const r = spawnSync('node', [path.resolve(import.meta.dirname, 'heavy-guard.mjs'), '--limits'], { encoding: 'utf8', env: envFor(dir, { FORGE_HEAVY_RSS_MB: '777', FORGE_HEAVY_SWAP_MB: '3000' }) });
     assert.equal(r.status, 0);
     assert.match(r.stdout, /^rssMb 777$/m); assert.match(r.stdout, /^swapRefuseMb 3000$/m); assert.match(r.stdout, /^compressedRefuseMb 8192$/m); assert.match(r.stdout, /^compressedKillMb 10240$/m);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+// ---- 2026-11-24-1037 Part A: the guard WAITS instead of refusing (--wait-minutes N / FORGE_HEAVY_WAIT_MIN; default 0 = refuse at once as always) ------------------------------------------------------------------------------
+// The unit tests feed a FAKE memory reader and an injected sleep (no real waiting); the script-level ones run the real heavy-guard.sh with FORGE_HEAVY_FAKE_MEM and a 40 ms look interval (FORGE_HEAVY_WAIT_POLL_MS).
+const { startOrWait, waitMinutesFrom, waitIntervalMs } = await import('./heavy-guard.mjs');
+const { waitingLine } = await import('./heavy-mem-core.mjs');
+const OVER = { compressedMb: 8602, swapUsedMb: 0, freePct: 80 }, UNDER = { compressedMb: 1000, swapUsedMb: 0, freePct: 80 };
+/** A fake reader that answers `readings` one per call (the last one for ever), a sleep that only counts, and a print that collects. */
+const fakes = (readings) => { let i = 0; const lines = [], slept = []; return { lines, slept, readMem: () => readings[Math.min(i++, readings.length - 1)], readRows: () => [], sleep: async (ms) => { slept.push(ms); }, print: (l) => lines.push(l) }; };
+
+test('1037 A: the waiting line, exactly: `waiting for memory: compressor 8.4 GB, limit 8 GB, 3 of 20 minutes`; swap and free-memory limits are named the same way', () => {
+  const limits = { compressedRefuseMb: 8192, swapRefuseMb: 2048, freePctMin: 35 };
+  assert.equal(waitingLine({ mem: OVER, limits, elapsedMin: 3, totalMin: 20 }), 'waiting for memory: compressor 8.4 GB, limit 8 GB, 3 of 20 minutes');
+  assert.equal(waitingLine({ mem: { compressedMb: 100, swapUsedMb: 2560, freePct: 90 }, limits, elapsedMin: 0.5, totalMin: 2 }), 'waiting for memory: swap 2.5 GB, limit 2 GB, 0.5 of 2 minutes');
+  assert.equal(waitingLine({ mem: { compressedMb: 100, swapUsedMb: 0, freePct: 20 }, limits, elapsedMin: 1, totalMin: 20 }), 'waiting for memory: free memory 20 %, limit 35 %, 1 of 20 minutes');
+});
+
+test('1037 A: under the limits at once: starts at once, nothing printed, nothing slept', async () => {
+  const f = fakes([UNDER]);
+  const r = await startOrWait({ env: {}, what: 'job', waitMinutes: 20, intervalMs: 30000, ...f });
+  assert.equal(r.refuse, false); assert.deepEqual(f.lines, []); assert.deepEqual(f.slept, []);
+});
+
+test('1037 A: over, then under: one line per wait (the elapsed minutes counted from 0), then it starts; the limits it used are the real ones', async () => {
+  const f = fakes([OVER, OVER, OVER, UNDER]);
+  const r = await startOrWait({ env: {}, what: 'job', waitMinutes: 20, intervalMs: 30000, ...f });
+  assert.equal(r.refuse, false);
+  assert.deepEqual(f.lines, ['waiting for memory: compressor 8.4 GB, limit 8 GB, 0 of 20 minutes', 'waiting for memory: compressor 8.4 GB, limit 8 GB, 0.5 of 20 minutes', 'waiting for memory: compressor 8.4 GB, limit 8 GB, 1 of 20 minutes']);
+  assert.deepEqual(f.slept, [30000, 30000, 30000]);
+  assert.equal(r.limits.compressedRefuseMb, 8192, 'a limit is never lowered or raised by waiting');
+});
+
+test('1037 A: over for the whole wait: refuses as today (the same message, nothing started) after N minutes, having slept exactly N minutes in all', async () => {
+  const f = fakes([OVER]);
+  const r = await startOrWait({ env: {}, what: 'job', waitMinutes: 2, intervalMs: 30000, ...f });
+  assert.equal(r.refuse, true);
+  assert.match(r.text, /heavy-guard: memory pressure high, wait \(job\): compressed memory 8602 MB is over 8192 MB \(FORGE_HEAVY_COMPRESSED_MB\)/);
+  assert.match(r.text, /nothing was started/);
+  assert.equal(f.slept.reduce((a, b) => a + b, 0), 2 * 60_000, 'it waited the whole N minutes and no more');
+  assert.equal(f.lines.length, 4); assert.match(f.lines[3], /1\.5 of 2 minutes$/);
+});
+
+test('1037 A: N = 0 (the default) refuses at once: no sleep, no waiting line; a wait that is not a positive number is 0; the flag wins over FORGE_HEAVY_WAIT_MIN', async () => {
+  const f = fakes([OVER]);
+  const r = await startOrWait({ env: {}, what: 'job', ...f });
+  assert.equal(r.refuse, true); assert.deepEqual(f.slept, []); assert.deepEqual(f.lines, []);
+  assert.equal(waitMinutesFrom({}, undefined), 0);
+  assert.equal(waitMinutesFrom({ FORGE_HEAVY_WAIT_MIN: '12' }, undefined), 12);
+  assert.equal(waitMinutesFrom({ FORGE_HEAVY_WAIT_MIN: '12' }, 5), 5, 'the flag wins');
+  assert.equal(waitMinutesFrom({ FORGE_HEAVY_WAIT_MIN: '12' }, 0), 0, 'a flag of 0 wins too');
+  for (const bad of ['', 'abc', '-3', 'NaN']) assert.equal(waitMinutesFrom({ FORGE_HEAVY_WAIT_MIN: bad }, undefined), 0, `env ${JSON.stringify(bad)}`);
+  assert.equal(waitIntervalMs({}), 30000); assert.equal(waitIntervalMs({ FORGE_HEAVY_WAIT_POLL_MS: '40' }), 40);
+});
+
+test('1037 A, the real script: --wait-minutes waits until the machine is fine and then runs the command; with the machine bad for the whole wait it refuses 75 with the same message; the flag wins over the variable; without either it refuses at once', () => {
+  const dir = mk();
+  try {
+    const marker = path.join(dir, 'ran'), mem = path.join(dir, 'mem.json');
+    const cmd = ['node', '-e', `require('fs').writeFileSync(${JSON.stringify(marker)}, 'x')`];
+    const BADM = { compressedMb: 9000, swapUsedMb: 0, freePct: 90 };
+    // bad for the whole wait: 0.02 minutes (1.2 s) at a 40 ms look
+    fs.writeFileSync(mem, JSON.stringify(BADM));
+    const t0 = Date.now();
+    const whole = sh(dir, ['--wait-minutes', '0.02', ...cmd], { FORGE_HEAVY_FAKE_MEM: mem, FORGE_HEAVY_WAIT_POLL_MS: '40' });
+    assert.equal(whole.status, 75, whole.err); assert.match(whole.err, /waiting for memory: compressor 8\.8 GB, limit 8 GB, \S+ of 0\.02 minutes/); assert.match(whole.err, /memory pressure high, wait/); assert.match(whole.err, /nothing was started/);
+    assert.ok(Date.now() - t0 >= 1000, 'it did wait'); assert.ok(!fs.existsSync(marker));
+    // no wait given: at once, no waiting line
+    const none = sh(dir, cmd, { FORGE_HEAVY_FAKE_MEM: mem, FORGE_HEAVY_WAIT_POLL_MS: '40' });
+    assert.equal(none.status, 75); assert.ok(!/waiting for memory/.test(none.err));
+    // the variable alone waits; the flag (0) wins over it and refuses at once
+    const env0 = sh(dir, ['--wait-minutes', '0', ...cmd], { FORGE_HEAVY_FAKE_MEM: mem, FORGE_HEAVY_WAIT_MIN: '5', FORGE_HEAVY_WAIT_POLL_MS: '40' });
+    assert.equal(env0.status, 75); assert.ok(!/waiting for memory/.test(env0.err), 'flag 0 beats FORGE_HEAVY_WAIT_MIN=5');
+    // over, then under: the machine gets better after about 0.4 s
+    const child = spawn('bash', [GUARD, '--wait-minutes', '1', ...cmd], { env: envFor(dir, { FORGE_HEAVY_FAKE_MEM: mem, FORGE_HEAVY_WAIT_POLL_MS: '40' }), stdio: ['ignore', 'pipe', 'pipe'] });
+    return new Promise((resolve, reject) => {
+      let err = ''; child.stderr.on('data', (d) => { err += d; });
+      setTimeout(() => fs.writeFileSync(mem, FINE), 400);
+      child.on('close', (code) => { try { assert.equal(code, 0, err); assert.match(err, /waiting for memory: compressor 8\.8 GB, limit 8 GB, \S+ of 1 minutes/); assert.ok(fs.existsSync(marker), 'the command ran once the machine was fine'); assert.match(err, /heavy-guard: .*stops its whole tree/); resolve(); } catch (e) { reject(e); } finally { fs.rmSync(dir, { recursive: true, force: true }); } });
+    });
+  } catch (e) { fs.rmSync(dir, { recursive: true, force: true }); throw e; }
+});
+
+test('1037 A: usage: --wait-minutes needs a number (exit 2); a negative or non-numeric value is a usage error too', () => {
+  const dir = mk();
+  try {
+    assert.match(sh(dir, ['--wait-minutes']).err, /needs a number/);
+    for (const bad of ['abc', '-1']) { const r = sh(dir, ['--wait-minutes', bad, 'node', '-e', '0']); assert.equal(r.status, 2, r.err); assert.match(r.err, /needs a number/); }
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });

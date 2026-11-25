@@ -115,7 +115,7 @@ export function drawnBarNames(pane: ParentNode | null | undefined): string[] | n
 /** `message`: what the dialog says (for `copy`, what it would write: said when a waiting line stops the sentence from being added). */
 export type DuplicateByLink = { kind: 'copy'; sentence: string; hint?: string; message: string } | { kind: 'which'; message: string } | { kind: 'absent'; message: string };
 const LINK_COPY = /^\s*(?:please\b[\s,]*)?(?:duplicate|copy)\s+\[\[([^\[\]|]*)(?:\|[^\[\]]*)?\]\]\s*(?:please\b)?\s*[.!]?\s*$/i;
-const and = (n: number[]): string => (n.length === 1 ? `${n[0]}` : `${n.slice(0, -1).join(', ')} and ${n[n.length - 1]}`);
+const and = (n: ReadonlyArray<number | string>): string => (n.length === 1 ? `${n[0]}` : `${n.slice(0, -1).join(', ')} and ${n[n.length - 1]}`);
 /** `please duplicate [[bar_007]]`, `Copy [[bar_007]].`, `duplicate [[bar_007]] please` (ONE sentence, a link of a bar, no number): which position of the drawn Score (`names`: one note name per bar) holds that bar. null = not this shape, or the Score does not say (`names` null or empty): the sentence goes the way it always went. */
 export function duplicateByLink(text: string, names: readonly string[] | null): DuplicateByLink | null {
   const m = LINK_COPY.exec(String(text ?? ''));
@@ -124,16 +124,31 @@ export function duplicateByLink(text: string, names: readonly string[] | null): 
   const name = bareName(m[1]);
   if (name === null) return null;
   const at = positionsOf(name, names);
-  const number = /^bar_(.+)$/.exec(name), label = number === null ? `[[${name}]]` : `Bar ${number[1]}`;
-  if (at.length === 0) return { kind: 'absent', message: `${label} is not in this phrase.` };
+  if (at.length === 0) return { kind: 'absent', message: notInPhrase(name) };          // 2026-11-24-1037: one wording for a link that is not in the phrase, 1033's plain copy and 1036's place sentences alike
   if (at.length === 1) return { kind: 'copy', sentence: `Copy bar ${at[0]}.`, hint: `${name} is bar ${at[0]} of this phrase.`, message: `${name} is bar ${at[0]} of this phrase, so it would write: Copy bar ${at[0]}.` };
-  return which(label, at, (k) => `Copy bar ${k}.`, 'Copy bar N. for the one you mean.');
+  return which(name, at, names.length, (k) => `Copy bar ${k}.`, 'Copy bar N.');
 }
 
-/** The question for a bar the Score holds at several positions: each answer in the grammar's words (4 or fewer), else the one pattern. */
-function which(label: string, at: number[], say: (k: number) => string, generic: string): DuplicateByLink {
-  const list = at.map(say);
-  return { kind: 'which', message: `${label} is bars ${and(at)} of this phrase: which one? Say ${at.length > 4 ? generic : `${list.slice(0, -1).join(', ')} or ${list[list.length - 1]}`}` };
+/** 2026-11-24-1037: the ONE sentence for a bar link that is not in the phrase (`There is no bar named bar_0012 in this phrase.`). */
+const notInPhrase = (name: string): string => `There is no bar named ${name} in this phrase.`;
+/** 2026-11-24-1037: positions said as ranges: a run of 3 or more is `a to b`, anything shorter is said position by position (`1 to 3, 5, 6 and 9`). */
+function spans(at: number[]): string {
+  const out: string[] = [];
+  for (let i = 0; i < at.length;) {
+    let j = i; while (j + 1 < at.length && at[j + 1] === at[j] + 1) j++;
+    if (j - i >= 2) out.push(`${at[i]} to ${at[j]}`); else for (let k = i; k <= j; k++) out.push(`${at[k]}`);
+    i = j + 1;
+  }
+  return and(out);
+}
+/**
+ * The question for a bar the Score holds at several positions (`total`: the bars of the phrase). 4 positions or fewer: the plain list, with each answer in the grammar's words. More: `bar_007 is every bar of this phrase (1 to 13)` when it is every bar,
+ * else `bar_005 is bars 1 to 3 and 7 and 8 ...` as ranges; then the one pattern (`Say Copy bar N.`). The link is written as it is in the note (`bar_007`, never `Bar 007`).
+ */
+function which(name: string, at: number[], total: number, say: (k: number) => string, generic: string): DuplicateByLink {
+  if (at.length <= 4) { const list = at.map(say); return { kind: 'which', message: `${name} is bars ${and(at)} of this phrase: which one? Say ${list.slice(0, -1).join(', ')} or ${list[list.length - 1]}` }; }
+  const where = at.length === total ? `every bar of this phrase (1 to ${total})` : `bars ${spans(at)} of this phrase`;
+  return { kind: 'which', message: `${name} is ${where}: which one? Say ${generic}` };
 }
 /** The bar name a link says (`bar_007`, `bars/bar_007`, `bar_007.md`); null for a link into another folder or an empty one. */
 function bareName(link: string): string | null {
@@ -158,13 +173,13 @@ function copyInPlace(text: string, names: readonly string[] | null): DuplicateBy
   if (head === null || ref === null) return null;
   const known = names !== null && names.length > 0, plain = head[1] !== undefined;
   let rest = text.slice(head[0].length + ref[0].length);
-  if (known && PLACE_HINT.test(rest)) for (const l of text.matchAll(/\[\[([^\[\]|]*)(?:\|[^\[\]]*)?\]\]?/g)) { const n = bareName(l[1]); if (n !== null && positionsOf(n, names).length === 0) return { kind: 'absent', message: `There is no bar named ${n}.` }; }          // a link the Score does not hold: refused, naming it
+  if (known && PLACE_HINT.test(rest)) for (const l of text.matchAll(/\[\[([^\[\]|]*)(?:\|[^\[\]]*)?\]\]?/g)) { const n = bareName(l[1]); if (n !== null && positionsOf(n, names).length === 0) return { kind: 'absent', message: notInPhrase(n) }; }          // a link the Score does not hold: refused, naming it
   const said: string[] = [];
   const bar = (link: string, as: (k: number) => string): number | DuplicateByLink | null => {          // the one position a link has in the Score, or the question / refusal in words
     const n = bareName(link); if (!known || n === null) return null;
     const at = positionsOf(n, names);
-    if (at.length === 0) return { kind: 'absent', message: `There is no bar named ${n}.` };
-    if (at.length > 1) return which(n.replace(/^bar_/, 'Bar '), at, as, `${as(0).replace(/ \d+/, ' N')} for the one you mean.`);
+    if (at.length === 0) return { kind: 'absent', message: notInPhrase(n) };
+    if (at.length > 1) return which(n, at, names!.length, as, `${as(0).replace(/ \d+/, ' N')}${/\.$/.test(as(0)) ? '' : '.'}`);
     said.push(`${n} is bar ${at[0]}`); return at[0];
   };
   let first: number, last: number;

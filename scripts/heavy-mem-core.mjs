@@ -162,6 +162,19 @@ export function refusalReasons(mem, limits) {
   if (mem.freePct != null && mem.freePct < limits.freePctMin) why.push(`memory_pressure free percentage ${mem.freePct} % is under ${limits.freePctMin} % (FORGE_HEAVY_FREE_PCT)`);
   return why;
 }
+/**
+ * 2026-11-24-1037: the one line printed per wait of a guard that WAITS (--wait-minutes N): the figures that are over their REFUSE limits, then the minutes waited so far: `waiting for memory: compressor 8.4 GB, limit 8 GB, 3 of 20 minutes`
+ * (a swap limit says `swap 2.5 GB, limit 2 GB`, the free-percentage one `free memory 20 %, limit 35 %`; two limits over say both, joined by `; `). A figure the machine did not give never appears.
+ */
+export function waitingLine({ mem, limits, elapsedMin, totalMin }) {
+  const gb = (v) => String(Math.round((v / 1024) * 10) / 10);
+  const parts = [];
+  if (mem.compressedMb != null && mem.compressedMb > limits.compressedRefuseMb) parts.push(`compressor ${gb(mem.compressedMb)} GB, limit ${gb(limits.compressedRefuseMb)} GB`);
+  if (mem.swapUsedMb != null && mem.swapUsedMb > limits.swapRefuseMb) parts.push(`swap ${gb(mem.swapUsedMb)} GB, limit ${gb(limits.swapRefuseMb)} GB`);
+  if (mem.freePct != null && mem.freePct < limits.freePctMin) parts.push(`free memory ${mem.freePct} %, limit ${limits.freePctMin} %`);
+  const n = (v) => String(Math.round(v * 100) / 100);
+  return `waiting for memory: ${parts.join('; ')}, ${n(elapsedMin)} of ${n(totalMin)} minutes`;
+}
 /** Why a run that is going must STOP now (null = carry on): the tree is over its cap, or the machine's compressor or swap is past its limit. */
 export function stopReason({ treeMb, mem }, limits) {
   if (treeMb > limits.rssMb) return `its process tree holds ${treeMb} MB, over the ${limits.rssMb} MB cap (FORGE_HEAVY_RSS_MB)`;

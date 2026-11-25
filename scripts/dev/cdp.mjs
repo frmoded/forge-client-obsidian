@@ -3,7 +3,7 @@
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path'; import os from 'node:os'; import { spawn } from 'node:child_process';
 import { startReaper } from './reaper.mjs';
 import { acquireForProcess } from './heavy-lock.mjs';
-import { checkStart, guardWanted, killDescendants, watchTree } from '../heavy-guard.mjs';
+import { guardWanted, killDescendants, startOrWait, waitMinutesFrom, watchTree } from '../heavy-guard.mjs';
 // 2026-10-31-1125: a real-Chrome measure is a heavy run: the first openPage of a process takes $TMPDIR/forge-heavy.lock and keeps it until the process ends (a second heavy run waits and says who holds it). Not inside a test run (NODE_TEST_CONTEXT).
 let heavyLock = null, memGuard = false;
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -14,7 +14,7 @@ export async function openPage({ dir, width = 900, height = 1200, pageHtml, rout
   // and while the measure runs stop it (exit 76; the exit handler below kills Chrome with it) when this process and its Chrome pass 6 GB, or the compressor 10 GB. Not inside a test run (NODE_TEST_CONTEXT), not under heavy-guard.sh (it watches the tree already).
   if (!memGuard && guardWanted()) {
     memGuard = true;
-    const start = checkStart({ what: 'real-Chrome measure' });
+    const start = await startOrWait({ what: 'real-Chrome measure', waitMinutes: waitMinutesFrom(process.env, process.env.FORGE_MEASURE_WAIT_MIN ?? 20) });   // 2026-11-24-1037: a measure WAITS up to 20 minutes for memory (FORGE_MEASURE_WAIT_MIN changes it; 0 refuses at once) instead of refusing
     if (start.refuse) { console.error(start.text); process.exit(75); }
     watchTree({ what: 'real-Chrome measure', roots: () => [process.pid], onStop: (hit) => { console.error(hit.text); killDescendants(process.pid); process.exit(76); } });
   }

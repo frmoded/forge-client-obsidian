@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # heavy-guard.sh - run ONE heavy command (a build, a test run, the drain matrix, a real-Chrome measure, a mutation pass) so that it cannot freeze the Mac.   2026-11-20-1001z
 #
-#   bash scripts/heavy-guard.sh [--what <label>] [--rss-mb <n>] [--] <command...>
+#   bash scripts/heavy-guard.sh [--what <label>] [--rss-mb <n>] [--wait-minutes <n>] [--] <command...>
 #   bash scripts/heavy-guard.sh npm test                       a helper session's build or test: run it like this, never bare
 #   bash scripts/heavy-guard.sh --what matrix --rss-mb 12288 -- bash scripts/drain-matrix.sh
+#   bash scripts/heavy-guard.sh --wait-minutes 20 --what measure -- node scripts/dev/measure-x.mjs   wait up to 20 minutes for memory instead of refusing at once
 #   node scripts/heavy-guard.mjs --limits                      the limits in force
 #
 # WHAT IT DOES
@@ -14,6 +15,10 @@
 #      its own. The free percentage is only one signal: on 2026-11-20 it said 42 % at the moment the compressor held 10.7 GB and the Mac froze, so the compressor and the swap are the gate;
 #   3. while the command runs, looks every 500 ms and kills the command's WHOLE process tree (its group and every descendant, frozen first so nothing forks on the way out) when the tree's total RSS passes 6144 MB, or the compressor
 #      passes 10240 MB, or used swap passes 4096 MB; it prints which process was the biggest. That run exits 76 and says "stopped by the memory guard": it is NOT a test failure.
+#
+# WAITING (2026-11-24-1037)   `--wait-minutes N` (or FORGE_HEAVY_WAIT_MIN=N; the flag wins) turns the refusal of step 2 into a wait: every 30 s (FORGE_HEAVY_WAIT_POLL_MS, for tests) the machine is read again, one line per wait is printed,
+#      `waiting for memory: compressor 8.4 GB, limit 8 GB, 3 of 20 minutes`, and the command starts the moment every figure is under its limit. When N minutes pass it refuses exactly as before (exit 75, the same message). Default 0: refuse
+#      at once, as every caller always did. Waiting never lowers or raises a limit; the heavy lock is held while it waits (one heavy thing at a time). drain-matrix.sh passes 20 (FORGE_MATRIX_WAIT_MIN), the real-Chrome helper too (FORGE_MEASURE_WAIT_MIN).
 #
 # THE NUMBERS (defaults; the variable beside each one changes it; they live in scripts/heavy-mem-core.mjs DEFAULT_LIMITS, and scripts/heavy-guard.test.mjs fails if this header and that table disagree)
 #   tree cap                 6144 MB   FORGE_HEAVY_RSS_MB              (--rss-mb is a caller's default for ITS tree: the matrix 12288 via FORGE_MATRIX_RSS_MB, a mutation pass its memory budget; FORGE_HEAVY_RSS_MB, when set, wins)
@@ -34,17 +39,21 @@
 set -euo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
-WHAT=""; RSS=""
+WHAT=""; RSS=""; WAIT=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --what) [ $# -ge 2 ] || { echo "heavy-guard: --what needs a label" >&2; exit 2; }; WHAT="$2"; shift 2 ;;
     --rss-mb) [ $# -ge 2 ] || { echo "heavy-guard: --rss-mb needs a number" >&2; exit 2; }; RSS="$2"; shift 2 ;;
+    --wait-minutes)   # 2026-11-24-1037: wait up to N minutes for memory instead of refusing at once (the flag wins over FORGE_HEAVY_WAIT_MIN)
+      [ $# -ge 2 ] || { echo "heavy-guard: --wait-minutes needs a number" >&2; exit 2; }
+      case "$2" in ''|*[!0-9.]*|.|*.*.*) echo "heavy-guard: --wait-minutes needs a number (0 or more), got '$2'" >&2; exit 2 ;; esac
+      WAIT="$2"; shift 2 ;;
     --) shift; break ;;
-    -*) echo "heavy-guard: unknown option $1 (usage: heavy-guard.sh [--what label] [--rss-mb n] [--] <command...>)" >&2; exit 2 ;;
+    -*) echo "heavy-guard: unknown option $1 (usage: heavy-guard.sh [--what label] [--rss-mb n] [--wait-minutes n] [--] <command...>)" >&2; exit 2 ;;
     *) break ;;
   esac
 done
-[ $# -gt 0 ] || { echo "usage: heavy-guard.sh [--what label] [--rss-mb n] [--] <command...>" >&2; exit 2; }
+[ $# -gt 0 ] || { echo "usage: heavy-guard.sh [--what label] [--rss-mb n] [--wait-minutes n] [--] <command...>" >&2; exit 2; }
 if [ -z "$WHAT" ]; then   # a name for the lock and the messages: the first word that is not an interpreter or a flag (`bash scripts/drain-matrix.sh` is drain-matrix.sh, `npm test` is npm)
   for w in "$@"; do case "$w" in -*|node|bash|sh|env|npx) ;; *) WHAT="$(basename "$w")"; break ;; esac; done
   [ -n "$WHAT" ] || WHAT="$(basename "$1")"
@@ -58,7 +67,7 @@ case "${FORGE_HEAVY_GUARD:-auto}" in
   *) [ -z "${NODE_TEST_CONTEXT:-}" ] || guard_on=0 ;;
 esac
 if [ "$guard_on" = "1" ]; then
-  OPTS=(--what "$WHAT"); [ -z "$RSS" ] || OPTS+=(--rss-mb "$RSS")
+  OPTS=(--what "$WHAT"); [ -z "$RSS" ] || OPTS+=(--rss-mb "$RSS"); [ -z "$WAIT" ] || OPTS+=(--wait-minutes "$WAIT")
   CMD=(node "$DIR/heavy-guard.mjs" "${OPTS[@]}" -- "$@")
 else
   CMD=("$@")

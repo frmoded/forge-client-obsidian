@@ -81,11 +81,12 @@ test('B: `Copy bar 1 after bar 3.` was asked of the service first and kept waiti
 });
 
 // ---- C ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-test('C: the driver\'s own sentence with a Score that names its bars: `There is no bar named bar_0012.`; nothing written, no waiting line, the service is NOT asked (set up or not)', async () => {
+// 2026-11-24-1037 (deliberate): one wording for a link that is not in the phrase, here and for the 1033 plain copy.
+test('C: the driver\'s own sentence with a Score that names its bars: `There is no bar named bar_0012 in this phrase.`; nothing written, no waiting line, the service is NOT asked (set up or not)', async () => {
   for (const configured of [true, false]) {
     const r = await phrase({ names: N12, configured }); const mark = r.texts().length;
     await r.say(DRIVER);
-    assert.equal(r.requests.length, 0, 'the service is not asked'); assert.ok(r.texts().slice(mark).includes('There is no bar named bar_0012.'), r.texts().slice(mark).join(' | '));
+    assert.equal(r.requests.length, 0, 'the service is not asked'); assert.ok(r.texts().slice(mark).includes('There is no bar named bar_0012 in this phrase.'), r.texts().slice(mark).join(' | '));
     assert.ok(!r.texts().slice(mark).some((x) => /^Asking|^The service|^Did you mean|not set up/.test(x)), r.texts().slice(mark).join(' | ')); assert.deepEqual(r.list(), [EXTEND], 'nothing written, no waiting line');
     await r.enter(); assert.deepEqual(r.list(), [EXTEND], 'Enter writes nothing either');
   }
@@ -93,15 +94,16 @@ test('C: the driver\'s own sentence with a Score that names its bars: `There is 
 test('C: the same sentence with the link the driver meant (`bar_012`) and the parenthesis closed is not read by the closed list (the service handles the rest); the bare unknown link of a plain Copy keeps its 1033 words', async () => {
   const r = await phrase({ names: N12, service: lines('Copy bar 6 and put it at the end.') }); await r.say('Make a copy of [[bar_006]] at the end of score (after [[bar_012]])');
   assert.equal(r.requests.length, 1, 'a parenthetical is outside the closed list: the service is asked'); assert.equal(r.suggestion(), 'Copy bar 6 and put it at the end.');
-  const q = await phrase({ names: N12 }); await q.say('please duplicate [[bar_999]]'); assert.ok(q.texts().includes('Bar 999 is not in this phrase.'), q.texts().join(' | ')); assert.equal(q.requests.length, 0);
+  const q = await phrase({ names: N12 }); await q.say('please duplicate [[bar_999]]'); assert.ok(q.texts().includes('There is no bar named bar_999 in this phrase.'), q.texts().join(' | ')); assert.equal(q.requests.length, 0);
 });
+// 2026-11-24-1037 (deliberate): the same wording (`... in this phrase.`), and `bar_005` in the which-question.
 test('C: the copied bar is not in the phrase: the link is named; a place link that is not: the link is named; several positions: ask which, nothing written', async () => {
   const r = await phrase({ names: N12 });
-  await r.say('Make a copy of [[bar_777]] at the end of the score.'); assert.ok(r.texts().includes('There is no bar named bar_777.'), r.texts().join(' | '));
-  await r.say('Make a copy of [[bar_006]] after [[bar_555]].'); assert.ok(r.texts().includes('There is no bar named bar_555.'), r.texts().join(' | '));
+  await r.say('Make a copy of [[bar_777]] at the end of the score.'); assert.ok(r.texts().includes('There is no bar named bar_777 in this phrase.'), r.texts().join(' | '));
+  await r.say('Make a copy of [[bar_006]] after [[bar_555]].'); assert.ok(r.texts().includes('There is no bar named bar_555 in this phrase.'), r.texts().join(' | '));
   assert.equal(r.requests.length, 0); assert.deepEqual(r.list(), [EXTEND]);
   const two = await phrase({ names: ['bar_005', 'bar_007', 'bar_005', 'bar_012'], drawn: 4 }); await two.say('Make a copy of [[bar_005]] at the end of the score.');
-  assert.ok(two.texts().includes('Bar 005 is bars 1 and 3 of this phrase: which one? Say Copy bar 1. or Copy bar 3.'), two.texts().join(' | ')); assert.equal(two.requests.length, 0); assert.deepEqual(two.list(), [EXTEND]);
+  assert.ok(two.texts().includes('bar_005 is bars 1 and 3 of this phrase: which one? Say Copy bar 1. or Copy bar 3.'), two.texts().join(' | ')); assert.equal(two.requests.length, 0); assert.deepEqual(two.list(), [EXTEND]);
   await two.say('Copy bar 3 and put it at the end.'); await two.enter(); assert.match(two.list()[1], /^Copy bar 3 and put it at the end\./, 'the answer the driver gives is a sentence the grammar reads');
 });
 test('C: another kind of note is not read (P3: a phrase only)', async () => {
@@ -110,11 +112,12 @@ test('C: another kind of note is not read (P3: a phrase only)', async () => {
 });
 
 // ---- D ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// 2026-11-24-1037 (deliberate): the refusal said while a waiting line is in the note ends `in this phrase.`.
 test('D: a WAITING line is in the note: the sentence is not added (1015), the service is NOT asked, and the dialog says what it WOULD write; an unknown link says so', async () => {
   const r = await phrase({ names: N12 }); await r.say('swap the second and third bars'); assert.deepEqual(r.list(), [EXTEND, 'Waiting: swap the second and third bars']); const asked = r.requests.length;
   await r.say(FREE);
   assert.equal(r.requests.length, asked, 'no new service call');
   assert.ok(r.texts().includes(`Line 2 is waiting for a translation, so "${FREE}" was not added. bar_006 is bar 6 of this phrase, so it would write: Copy bar 6 and put it at the end. ${TAIL}`), r.texts().join(' | '));
-  await r.say(DRIVER); assert.ok(r.texts().includes(`Line 2 is waiting for a translation, so "${DRIVER}" was not added. There is no bar named bar_0012. ${TAIL}`), r.texts().join(' | '));
+  await r.say(DRIVER); assert.ok(r.texts().includes(`Line 2 is waiting for a translation, so "${DRIVER}" was not added. There is no bar named bar_0012 in this phrase. ${TAIL}`), r.texts().join(' | '));
   assert.deepEqual(r.list(), [EXTEND, 'Waiting: swap the second and third bars'], 'nothing written'); assert.equal(r.requests.length, asked);
 });

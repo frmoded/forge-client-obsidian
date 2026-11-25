@@ -1,6 +1,6 @@
 // 2026-11-24-1033 on the REAL controller, composer and dialog (a faked service; the real model cannot be run): the driver typed `please duplicate [[bar_007]]` in a phrase whose list already held a WAITING line 2, and the SERVICE refused ("cannot duplicate a single bar").
 //   A  what happens today, in order (the old path is kept when the Score does not say which note made each bar): asked once, refused, kept as a waiting line; and the one-step ways out of a waiting line
-//   B  the client says it without the model: `Copy bar K.` for the position the drawn Score gives the bar (one Enter, one undo entry); several positions = ask which; none = `Bar 007 is not in this phrase.`; a waiting line = the sentence is not added but the dialog says what it WOULD write
+//   B  the client says it without the model: `Copy bar K.` for the position the drawn Score gives the bar (one Enter, one undo entry); several positions = ask which; none = `There is no bar named bar_007 in this phrase.`; a waiting line = the sentence is not added but the dialog says what it WOULD write
 //   C  the request carries `bar_names` (same length as `bar_numbers`) when the Score says them, and nothing more when it does not
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -53,17 +53,18 @@ test('B: the service is not set up: the sentence is still said (the service was 
   const r = await withNames(N4, refuse, false); await r.say('please duplicate [[bar_007]]');
   assert.equal(r.requests.length, 0); assert.ok(r.texts().includes('Did you mean: Copy bar 2? bar_007 is bar 2 of this phrase.'), r.texts().join(' | ')); assert.ok(!r.texts().some((x) => /not set up/.test(x)), r.texts().join(' | '));
 });
+// 2026-11-24-1037 (deliberate): one wording for the bar link that is not in the phrase (`There is no bar named bar_007 in this phrase.`; `Bar 007 is not in this phrase.` is retired), and the link is written `bar_007`, not `Bar 007`, in the which-question.
 test('B: SEVERAL positions: it asks which, in words, never guesses; nothing is written, no waiting line, the service is not asked', async () => {
   const r = await withNames(N2); await r.say('please duplicate [[bar_007]]');
-  assert.equal(r.requests.length, 0); assert.ok(r.texts().includes('Bar 007 is bars 3 and 4 of this phrase: which one? Say Copy bar 3. or Copy bar 4.'), r.texts().join(' | '));
+  assert.equal(r.requests.length, 0); assert.ok(r.texts().includes('bar_007 is bars 3 and 4 of this phrase: which one? Say Copy bar 3. or Copy bar 4.'), r.texts().join(' | '));
   assert.ok(!r.texts().some((x) => /^Did you mean/.test(x))); assert.deepEqual(r.list(), [EXTEND], 'nothing written, no waiting line');
   await r.say('Copy bar 4.'); await r.enter(); assert.match(r.list()[1], /^Copy bar 4\./, 'the answer the driver gives is a sentence the grammar reads');
 });
-test('B: the bar is NOT in the phrase: `Bar 007 is not in this phrase.` in words; nothing written, no waiting line, the service is not asked (set up or not)', async () => {
+test('B: the bar is NOT in the phrase: `There is no bar named bar_007 in this phrase.` in words; nothing written, no waiting line, the service is not asked (set up or not)', async () => {
   for (const configured of [true, false]) {
     const r = await withNames(['bar_005', 'bar_005', 'bar_005', 'bar_005'], refuse, configured);
     await r.say('please duplicate [[bar_007]]'); await r.say('Copy [[bar_007]].');
-    assert.equal(r.requests.length, 0); assert.equal(r.texts().filter((x) => x === 'Bar 007 is not in this phrase.').length, 2, r.texts().join(' | ')); assert.deepEqual(r.list(), [EXTEND]);
+    assert.equal(r.requests.length, 0); assert.equal(r.texts().filter((x) => x === 'There is no bar named bar_007 in this phrase.').length, 2, r.texts().join(' | ')); assert.deepEqual(r.list(), [EXTEND]);
   }
 });
 test('B: a WAITING line is in the note: the sentence is not added (the 1015 contract), the service is NOT asked, and the dialog says what it WOULD write (or why it cannot)', async () => {
@@ -72,12 +73,13 @@ test('B: a WAITING line is in the note: the sentence is not added (the 1015 cont
   assert.equal(r.requests.length, asked, 'no new service call');
   assert.ok(r.texts().includes(`Line 2 is waiting for a translation, so "please duplicate [[bar_007]]" was not added. bar_007 is bar 2 of this phrase, so it would write: Copy bar 2. ${TAIL}`), r.texts().join(' | '));
   assert.deepEqual(r.list(), [EXTEND, 'Waiting: swap the second and third bars'], 'nothing written');
-  await r.say('Copy [[bar_999]].'); assert.ok(r.texts().includes(`Line 2 is waiting for a translation, so "Copy [[bar_999]]." was not added. Bar 999 is not in this phrase. ${TAIL}`), r.texts().join(' | '));
+  await r.say('Copy [[bar_999]].'); assert.ok(r.texts().includes(`Line 2 is waiting for a translation, so "Copy [[bar_999]]." was not added. There is no bar named bar_999 in this phrase. ${TAIL}`), r.texts().join(' | '));
   assert.equal(r.requests.length, asked);
 });
+// 2026-11-24-1037 (deliberate): the link is written `bar_007` in the which-question.
 test('B: a waiting line and a bar at SEVERAL positions: the question is asked in words, nothing added', async () => {
   const r = await withNames(N2); await r.say('swap the second and third bars'); await r.say('Copy [[bar_007]].');
-  assert.ok(r.texts().includes(`Line 2 is waiting for a translation, so "Copy [[bar_007]]." was not added. Bar 007 is bars 3 and 4 of this phrase: which one? Say Copy bar 3. or Copy bar 4. ${TAIL}`), r.texts().join(' | '));
+  assert.ok(r.texts().includes(`Line 2 is waiting for a translation, so "Copy [[bar_007]]." was not added. bar_007 is bars 3 and 4 of this phrase: which one? Say Copy bar 3. or Copy bar 4. ${TAIL}`), r.texts().join(' | '));
 });
 test('B: after the waiting line is taken back, the same sentence goes through (the way out works)', async () => {
   const r = await withNames(N4); await r.say('swap the second and third bars'); await r.say('please duplicate [[bar_007]]');

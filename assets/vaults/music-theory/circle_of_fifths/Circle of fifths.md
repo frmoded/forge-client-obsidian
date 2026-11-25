@@ -1,5 +1,5 @@
 ---
-description: "Find any key's signature in seconds, name its relative minor and see which keys sit close."
+description: "A first look at the circle of fifths: where it comes from, how it's built and how it's used."
 ---
 <div style="display:flex;justify-content:center">
 

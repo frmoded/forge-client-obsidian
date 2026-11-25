@@ -130,11 +130,15 @@ test('--cleanup-worktrees removes the registered worktrees of a killed matrix in
   } finally { p.done(); }
 });
 
-test('a matrix that starts while a killed one\'s worktrees are still registered says so and prints the cleanup command', { skip }, () => {
+// 2026-11-24-1037 (deliberate): a matrix that starts over a killed one's worktrees no longer only WARNS and prints the cleanup command: it takes them back itself at its start and says how many it found (drain-matrix-prune.test.mjs pins that
+// in full). The WARN stays for worktrees the cleanup could not remove (the second assertion cannot be reached on a healthy repo, so only its absence is pinned here).
+test('a matrix that starts while a killed one\'s worktrees are still registered takes them back itself and says how many it found (it no longer leaves them with a WARN)', { skip }, () => {
   const p = projects();
   try {
     strand(p);
     const r = matrix(p, ['--no-forge'], { TEST_MS: '100' }); assert.equal(r.status, 0, r.out + r.err);
-    assert.match(r.err + r.out, /WARN: 8 worktree\(s\) of an earlier matrix are still registered \(a killed run\): bash scripts\/drain-matrix\.sh --cleanup-worktrees/);
+    assert.match(r.out, /^stale worktrees found: 8$/m);
+    assert.doesNotMatch(r.err + r.out, /WARN: \d+ worktree\(s\) of an earlier matrix are still registered/);
+    assert.deepEqual(worktreesOf(p, 'forge-client-obsidian').filter((w) => /\/drain-matrix\./.test(w)), []);
   } finally { p.done(); }
 });
