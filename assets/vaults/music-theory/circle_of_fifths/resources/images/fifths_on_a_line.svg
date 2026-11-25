@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="600" height="400" viewBox="0 0 600 400" role="img" aria-label="Two octaves of keys in a line. An arrow runs from C to G, seven half steps, a fifth. A second arrow runs from B to F sharp in the next octave, also seven half steps.">
+<!-- own background: a solid panel so no ink depends on the page colour (dark mode); the wheel's panel, palette and font -->
+<rect x="0" y="0" width="600" height="400" rx="10" ry="10" fill="#fdfcfa"/>
+<defs>
+<marker id="head1" markerUnits="userSpaceOnUse" markerWidth="16" markerHeight="14" refX="15" refY="7" orient="auto"><path d="M0 0 L15 7 L0 14 Z" fill="#2B2B2B"/></marker>
+<marker id="head2" markerUnits="userSpaceOnUse" markerWidth="16" markerHeight="14" refX="15" refY="7" orient="auto"><path d="M0 0 L15 7 L0 14 Z" fill="#D72027"/></marker>
+</defs>
+<g font-family="system-ui, -apple-system, Segoe UI, sans-serif" text-anchor="middle">
+<!-- the arrows: both run left to right above the keys and never fold back; the second is dashed as well as red -->
+<path class="arrow" d="M 40 182 C 40 62 200 62 200 182" fill="none" stroke="#2B2B2B" stroke-width="3.5" stroke-linecap="round" marker-end="url(#head1)"/>
+<circle cx="40" cy="182" r="4.5" fill="#2B2B2B"/>
+<text class="arrowlabel" x="120" y="50" font-size="18" font-weight="600" fill="#2B2B2B">a fifth: 7 half steps</text>
+<text class="arrowwhere" x="120" y="72" font-size="15" fill="#555555">C to G</text>
+<path class="arrow" d="M 280 182 C 280 62 460 62 460 182" fill="none" stroke="#D72027" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="10 6" marker-end="url(#head2)"/>
+<circle cx="280" cy="182" r="4.5" fill="#D72027"/>
+<text class="arrowlabel" x="370" y="50" font-size="18" font-weight="600" fill="#2B2B2B">a fifth: 7 half steps</text>
+<text class="arrowwhere" x="370" y="72" font-size="15" fill="#555555">B to F♯</text>
+<!-- the keys, C to B twice (white keys first, the black keys on top); the four keys an arrow starts or ends on are lit -->
+<rect class="key white end" data-i="0" data-note="C" x="20" y="190" width="40" height="150" rx="3" ry="3" fill="#F8C54B" stroke="#2B2B2B" stroke-width="1"/>
+<rect class="key white" data-i="2" data-note="D" x="60" y="190" width="40" height="150" rx="3" ry="3" fill="#FFFFFF" stroke="#2B2B2B" stroke-width="1"/>
+<rect class="key white" data-i="4" data-note="E" x="100" y="190" width="40" height="150" rx="3" ry="3" fill="#FFFFFF" stroke="#2B2B2B" stroke-width="1"/>
+<rect class="key white" data-i="5" data-note="F" x="140" y="190" width="40" height="150" rx="3" ry="3" fill="#FFFFFF" stroke="#2B2B2B" stroke-width="1"/>
+<rect class="key white end" data-i="7" data-note="G" x="180" y="190" width="40" height="150" rx="3" ry="3" fill="#F8C54B" stroke="#2B2B2B" stroke-width="1"/>
+<rect class="key white" data-i="9" data-note="A" x="220" y="190" width="40" height="150" rx="3" ry="3" fill="#FFFFFF" stroke="#2B2B2B" stroke-width="1"/>
+<rect class="key white end" data-i="11" data-note="B" x="260" y="190" width="40" height="150" rx="3" ry="3" fill="#F8C54B" stroke="#2B2B2B" stroke-width="1"/>
+<rect class="key white" data-i="12" data-note="C" x="300" y="190" width="40" height="150" rx="3" ry="3" fill="#FFFFFF" stroke="#2B2B2B" stroke-width="1"/>
+<rect class="key white" data-i="14" data-note="D" x="340" y="190" width="40" height="150" rx="3" ry="3" fill="#FFFFFF" stroke="#2B2B2B" stroke-width="1"/>
+<rect class="key white" data-i="16" data-note="E" x="380" y="190" width="40" height="150" rx="3" ry="3" fill="#FFFFFF" stroke="#2B2B2B" stroke-width="1"/>
+<rect class="key white" data-i="17" data-note="F" x="420" y="190" width="40" height="150" rx="3" ry="3" fill="#FFFFFF" stroke="#2B2B2B" stroke-width="1"/>
+<rect class="key white" data-i="19" data-note="G" x="460" y="190" width="40" height="150" rx="3" ry="3" fill="#FFFFFF" stroke="#2B2B2B" stroke-width="1"/>
+<rect class="key white" data-i="21" data-note="A" x="500" y="190" width="40" height="150" rx="3" ry="3" fill="#FFFFFF" stroke="#2B2B2B" stroke-width="1"/>
+<rect class="key white" data-i="23" data-note="B" x="540" y="190" width="40" height="150" rx="3" ry="3" fill="#FFFFFF" stroke="#2B2B2B" stroke-width="1"/>
+<rect class="key black" data-i="1" data-note="C♯" x="46" y="190" width="28" height="92" rx="3" ry="3" fill="#2B2B2B" stroke="#2B2B2B" stroke-width="1"/>
+<rect class="key black" data-i="3" data-note="D♯" x="86" y="190" width="28" height="92" rx="3" ry="3" fill="#2B2B2B" stroke="#2B2B2B" stroke-width="1"/>
+<rect class="key black" data-i="6" data-note="F♯" x="166" y="190" width="28" height="92" rx="3" ry="3" fill="#2B2B2B" stroke="#2B2B2B" stroke-width="1"/>
+<rect class="key black" data-i="8" data-note="G♯" x="206" y="190" width="28" height="92" rx="3" ry="3" fill="#2B2B2B" stroke="#2B2B2B" stroke-width="1"/>
+<rect class="key black" data-i="10" data-note="A♯" x="246" y="190" width="28" height="92" rx="3" ry="3" fill="#2B2B2B" stroke="#2B2B2B" stroke-width="1"/>
+<rect class="key black" data-i="13" data-note="C♯" x="326" y="190" width="28" height="92" rx="3" ry="3" fill="#2B2B2B" stroke="#2B2B2B" stroke-width="1"/>
+<rect class="key black" data-i="15" data-note="D♯" x="366" y="190" width="28" height="92" rx="3" ry="3" fill="#2B2B2B" stroke="#2B2B2B" stroke-width="1"/>
+<rect class="key black end" data-i="18" data-note="F♯" x="446" y="190" width="28" height="92" rx="3" ry="3" fill="#B07F00" stroke="#2B2B2B" stroke-width="1"/>
+<rect class="key black" data-i="20" data-note="G♯" x="486" y="190" width="28" height="92" rx="3" ry="3" fill="#2B2B2B" stroke="#2B2B2B" stroke-width="1"/>
+<rect class="key black" data-i="22" data-note="A♯" x="526" y="190" width="28" height="92" rx="3" ry="3" fill="#2B2B2B" stroke="#2B2B2B" stroke-width="1"/>
+<!-- the labels: sharps only, one spelling -->
+<text class="keylabel" data-i="0" x="40" y="326" font-size="18" font-weight="600" fill="#2B2B2B">C</text>
+<text class="keylabel" data-i="1" x="60" y="270" font-size="14" font-weight="600" fill="#fdfcfa">C♯</text>
+<text class="keylabel" data-i="2" x="80" y="326" font-size="18" font-weight="600" fill="#2B2B2B">D</text>
+<text class="keylabel" data-i="3" x="100" y="270" font-size="14" font-weight="600" fill="#fdfcfa">D♯</text>
+<text class="keylabel" data-i="4" x="120" y="326" font-size="18" font-weight="600" fill="#2B2B2B">E</text>
+<text class="keylabel" data-i="5" x="160" y="326" font-size="18" font-weight="600" fill="#2B2B2B">F</text>
+<text class="keylabel" data-i="6" x="180" y="270" font-size="14" font-weight="600" fill="#fdfcfa">F♯</text>
+<text class="keylabel" data-i="7" x="200" y="326" font-size="18" font-weight="600" fill="#2B2B2B">G</text>
+<text class="keylabel" data-i="8" x="220" y="270" font-size="14" font-weight="600" fill="#fdfcfa">G♯</text>
+<text class="keylabel" data-i="9" x="240" y="326" font-size="18" font-weight="600" fill="#2B2B2B">A</text>
+<text class="keylabel" data-i="10" x="260" y="270" font-size="14" font-weight="600" fill="#fdfcfa">A♯</text>
+<text class="keylabel" data-i="11" x="280" y="326" font-size="18" font-weight="600" fill="#2B2B2B">B</text>
+<text class="keylabel" data-i="12" x="320" y="326" font-size="18" font-weight="600" fill="#2B2B2B">C</text>
+<text class="keylabel" data-i="13" x="340" y="270" font-size="14" font-weight="600" fill="#fdfcfa">C♯</text>
+<text class="keylabel" data-i="14" x="360" y="326" font-size="18" font-weight="600" fill="#2B2B2B">D</text>
+<text class="keylabel" data-i="15" x="380" y="270" font-size="14" font-weight="600" fill="#fdfcfa">D♯</text>
+<text class="keylabel" data-i="16" x="400" y="326" font-size="18" font-weight="600" fill="#2B2B2B">E</text>
+<text class="keylabel" data-i="17" x="440" y="326" font-size="18" font-weight="600" fill="#2B2B2B">F</text>
+<text class="keylabel" data-i="18" x="460" y="270" font-size="14" font-weight="600" fill="#fdfcfa">F♯</text>
+<text class="keylabel" data-i="19" x="480" y="326" font-size="18" font-weight="600" fill="#2B2B2B">G</text>
+<text class="keylabel" data-i="20" x="500" y="270" font-size="14" font-weight="600" fill="#fdfcfa">G♯</text>
+<text class="keylabel" data-i="21" x="520" y="326" font-size="18" font-weight="600" fill="#2B2B2B">A</text>
+<text class="keylabel" data-i="22" x="540" y="270" font-size="14" font-weight="600" fill="#fdfcfa">A♯</text>
+<text class="keylabel" data-i="23" x="560" y="326" font-size="18" font-weight="600" fill="#2B2B2B">B</text>
+<!-- the two octaves -->
+<polyline points="24,346 24,354 296,354 296,346" fill="none" stroke="#555555" stroke-width="1.5" stroke-linejoin="round"/>
+<polyline points="304,346 304,354 576,354 576,346" fill="none" stroke="#555555" stroke-width="1.5" stroke-linejoin="round"/>
+<text class="octave" x="160" y="378" font-size="16" font-weight="500" fill="#555555">1st octave</text>
+<text class="octave" x="440" y="378" font-size="16" font-weight="500" fill="#555555">2nd octave</text>
+</g>
+</svg>

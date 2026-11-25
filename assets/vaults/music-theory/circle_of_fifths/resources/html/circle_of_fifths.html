@@ -55,17 +55,17 @@
   #title { min-height: 36px; margin: 3px 0 0; color: var(--ink); font-size: 13px; }
   #detail, #prompt { min-height: 34px; margin: 2px 0 0; font-size: 12px; line-height: 16px; color: var(--ink); }
   #prompt { min-height: 36px; font-size: 13px; line-height: 18px; margin: 3px 0 0; }
-  .chg { min-height: 34px; margin: 2px 0 0; font-size: 12px; line-height: 16px; color: var(--ink); }
+  .chg { min-height: 16px; margin: 2px 0 0; font-size: 12px; line-height: 16px; color: var(--ink); }                 /* one short sentence now (2026-11-25-1041): one line, not two */
 </style>
 </head>
 <body>
 <div class="wrap">
-<div class="row"><button type="button" id="ccw">Counter-clockwise</button><button type="button" id="cw">Clockwise</button><button type="button" id="play">Play</button></div>
+<div class="row"><button type="button" id="play">Play</button></div>
 <div class="wheelbox"><svg id="wheel" role="group" aria-label="The circle of fifths: major keys on the outer ring, their relative minors on the inner ring"></svg></div>
 <div id="title" aria-live="off"></div>
 <svg id="staff" role="img" aria-label="Treble staff"></svg>
 <svg id="strip" role="img" aria-label="Piano keys, C4 to C6"></svg>
-<div class="chg" id="change"></div>
+<div class="chg" id="change">Choose a key on the wheel.</div>
 <div id="detail"></div>
 <span id="sr" class="sr" role="status" aria-live="polite"></span>
 </div>
@@ -81,8 +81,8 @@
 (function () {
   "use strict";
   // 2026-11-19-0900 - the CIRCLE OF FIFTHS explorer: a wheel of twelve sectors (the major keys on the outer ring, C at the top and clockwise, the relative minors on the inner ring, the number of sharps or flats printed on each sector). Choose a sector: it lights, its key signature
-  // shows on the treble staff in the standard order of sharps or flats, a piano strip lights its scale and Play sounds it up. Clockwise and counter-clockwise step one fifth and say what changed (one sharp added or one flat added, and which note); the two neighbours shade softly and
-  // the opposite sector shades differently, with how many of the seven notes each shares with the chosen key. Sharp keys go clockwise and flat keys counter-clockwise; the sector at the bottom has both names (click it again to switch the spelling). Nothing happens when the pointer merely rests.
+  // shows on the treble staff in the standard order of sharps or flats, a piano strip lights its scale and Play sounds it up; the two neighbours shade softly and the opposite sector shades differently, with how many of the seven notes each shares with the chosen key. Sharp keys go clockwise
+  // and flat keys counter-clockwise; the sector at the bottom has both names (click it again to switch the spelling). 2026-11-25-1041: no step buttons any more: a key is chosen by tapping the wheel (or Enter / Space on a focused sector; the arrow keys move the focus). Nothing happens when the pointer merely rests.
   // It looks like the Scales hub player and shares its blocks, byte for byte (pinned by a test): the scale core and the piano voice; the scale view (strip and staff) too. Memory only: the sandboxed page has no storage.
   // ---- pure functions (no DOM; the node harness exports them) ------------------------------------------------------------------------------------------
     var BASE = 60, LOW = 60, HIGH = 84, A4_HZ = 440, STEP_SECONDS = 0.45, NOTE_LEN = 0.7;                 // the strip is C4..C6; a scale sits on the tonic's pitch class in the octave from C4 (so the staff and the strip agree)
@@ -353,7 +353,7 @@
   }
   // ---- the page ---------------------------------------------------------------------------------------------------------------------------------------
   var schedule = function (fn, ms) { return (window.__schedule || setTimeout)(fn, ms); };                 // an injected scheduler for tests; the page's own is setTimeout
-  var cur = 0, curAlt = false, lastChange = null, timers = [], soundingForm = null;
+  var cur = 0, curAlt = false, timers = [], soundingForm = null;
   // ==== scale view BEGIN (2026-11-17-2003) =========================================================================================================
   // The SAME block is in scale_player.html and in the five scale exercise widgets (scale_build_major / _natural_minor / _modes_and_minor / _other_scales and scale_ear_build_the_scale; a test pins them identical): the piano strip (C4..C6) and the treble staff. A note given to drawStaff may be `hidden` (not drawn: the exercise has not found it yet) or `ghost` (drawn dashed: the exercise shows what was missed); the player never sets either.
   var NS = "http://www.w3.org/2000/svg";
@@ -450,7 +450,7 @@
     return segs;
   }
   // ==== circle wheel END ===========================================================================================================================
-  var segs = buildWheel($("wheel"), { counts: true, onPick: function (ring, k) { choose(k, k === 6 && k === cur ? !curAlt : false, null); } });
+  var segs = buildWheel($("wheel"), { counts: true, onPick: function (ring, k) { choose(k, k === 6 && k === cur ? !curAlt : false); } });
   Object.keys(segs).forEach(function (r) { segs[r].forEach(function (g, k) { g.setAttribute("aria-label", r === "major" ? ciKeyWords(k, false) + (k === 6 ? " or " + ciKeyWords(6, true) : "") + ", " + ciCountWords(k, false) + (k === 6 ? " or " + ciCountWords(6, true) : "") : ciMinorKeyWords(k, false) + (k === 6 ? " or " + ciMinorKeyWords(6, true) : "") + ", the relative minor of " + ciKeyWords(k, false)); }); });
   function midisOf() { return scaleMidis(ciPc(cur), "major", "up", BASE); }
   function render(announce) {
@@ -463,13 +463,11 @@
     for (kk in keys) { gk = keys[kk]; gk.setAttribute("class", "key " + (isBlack(+kk) ? "black" : "white")); }
     midis.forEach(function (mm, idx) { if (keys[mm]) keys[mm].classList.add("lit"); if ((idx === 0 || idx === midis.length - 1) && keys[mm]) keys[mm].classList.add("tonic"); });
     if (soundingIndex >= 0 && keys[midis[soundingIndex]]) keys[midis[soundingIndex]].classList.add("sounding");
-    $("change").textContent = lastChange ? ciChangeText(lastChange) : "Choose a key on the wheel, or step round the circle with Clockwise and Counter-clockwise.";
     var rel = ciRelations(cur, curAlt);
     $("detail").textContent = "Neighbours: " + ciKeyTitle(rel[0].sector, rel[0].alt) + " and " + ciKeyTitle(rel[1].sector, rel[1].alt) + " share " + rel[0].shared + " of their 7 notes with " + ciKeyTitle(cur, curAlt) + ". Opposite: " + (rel[2].sector === 6 ? ciName(6, false) + "/" + ciName(6, true) + " major" : ciKeyTitle(rel[2].sector, rel[2].alt)) + " shares " + rel[2].shared + ".";
     if (announce !== undefined) $("sr").textContent = announce;
   }
-  function choose(k, alt, change) { stopTimers(); cur = ciSector(k); curAlt = cur === 6 ? alt : false; lastChange = change; render(ciKeyWords(cur, curAlt) + ", " + ciCountWords(cur, curAlt) + ". " + (change ? ciChangeWords(change) : "")); }
-  function step(dir) { var c = ciChange(cur, dir); choose(c.to, c.toAlt, c); }
+  function choose(k, alt) { stopTimers(); cur = ciSector(k); curAlt = cur === 6 ? alt : false; render(ciKeyWords(cur, curAlt) + ", " + ciCountWords(cur, curAlt) + "."); }
   // ---- sound: the piano voice (the block above, the same as the other gadgets) ------------------------------------------------------------------------------
   var ctx = null;
   function audio() { if (!ctx) { var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null; ctx = new AC(); } if (ctx.state === "suspended") ctx.resume(); return ctx; }
@@ -481,8 +479,6 @@
     timers.push(schedule(function () { soundingIndex = -1; render(); }, Math.round((midis.length - 1) * STEP_SECONDS * 1000 + NOTE_LEN * 1000)));
     $("sr").textContent = "Playing " + ciKeyWords(cur, curAlt) + ".";
   }
-  $("cw").addEventListener("click", function () { step(1); });
-  $("ccw").addEventListener("click", function () { step(-1); });
   $("play").addEventListener("click", function () { play(); });
   render();
 })();

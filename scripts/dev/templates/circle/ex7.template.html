@@ -1,0 +1,188 @@
+@@HEAD@@
+  #prompt { min-height: 36px; margin: 3px 0 0; font-size: 13px; line-height: 18px; }                       /* two lines at 360 px */
+  .seg.second path { fill: #DCE7F6; stroke: var(--ink); stroke-width: 2; stroke-dasharray: 5 3; }
+  .seg.sounding path { fill: #9DD9B5; }
+  #facts { min-height: 84px; margin: 2px 0 0; font-size: 12px; line-height: 14px; color: var(--ink); }
+  #facts div { margin: 0 0 2px; }
+  .part { margin: 8px 0 0; padding: 0; color: var(--ink); font-size: 14px; line-height: 18px; font-weight: 600; }
+  .pairs { display: flex; gap: 8px; margin: 3px 0 0; }
+  .pair { flex: 1 1 0; min-width: 0; background: #fff; border: 1px solid var(--axis); border-radius: 6px; padding: 4px 8px; }
+  .pair.now { background: #FBEFC4; box-shadow: inset 0 0 0 2px var(--ink); }
+  .pl { color: var(--ink); font-weight: 600; line-height: 16px; }
+  .pk { color: var(--ink); line-height: 16px; min-height: 16px; }
+  .pair button { margin: 3px 0 0; }
+  #result { min-height: 52px; margin: 3px 0 0; font-size: 12px; line-height: 16px; color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="wheelbox"><svg id="wheel" role="group" aria-label="The circle of fifths: tap two keys to compare them"></svg></div>
+<div id="prompt" aria-live="off"></div>
+<div id="facts"></div>
+<div class="row"><button type="button" id="play">Play</button></div>
+<h2 class="part">Which pair sounds closer?</h2>
+<div class="pairs">
+<div class="pair" id="pairA" role="group" aria-label="Pair A"><div class="pl">Pair A</div><div class="pk" id="keysA"></div><button type="button" id="playA" aria-label="Play pair A">Play</button></div>
+<div class="pair" id="pairB" role="group" aria-label="Pair B"><div class="pl">Pair B</div><div class="pk" id="keysB"></div><button type="button" id="playB" aria-label="Play pair B">Play</button></div>
+</div>
+<div class="row"><button type="button" id="ansA" aria-label="Pair A sounds closer">A</button><button type="button" id="ansB" aria-label="Pair B sounds closer">B</button><button type="button" id="next">Next pair</button><button type="button" id="startover">Start over</button></div>
+<div id="result" aria-live="off"></div>
+<span id="sr" class="sr" role="status" aria-live="polite"></span>
+</div>
+<script>
+(function () {
+  "use strict";
+  // 2026-11-25-1041 - the CIRCLE EXERCISE "hear the distance": one level, no score, no tries, only Start over. Two parts on one page, the wheel on top. (1) PICK TWO: tap two keys on the wheel (the first tap marks, the second marks the other, a third tap starts a new pair; the same key twice is fine): the page writes both keys'
+  // seven notes, how many of the seven they share, which notes differ in words, and Play sounds the first key's scale up, a short pause, the second key's scale up. (2) WHICH PAIR SOUNDS CLOSER: two pairs of keys at different distances round the wheel (1 to 6 steps; never the same distance, and never two distances that share
+  // the same number of notes: five and six steps both share two, so "closer" would have no answer in notes), each with its own Play (the wheel marks the pair that plays); tap A or B. A right or a wrong answer says why in words (how far apart each pair is and how many notes it shares) and costs nothing: no limit,
+  // Next pair goes on, Start over clears the picks and draws again. Notes are shared BY PITCH CLASS (F-sharp major has E-sharp, which is the F of the other keys: written E♯ (F)). Nothing plays by itself and nothing happens when the pointer merely rests. Memory only: the sandboxed page has no storage.
+  // It shares its blocks with the other circle gadgets, byte for byte (pinned by a test): the scale core, the piano voice (the explorer's sound), the circle core, the wheel and the ring core. The page's own code is below.
+  // ---- pure functions (no DOM; the node harness exports them) ------------------------------------------------------------------------------------------
+  @@PRELUDE@@
+@@SCALE_CORE@@
+@@CIRCLE_CORE@@
+@@PIANO_VOICE@@
+@@RING_CORE@@
+  // ==== hear the distance core (2026-11-25-1041) ===================================================================================================
+  // A key is a sector 0..11 (C at the top, clockwise); six o'clock is spelled F-sharp here (one tap, one key). Its seven notes come from the circle core (the spelling) and the scale core (the pitch classes); everything that counts notes counts PITCH CLASSES.
+  function hdName(k) { return ciName(k, false); }
+  function hdTitle(k) { return ciKeyTitle(k, false); }
+  function hdWords(k) { return ciKeyWords(k, false); }
+  function hdNotes(k) { var sp = ciScale(k, false), pcs = scaleNotes(ciPc(k), "major", "up"); return sp.map(function (n, d) { return { name: noteName(n), words: noteWords(n), pc: pcs[d] }; }); }
+  function hdShown(n) { return n.name === "E♯" ? "E♯ (F)" : n.name; }                                          // E-sharp is the note the other keys call F
+  function hdList(items) { return items.length < 2 ? items.join("") : items.slice(0, -1).join(", ") + " and " + items[items.length - 1]; }
+  // The two keys' notes by pitch class: the ones both have (each as that key spells it), and the ones only one of them has.
+  function hdCompare(i, j) {
+    var a = hdNotes(i), b = hdNotes(j), pa = {}, pb = {}, shared = [], onlyA = [], onlyB = [];
+    a.forEach(function (n) { pa[n.pc] = n; }); b.forEach(function (n) { pb[n.pc] = n; });
+    a.forEach(function (n) { if (pb[n.pc]) shared.push({ a: n, b: pb[n.pc] }); else onlyA.push(n); });
+    b.forEach(function (n) { if (!pa[n.pc]) onlyB.push(n); });
+    return { i: i, j: j, steps: ciSteps(i, j), shared: shared, onlyA: onlyA, onlyB: onlyB, count: shared.length };
+  }
+  // A shared note spelled two ways is written with the sharp spelling first and the other in brackets, whichever key comes first: F♯ major's E♯ against the F of F major, D♭ major or C major is "E♯ (F)", F♯ against G♭ is "F♯ (G♭)"; the same spelling in both: the name.
+  function hdSharedName(s) { var x = s.a.name, y = s.b.name, t; if (x === y) return hdShown(s.a); if (y.indexOf("♯") >= 0 && x.indexOf("♯") < 0) { t = x; x = y; y = t; } return x + " (" + y + ")"; }
+  function hdStepsWords(d) { return d === 0 ? "the same key" : RG_NUMBER_WORDS[d] + (d === 1 ? " step" : " steps") + " apart"; }
+  function hdNotesRow(k) { return hdTitle(k) + ": " + hdNotes(k).map(hdShown).join(" "); }
+  function hdSharesRow(c) { return hdTitle(c.i) + " shares " + c.count + " of 7 notes with " + hdTitle(c.j) + (c.steps === 0 ? ": the same key." : ", " + hdStepsWords(c.steps) + "."); }
+  function hdDifferText(c) {
+    if (c.onlyA.length === 0) return "No notes differ.";
+    var one = c.onlyA.length === 1, x = hdName(c.i) + " has " + hdList(c.onlyA.map(hdShown)), y = hdName(c.j) + " has " + hdList(c.onlyB.map(hdShown));
+    return one ? x + ", " + y + "." : x + "; " + y + ".";
+  }
+  function hdSharedRow(c) { return "Shared: " + hdList(c.shared.map(hdSharedName)) + ". Different: " + hdDifferText(c).replace(/^No notes differ\.$/, "none."); }
+  // The pick: the keys tapped so far (a third tap starts a new pair).
+  function hdPick(picks, k) { return picks.length === 1 ? [picks[0], k] : [k]; }
+  function hdPickRows(picks) { if (picks.length < 2) return picks.length ? [hdNotesRow(picks[0])] : []; var c = hdCompare(picks[0], picks[1]); return [hdNotesRow(picks[0]), hdNotesRow(picks[1]), hdSharesRow(c), hdSharedRow(c)]; }
+  function hdPickPrompt(picks) {
+    if (picks.length === 0) return "Pick two keys on the wheel to compare them.";
+    if (picks.length === 1) return hdTitle(picks[0]) + " is marked. Tap a second key (the same one again is fine).";
+    return hdTitle(picks[0]) + " and " + hdTitle(picks[1]) + " are marked. Tap a key to start a new pair.";
+  }
+  function hdPickWords(picks) {                                                                                         // for a screen reader: the signs spelled out
+    var c = hdCompare(picks[0], picks[1]), w = function (n) { return n.words; }, one = c.onlyA.length === 1;
+    var diff = c.onlyA.length === 0 ? "No notes differ." : hdWords(c.i).replace(/ major$/, "") + " has " + hdList(c.onlyA.map(w)) + (one ? ", " : "; ") + hdWords(c.j).replace(/ major$/, "") + " has " + hdList(c.onlyB.map(w)) + ".";
+    return hdWords(picks[0]) + " and " + hdWords(picks[1]) + ". " + hdWords(c.i) + " shares " + c.count + " of 7 notes with " + hdWords(c.j) + (c.steps === 0 ? ": the same key. " : ", " + hdStepsWords(c.steps) + ". ") + diff;
+  }
+  // The question: two pairs of keys. The distances (steps round the wheel, 1 to 6) are never equal, and never two that share the same number of notes (5 and 6 both share 2), so the closer pair is always the one that shares more.
+  var HD_DISTANCES = (function () { var out = [], a, b; for (a = 1; a <= 6; a++) for (b = 1; b <= 6; b++) if (a !== b && ciShared(0, a) !== ciShared(0, b)) out.push([a, b]); return out; })();
+  function hdPairAt(d, rng) { var x = Math.min(11, Math.floor(rng() * 12)), dir = rng() < 0.5 ? 1 : -1; return [x, ciSector(x + dir * d)]; }
+  function hdSameQuestion(p, q) { return !!p && !!q && JSON.stringify([p.a, p.b]) === JSON.stringify([q.a, q.b]); }
+  function hdDraw(rng, prev) {
+    var q, n, ds;
+    for (n = 0; n < 30; n++) {
+      ds = rgShuffle(HD_DISTANCES, rng)[0];
+      q = { a: hdPairAt(ds[0], rng), b: hdPairAt(ds[1], rng), closer: ds[0] < ds[1] ? "A" : "B" };
+      if (!hdSameQuestion(prev, q)) break;
+    }
+    return q;
+  }
+  function hdPairText(p) { return hdName(p[0]) + " and " + hdName(p[1]); }
+  function hdPairWords(p) { return hdWords(p[0]) + ", then " + hdWords(p[1]); }
+  // "A is one step apart: they share six notes. B is four steps apart: they share three." (the word `notes` once, after the first number)
+  function hdWhy(q) {
+    function one(label, p, tail) { var c = hdCompare(p[0], p[1]); return label + " is " + hdStepsWords(c.steps) + ": they share " + RG_NUMBER_WORDS[c.count] + tail + "."; }
+    return one("A", q.a, " notes") + " " + one("B", q.b, "");
+  }
+  function hdStart(rng, prev) { return { picks: [], q: hdDraw(rng, prev), wrong: [], right: false, note: "" }; }
+  function hdNext(s, rng) { return rgCopy(s, { q: hdDraw(rng, s.q), wrong: [], right: false, note: "" }); }
+  function hdAnswerTap(s, choice) {
+    if (s.right || s.wrong.indexOf(choice) >= 0) return { state: s, event: "ignored" };
+    if (choice === s.q.closer) return { state: rgCopy(s, { right: true, note: "Right. " + hdWhy(s.q) }), event: "right" };
+    return { state: rgCopy(s, { wrong: s.wrong.concat([choice]), note: "Not that one. " + hdWhy(s.q) + " The pair that shares more notes sounds closer." }), event: "wrong" };
+  }
+  var HD_ASK = "Play both pairs, then tap A or B for the pair that sounds closer.";
+  function hdResult(s) { return s.note || HD_ASK; }
+  function hdAnnounce(s, event) {
+    if (event === "start") return hdPickPrompt([]) + " Then listen to two pairs and tap the one that sounds closer.";
+    if (event === "again") return "Started over. " + hdPickPrompt([]);
+    if (event === "pick") return s.picks.length === 2 ? hdPickWords(s.picks) : hdWords(s.picks[0]) + " is marked. Tap a second key.";
+    if (event === "next") return "Next pair. " + HD_ASK;
+    if (event === "right" || event === "wrong") return s.note.replace(/♯/g, " sharp").replace(/♭/g, " flat");
+    return "";
+  }
+  // ==== hear the distance core END =================================================================================================================
+  if (typeof document === "undefined") {           // node test harness
+    module.exports = { BASE: BASE, STEP_SECONDS: STEP_SECONDS, NOTE_LEN: NOTE_LEN, scaleNotes: scaleNotes, scaleMidis: scaleMidis, noteName: noteName, noteWords: noteWords,
+      CIRCLE_TONICS: CIRCLE_TONICS, ciPc: ciPc, ciScale: ciScale, ciSector: ciSector, ciName: ciName, ciKeyTitle: ciKeyTitle, ciKeyWords: ciKeyWords, ciSteps: ciSteps, ciShared: ciShared, ciSharedByPitch: ciSharedByPitch, ciNeighbours: ciNeighbours, ciOpposite: ciOpposite,
+      rgShuffle: rgShuffle, RG_NUMBER_WORDS: RG_NUMBER_WORDS,
+      hdName: hdName, hdTitle: hdTitle, hdNotes: hdNotes, hdShown: hdShown, hdList: hdList, hdCompare: hdCompare, hdSharedName: hdSharedName, hdStepsWords: hdStepsWords, hdNotesRow: hdNotesRow, hdSharesRow: hdSharesRow, hdDifferText: hdDifferText, hdSharedRow: hdSharedRow,
+      hdPick: hdPick, hdPickRows: hdPickRows, hdPickPrompt: hdPickPrompt, hdPickWords: hdPickWords, HD_DISTANCES: HD_DISTANCES, hdPairAt: hdPairAt, hdDraw: hdDraw, hdWhy: hdWhy, hdStart: hdStart, hdNext: hdNext, hdAnswerTap: hdAnswerTap, hdResult: hdResult, hdAnnounce: hdAnnounce, HD_ASK: HD_ASK };
+    return;
+  }
+  // ---- the page ---------------------------------------------------------------------------------------------------------------------------------------
+  var rng = function () { return (window.__earRandom || Math.random)(); };                                   // an injected random source for tests
+  var schedule = function (fn, ms) { return (window.__schedule || setTimeout)(fn, ms); };                 // an injected scheduler for tests; the page's own is setTimeout
+  var PAUSE_SECONDS = 0.6;
+  var state = null, mode = "pick", timers = [], playEnd = null, playing = false, soundingKey = -1, ctx = null;
+  var NS = "http://www.w3.org/2000/svg";
+  var $ = function (id) { return document.getElementById(id); };
+  function el(tag, attrs, parent) { var n = document.createElementNS(NS, tag); for (var a in attrs) n.setAttribute(a, attrs[a]); if (parent) parent.appendChild(n); return n; }
+@@CIRCLE_WHEEL@@
+  var segs = buildWheel($("wheel"), { counts: false, onPick: function (ring, k) { state = rgCopy(state, { picks: hdPick(state.picks, k) }); mode = "pick"; render(hdAnnounce(state, "pick")); } });
+  function marked() { return mode === "A" ? state.q.a : mode === "B" ? state.q.b : state.picks; }
+  function render(announce) {
+    var m = marked(), r, k, g, cls, role;
+    for (r in segs) for (k = 0; k < 12; k++) {
+      g = segs[r][k]; role = m[0] === k ? "first key" : m.length > 1 && m[1] === k ? "second key" : "";
+      cls = "seg " + r + (m[0] === k ? " lit" : m.length > 1 && m[1] === k ? " second" : "") + (soundingKey === k ? " sounding" : "");
+      g.setAttribute("class", cls);
+      g.setAttribute("aria-label", (r === "major" ? hdWords(k) : ciMinorWords(k, false) + " minor, the relative minor of " + hdWords(k)) + (role ? ", " + role : ""));
+    }
+    $("prompt").textContent = mode === "pick" ? hdPickPrompt(state.picks) : "Pair " + mode + " is on the wheel: " + hdPairText(marked()) + ".";
+    var facts = $("facts"); facts.textContent = ""; hdPickRows(state.picks).forEach(function (t) { var d = document.createElement("div"); d.textContent = t; facts.appendChild(d); });
+    $("keysA").textContent = hdPairText(state.q.a); $("keysB").textContent = hdPairText(state.q.b);
+    $("pairA").setAttribute("class", "pair" + (mode === "A" ? " now" : "")); $("pairB").setAttribute("class", "pair" + (mode === "B" ? " now" : ""));
+    $("pairA").setAttribute("aria-label", "Pair A: " + hdPairWords(state.q.a)); $("pairB").setAttribute("aria-label", "Pair B: " + hdPairWords(state.q.b));
+    $("play").disabled = playing || state.picks.length < 2; $("playA").disabled = playing; $("playB").disabled = playing;
+    ["A", "B"].forEach(function (c) { var b = $("ans" + c); b.disabled = state.right || state.wrong.indexOf(c) >= 0; b.setAttribute("class", state.wrong.indexOf(c) >= 0 ? "wrongbtn" : ""); });
+    $("result").textContent = hdResult(state);
+    if (announce !== undefined) $("sr").textContent = announce;
+  }
+  // ---- sound: the explorer's piano voice: a key's scale up (8 notes), a short pause, the next key's scale up. Nothing plays until a Play button is pressed. A sounding note cannot be taken back, so every Play waits until the one before has ended. ----
+  function audio() { if (!ctx) { var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null; ctx = new AC(); } if (ctx.state === "suspended") ctx.resume(); return ctx; }
+  function stopMarks() { timers.forEach(function (t) { (window.__unschedule || clearTimeout)(t); }); timers = []; soundingKey = -1; }
+  function playKeys(keys, which, words) {                                          // the Play buttons are disabled while a sound is going: a disabled button takes no click
+    var c = audio(), t0 = c ? c.currentTime + 0.02 : 0, end = 0;
+    stopMarks(); mode = which; playing = true;
+    keys.forEach(function (k, idx) {
+      var midis = scaleMidis(ciPc(k), "major", "up", BASE), off = idx * (midis.length * STEP_SECONDS + PAUSE_SECONDS), done = off + (midis.length - 1) * STEP_SECONDS + NOTE_LEN;
+      if (c) midis.forEach(function (mm, j) { pianoVoice(c, pianoBus(c), midiToHz(mm), t0 + off + j * STEP_SECONDS, NOTE_LEN, 0.8, 1); });
+      timers.push(schedule(function () { soundingKey = k; render(); }, Math.round(off * 1000)));
+      timers.push(schedule(function () { soundingKey = -1; render(); }, Math.round(done * 1000))); end = done;
+    });
+    playEnd = schedule(function () { playing = false; playEnd = null; render(); }, Math.round(end * 1000) + 50);
+    render("Playing " + words + ".");
+  }
+  $("play").addEventListener("click", function () { if (state.picks.length === 2) playKeys(state.picks, "pick", hdWords(state.picks[0]) + ", then " + hdWords(state.picks[1])); });
+  $("playA").addEventListener("click", function () { playKeys(state.q.a, "A", "pair A: " + hdPairWords(state.q.a)); });
+  $("playB").addEventListener("click", function () { playKeys(state.q.b, "B", "pair B: " + hdPairWords(state.q.b)); });
+  function answer(choice) { var r = hdAnswerTap(state, choice); if (r.event === "ignored") return; state = r.state; render(hdAnnounce(state, r.event)); }
+  $("ansA").addEventListener("click", function () { answer("A"); });
+  $("ansB").addEventListener("click", function () { answer("B"); });
+  $("next").addEventListener("click", function () { stopMarks(); state = hdNext(state, rng); mode = "pick"; render(hdAnnounce(state, "next")); });
+  $("startover").addEventListener("click", function () { stopMarks(); state = hdStart(rng, state.q); mode = "pick"; render(hdAnnounce(state, "again")); });
+  state = hdStart(rng, null); render(hdAnnounce(state, "start"));
+})();
+</script>
+</body>
+</html>

@@ -28,11 +28,13 @@ let generated: string | null = null;
 function generatedDir(): string {
   if (generated) return generated;
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'circle-ring-gen-')); process.on('exit', () => { try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* the system cleans the temp dir */ } });
-  fs.mkdirSync(path.join(tmp, 'scales/resources/html'), { recursive: true }); fs.copyFileSync(path.join(VAULT, 'scales/resources/html/scale_player.html'), path.join(tmp, 'scales/resources/html/scale_player.html')); fs.copyFileSync(path.join(VAULT, 'captions.json'), path.join(tmp, 'captions.json'));
+  fs.mkdirSync(path.join(tmp, 'scales/resources/html'), { recursive: true }); fs.copyFileSync(path.join(VAULT, 'scales/resources/html/scale_player.html'), path.join(tmp, 'scales/resources/html/scale_player.html')); fs.copyFileSync(fs.existsSync(path.join(os.homedir(), 'projects/music-theory/captions.json')) ? path.join(os.homedir(), 'projects/music-theory/captions.json') : path.join(VAULT, 'captions.json'), path.join(tmp, 'captions.json'));   // 2026-11-25-1041: the live vault's captions (the new entries are there before the sync), else the bundle's
   const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts/dev/make-circle-gadgets.mjs'), '--vault', tmp], { encoding: 'utf8' }); assert.equal(r.status, 0, r.stderr);
   generated = path.join(tmp, 'circle_of_fifths/resources/html'); return generated;
 }
-const read = (f: string): string => fs.readFileSync(path.join(RING_FILES.includes(f) ? generatedDir() : DIR, f), 'utf8');
+// 2026-11-25-1041: the explorer (it lost its two step buttons) and the new `hear the distance` gadget are read from the generator's output too, for the same reason: they exist in the live vault first and reach the bundle with the driver's sync.
+const HEAR = 'circle_exercise_hear_distance.html';
+const read = (f: string): string => fs.readFileSync(path.join(RING_FILES.includes(f) || f === EXPLORER || f === HEAR ? generatedDir() : DIR, f), 'utf8');
 const scriptOf = (h: string): string => /<script>([\s\S]*?)<\/script>/.exec(h)![1];
 const block = (h: string, name: string): string => { const a = h.indexOf(`  // ==== ${name} BEGIN`), e = h.indexOf(`  // ==== ${name} END`); assert.ok(a > 0 && e > a, `no "${name}" block`); return h.slice(a, h.indexOf('\n', e) + 1); };
 const player = fs.readFileSync(path.join(VAULT, 'scales/resources/html/scale_player.html'), 'utf8');
@@ -207,13 +209,36 @@ test('the explorer: twelve sectors on each ring (the count printed on the outer 
   assert.match(p.text('detail'), /^Neighbours: D♭ major and E♭ major share 6 of their 7 notes with A♭ major\. Opposite: D major shares 2\.$/);
 });
 
-test('the explorer: Clockwise and Counter-clockwise step one fifth and say what changed; the sixth sector shows both names and its spelling follows the way you came; clicking it again switches the spelling', () => {
-  const p = open(EXPLORER); p.click(p.doc.getElementById('cw')); assert.match(p.text('change'), /^G major has one more sharp than C major: F becomes F♯\.$/); assert.equal(p.count('.acc.sig'), 1);
-  p.click(p.doc.getElementById('ccw')); p.click(p.doc.getElementById('ccw')); assert.match(p.text('change'), /^F major has one more flat than C major: B becomes B♭\.$/); assert.equal(p.count('.acc.sig'), 1);
-  p.click(p.seg('major', 5)); p.click(p.doc.getElementById('cw')); assert.match(p.text('title'), /^F♯ major \(the same keys as G♭ major\), relative minor D♯ minor: 6 sharps\.$/); assert.equal(p.count('.acc.sig'), 6); assert.equal(p.doc.querySelector('.acc.sig')!.textContent, '♯');
+// 2026-11-25-1041 (deliberate): the explorer has no `Counter-clockwise` and `Clockwise` buttons any more (the driver's R1.4): the test that stepped with them is replaced by this one, which keeps what was true of the wheel taps (the sixth sector shows both
+// names and a tap on it chooses the sharp spelling, a second tap switches it) and says what is gone.
+test('the explorer: the sixth sector shows both names and its first tap chooses the sharp spelling; tapping it again switches the spelling; every other sector sets its own key (no step buttons)', () => {
+  const p = open(EXPLORER);
+  p.click(p.seg('major', 5)); p.click(p.seg('major', 6)); assert.match(p.text('title'), /^F♯ major \(the same keys as G♭ major\), relative minor D♯ minor: 6 sharps\.$/); assert.equal(p.count('.acc.sig'), 6); assert.equal(p.doc.querySelector('.acc.sig')!.textContent, '♯');
   p.click(p.seg('major', 6)); assert.match(p.text('title'), /^G♭ major \(the same keys as F♯ major\), relative minor E♭ minor: 6 flats\.$/); assert.equal(p.doc.querySelector('.acc.sig')!.textContent, '♭');
-  p.click(p.doc.getElementById('cw')); assert.match(p.text('change'), /^D♭ major has one fewer flat than G♭ major: C♭ becomes C\.$/);
+  p.click(p.seg('major', 7)); assert.match(p.text('title'), /^D♭ major, relative minor B♭ minor: 5 flats\.$/);
   assert.equal(p.doc.querySelector('.seg.major[data-sector="6"] text.name')!.textContent!.replace(/\s+/g, ''), 'F♯G♭'); p.click(p.seg('major', 6)); assert.match(p.text('title'), /^F♯ major/, 'a first click on the sixth sector chooses the sharp spelling'); p.click(p.seg('major', 6)); assert.match(p.text('title'), /^G♭ major/, 'clicking the chosen sector again switches the spelling');
+});
+
+// 2026-11-25-1041: the two step buttons are gone from the explorer, and with them every sentence and label that named them; what stays: Play, the taps on the wheel, the staff, the piano strip, the shading of the neighbours and the opposite sector. Checked in the markup, in the code
+// (outside comments), in the live DOM and its labels, in the page's text in the fresh state and after taps and a Play. The wheel's keys (Enter, Space, the arrow keys that MOVE FOCUS between sectors) are the shared wheel block and did not change: the arrow keys never stepped the key.
+test('the explorer has no Clockwise / Counter-clockwise buttons: not in the markup, not in the code, not in the live DOM or any label, in any state; the instruction line says `Choose a key on the wheel.`; Play, the wheel, the staff and the strip are still there', () => {
+  const h = read(EXPLORER), markup = h.replace(/<script>[\s\S]*?<\/script>/, ''), code = withoutComments(scriptOf(h));
+  assert.doesNotMatch(markup, /id="cw"|id="ccw"|>Clockwise<|>Counter-clockwise<|Counter-clockwise|\bClockwise\b/, 'the markup'); assert.ok(code.indexOf('var schedule') > 0); const page = code.slice(code.indexOf('var schedule'));   // the page's own code, after the shared blocks and the node harness: where the step handlers were
+  assert.doesNotMatch(code, /\$\("c?cw"\)|getElementById\("c?cw"\)|\bstep\(|\blastChange\b|Counter-clockwise|\bClockwise\b|step round/, 'the code: no handler, no step function, no change line'); assert.doesNotMatch(page, /\bciChange\w*\b|\.change\b/, 'the page does not call the change helpers (they stay in the shared circle core, which the exercises use)');
+  assert.match(markup, /<div class="chg" id="change">Choose a key on the wheel\.<\/div>/, 'the instruction line is exactly one sentence');
+  const p = open(EXPLORER); same(p.errors, []);
+  const gone = (what: string) => { assert.ok(p.doc.getElementById('cw') === null && p.doc.getElementById('ccw') === null, `${what}: no #cw / #ccw`); const labels = [...p.doc.querySelectorAll('[aria-label],[title]')].flatMap((e: any) => [e.getAttribute('aria-label'), e.getAttribute('title')]).filter(Boolean).join(' | '); assert.doesNotMatch(p.doc.body.textContent + ' | ' + labels + ' | ' + p.text('sr'), /Counter-clockwise|\bClockwise\b|step round/, `${what}: no word of them`); };
+  gone('fresh'); assert.equal(p.text('change'), 'Choose a key on the wheel.'); assert.deepEqual([...p.doc.querySelectorAll('button')].map((b: any) => b.textContent.trim()), ['Play'], 'Play is the only button');
+  p.click(p.seg('major', 4)); gone('after a tap'); assert.equal(p.text('change'), 'Choose a key on the wheel.', 'the line does not change: nothing writes it any more'); assert.equal(p.count('.acc.sig'), 4, 'a tap still shows the signature');
+  p.click(p.doc.getElementById('play')); gone('after Play'); assert.match(p.text('sr'), /^Playing E major\.$/);
+});
+
+test('the explorer by keyboard after 1041: the arrow keys only move the focus between sectors (they never step a key, nothing listens to them but the wheel), Enter and Space choose; there is no key handler outside the wheel block', () => {
+  const p = open(EXPLORER); const s0 = p.seg('major', 0); s0.focus(); const before = p.text('title');
+  p.keydown(s0, 'ArrowRight'); assert.equal(p.doc.activeElement, p.seg('major', 1), 'the focus moved'); assert.equal(p.text('title'), before, 'but the key did not change'); p.keydown(p.seg('major', 1), 'ArrowDown'); assert.equal(p.doc.activeElement, p.seg('major', 2)); assert.equal(p.text('title'), before);
+  p.keydown(p.seg('major', 2), 'Enter'); assert.match(p.text('title'), /^D major/);
+  const code = withoutComments(scriptOf(read(EXPLORER))), wheel = block(read(EXPLORER), 'circle wheel'); const outside = code.replace(withoutComments(wheel), '');
+  assert.doesNotMatch(outside, /keydown|keyup|keypress|\.key\b/, 'no key handler outside the shared wheel block');
 });
 
 test('the explorer by keyboard: a sector is a button (Enter and Space choose it), the arrow keys move between sectors of a ring; Play sounds the scale up, each note lighting as it sounds', () => {
@@ -256,33 +281,49 @@ test('neighbours in a page: the key is marked, the two neighbours and the opposi
 // How tall each is (no vertical scroll at 800 and 360 px in every state), and that the pointer resting changes nothing, is measured in real Chrome: scripts/dev/measure-circle-gadgets.mjs.
 // =====================================================================================================================================================================================================
 const ALL7 = [...FILES, ...RING_FILES];
+const ALL8 = [...ALL7, HEAR];                                         // 2026-11-25-1041: and `hear the distance`
 test('the three ring exercises exist, with their titles', () => {
   const titles: Record<string, string> = { [OUTER]: 'Exercise: build the outer ring', [INNER]: 'Exercise: build the inner ring', [COUNTS]: 'Exercise: add the sharps and flats' };
   for (const f of RING_FILES) assert.match(read(f), new RegExp(`<title>${titles[f]}</title>`), f);
 });
 
 // 2026-11-24-1038 (deliberate): the circle exercise core (levels, wrong taps, scores) is no longer in the three ring files: they have no levels, tries or scores. It stays in the three older exercises, byte for byte.
-test('the shared blocks of all seven circle files are byte-identical wherever a file uses them (the Scales player\'s scale core and scale view, the circle core, the wheel, the staff; the exercise core in the three older exercises only), and the ring core and ring page are the same in the three ring exercises and in no other file; none of them plays a sound (no piano voice)', () => {
-  const users: Record<string, string[]> = { 'scale core': ALL7, 'piano voice': [EXPLORER], 'scale view': [EXPLORER, EX1, EX2, COUNTS], 'circle core': ALL7, 'circle exercise core': EXERCISES, 'circle wheel': [EXPLORER, EX2, EX3, ...RING_FILES], 'circle staff': [EXPLORER, EX1, EX2, COUNTS], 'circle ring core': RING_FILES, 'circle ring page': RING_FILES };
+// 2026-11-25-1041 (deliberate): the eighth file, `hear the distance`, carries the scale core, the piano voice (the explorer's sound: the byte-for-byte same block), the circle core, the wheel and the RING CORE (its shuffle, its copy and its number words); it has no scale view, no staff, no exercise core and no ring page.
+// The ring exercises still make no sound: the piano voice is in the explorer and in the new gadget only.
+test('the shared blocks of all eight circle files are byte-identical wherever a file uses them (the Scales player\'s scale core, piano voice and scale view, the circle core, the wheel, the staff; the exercise core in the three older exercises only), and the ring core is the same in the three ring exercises and the new gadget, the ring page in the three ring exercises only; the three ring exercises make no sound (no piano voice)', () => {
+  const users: Record<string, string[]> = { 'scale core': ALL8, 'piano voice': [EXPLORER, HEAR], 'scale view': [EXPLORER, EX1, EX2, COUNTS], 'circle core': ALL8, 'circle exercise core': EXERCISES, 'circle wheel': [EXPLORER, EX2, EX3, ...RING_FILES, HEAR], 'circle staff': [EXPLORER, EX1, EX2, COUNTS], 'circle ring core': [...RING_FILES, HEAR], 'circle ring page': RING_FILES };
   for (const [name, files] of Object.entries(users)) {
     for (const f of files) { const b = block(read(f), name); if (['scale core', 'piano voice', 'scale view'].includes(name)) assert.equal(b, block(player, name), `${f}: ${name} differs from the Scales player`); else assert.equal(b, block(read(files[0]), name), `${f}: ${name} differs`); assert.ok(b.length > 600 || name === 'circle ring page', `${name}: non-vacuity`); assert.ok(b.length > 200, `${name}: not empty`); }
-    for (const f of ALL7.filter((x) => !files.includes(x))) assert.equal(read(f).includes(`// ==== ${name} BEGIN`), false, `${f} should not carry ${name}`);
+    for (const f of ALL8.filter((x) => !files.includes(x))) assert.equal(read(f).includes(`// ==== ${name} BEGIN`), false, `${f} should not carry ${name}`);
   }
   for (const f of RING_FILES) assert.doesNotMatch(read(f), /AudioContext|createOscillator/, `${f}: a ring exercise makes no sound`);
 });
 
-test('the generator writes the three ring files exactly as the four others (its output is the source of truth) and does not touch the four', () => {
-  for (const f of RING_FILES) { const h = read(f); assert.ok(h.startsWith('<!DOCTYPE html>') && h.endsWith('</html>\n'), f); assert.doesNotMatch(h, /@@\w+@@/, `${f}: a placeholder is left`); }
+// 2026-11-25-1041 (deliberate): the explorer changed (Part B), so the bundle's copy of it equals the generator's output only once the driver has synced the vault: until then it is the explorer of 0.11.133 (OLD_EXPLORER_SHA) and the comparison is skipped; the other three of the four older files are compared as before.
+// The new gadget (`hear the distance`) is compared with the bundle's copy only when the bundle has one.
+const OLD_EXPLORER_SHA = 'b4a862a694b9f5cc7464465b893468ee2eae8ead4023630559a7c59d734800cd';
+const shaOf = (b: Buffer | string): string => crypto.createHash('sha256').update(b).digest('hex');
+test('the generator writes the ring files, the explorer and the new gadget exactly as the files in the live vault and (once synced) the bundle, and does not touch the three older exercises', () => {
+  for (const f of [...RING_FILES, EXPLORER, HEAR]) { const h = read(f); assert.ok(h.startsWith('<!DOCTYPE html>') && h.endsWith('</html>\n'), f); assert.doesNotMatch(h, /@@\w+@@/, `${f}: a placeholder is left`); }
   const copies: Array<[string, string]> = [['the bundle', DIR], ['the live vault', path.join(os.homedir(), 'projects/music-theory/circle_of_fifths/resources/html')]];
-  for (const [what, dir] of copies) for (const f of RING_FILES) if (fs.existsSync(path.join(dir, f))) assert.equal(fs.readFileSync(path.join(dir, f), 'utf8'), read(f), `${what}: ${f} differs from the generator's output`);
-  for (const f of FILES) assert.equal(fs.readFileSync(path.join(generatedDir(), f), 'utf8'), fs.readFileSync(path.join(DIR, f), 'utf8'), `${f}: the four first files are what they were`);
+  for (const [what, dir] of copies) for (const f of [...RING_FILES, EXPLORER, HEAR]) {
+    if (!fs.existsSync(path.join(dir, f))) continue; const have = fs.readFileSync(path.join(dir, f));
+    if (what === 'the bundle' && f === EXPLORER && shaOf(have) === OLD_EXPLORER_SHA) continue;                 // not synced yet
+    assert.equal(have.toString('utf8'), read(f), `${what}: ${f} differs from the generator's output`);
+  }
+  for (const f of [EX1, EX2, EX3]) assert.equal(fs.readFileSync(path.join(generatedDir(), f), 'utf8'), fs.readFileSync(path.join(DIR, f), 'utf8'), `${f}: the three older exercises are what they were`);
 });
 
 // 2026-11-24-1038: the four older circle gadgets are byte for byte what they were before the ring exercises lost their levels (their SHA-256, taken from the files of 0.11.131): this drain touches only the three ring files.
-test('the four older circle gadgets are byte for byte unchanged (SHA-256 of 0.11.131), in the bundle, in the live vault and in what the generator writes', () => {
-  const SHA: Record<string, string> = { [EXPLORER]: 'b4a862a694b9f5cc7464465b893468ee2eae8ead4023630559a7c59d734800cd', [EX1]: '76695dfda8cfb83f0decafd1797652ef08c274fea9775ff84978b640be6831f1', [EX2]: '4b7007f7d3d3cc524d86ae106bd04e42db1171dc16fe66e52c7119eebe831fba', [EX3]: '5950897a5e63e381a37682f39c2263c86434bb4a8f235bf328a446249738ea21' };
-  const sha = (b: Buffer | string) => crypto.createHash('sha256').update(b).digest('hex');
-  for (const dir of [DIR, generatedDir(), path.join(os.homedir(), 'projects/music-theory/circle_of_fifths/resources/html')]) for (const f of FILES) if (fs.existsSync(path.join(dir, f))) assert.equal(sha(fs.readFileSync(path.join(dir, f))), SHA[f], `${dir}/${f} changed`);
+// 2026-11-25-1041 (deliberate): the EXPLORER's pin moved on purpose (Part B, it lost its two step buttons): the new SHA is that of what the generator writes now; the bundle may still hold the old explorer until the driver's sync (OLD_EXPLORER_SHA). The three exercises are as 1038 left them.
+test('the four older circle gadgets are byte for byte what they were, except the explorer which lost its step buttons on purpose: SHA-256 in the bundle, in the live vault and in what the generator writes', () => {
+  const SHA: Record<string, string> = { [EXPLORER]: '40ae14a4a010aa1444346b61e9bc6876aa73c4c0a9c9a375fef6d84bb760c63e', [EX1]: '76695dfda8cfb83f0decafd1797652ef08c274fea9775ff84978b640be6831f1', [EX2]: '4b7007f7d3d3cc524d86ae106bd04e42db1171dc16fe66e52c7119eebe831fba', [EX3]: '5950897a5e63e381a37682f39c2263c86434bb4a8f235bf328a446249738ea21' };
+  for (const dir of [DIR, generatedDir(), path.join(os.homedir(), 'projects/music-theory/circle_of_fifths/resources/html')]) for (const f of FILES) if (fs.existsSync(path.join(dir, f))) {
+    const got = shaOf(fs.readFileSync(path.join(dir, f)));
+    if (f === EXPLORER && dir === DIR && got === OLD_EXPLORER_SHA) continue;                                       // the bundle before the sync: the explorer of 0.11.133
+    assert.equal(got, SHA[f], `${dir}/${f} changed`);
+  }
+  assert.notEqual(SHA[EXPLORER], OLD_EXPLORER_SHA, 'the explorer pin moved on purpose');
 });
 
 // 2026-11-24-1038: the caption of the outer ring says `from C` (the start is always C); the three captions never say `from the given key` again. Checked on the bundle's captions.json and, when it exists, the live vault's.
@@ -404,18 +445,18 @@ test('signature counts: a wrong count says in words which note changed or which 
 });
 
 // ---- the words, the hover rule and the published-gadget lint, over the three ring files ---------------------------------------------------------------------------------------------------------------------
-test('ring exercises, the words: an exercise, never a test, quiz, game or question, in the code, the markup, the labels and every state\'s text; no plugin word', () => {
-  for (const f of RING_FILES) {
+test('ring exercises, the words: an exercise, never a test, quiz, game or question, in the code, the markup, the labels and every state\'s text; no plugin word (2026-11-25-1041: `hear the distance` too)', () => {
+  for (const f of [...RING_FILES, HEAR]) {
     const h = read(f); const code = scriptOf(h).split('\n').filter((l) => !/^\s*\/\//.test(l)).map((l) => l.replace(/\s\/\/.*$/, '')).join('\n');
     assert.doesNotMatch(code, FORBIDDEN, `${f}: a forbidden word in the code`); assert.doesNotMatch(h.replace(/<script>[\s\S]*?<\/script>/, ''), FORBIDDEN, `${f}: in the markup`); assert.doesNotMatch(h, /style_guide|\bforge\b|forge[-_]/i, `${f}: a plugin word`);
     assert.match(h, /Exercise/, `${f}: the word is exercise`);
   }
-  for (const f of RING_FILES) { const p = open(f); const texts = [p.doc.body.textContent, ...[...p.doc.querySelectorAll('[aria-label]')].map((e: any) => e.getAttribute('aria-label'))].join(' | '); assert.doesNotMatch(texts, FORBIDDEN, `${f}: in the page`); }
+  for (const f of [...RING_FILES, HEAR]) { const p = open(f); const texts = [p.doc.body.textContent, ...[...p.doc.querySelectorAll('[aria-label]')].map((e: any) => e.getAttribute('aria-label'))].join(' | '); assert.doesNotMatch(texts, FORBIDDEN, `${f}: in the page`); }
 });
 test('ring exercises, no hover: no pointer-rest handler, no :hover rule, no native tooltip (the scan of src/no-hover-behavior.test.ts, applied to what the generator writes); and as published gadgets: no storage, no talking to the page, no network', () => {
   const REST = /['"`](?:mouseover|mouseenter|mouseleave|mouseout|pointerenter|pointerleave|pointerover|pointerout|mousemove|pointermove)['"`]/, ON = /\bon(?:mouseover|mouseenter|mouseleave|mouseout|pointerenter|pointerleave|pointerover|pointerout)\s*=/i, HOVER = /:hover\b/;
   const TITLE = [/setAttribute\(\s*['"`]title['"`]/, /setAttr\(\s*['"`]title['"`]/, /\.title\s*=[^=]/, /(?<![\w-])title\s*=\s*["'\\]/, /\bsetTooltip\(/, /\bdata-tooltip\b/];
-  for (const f of RING_FILES) {
+  for (const f of [...RING_FILES, HEAR]) {
     const code = read(f).replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^\s*\/\/.*$/gm, ' ').replace(/<!--[\s\S]*?-->/g, ' ');
     for (const line of code.split('\n')) { assert.doesNotMatch(line, REST, `${f}: ${line.trim().slice(0, 100)}`); assert.doesNotMatch(line, ON, f); assert.doesNotMatch(line, HOVER, f); for (const t of TITLE) assert.doesNotMatch(line, t, `${f}: a tooltip: ${line.trim().slice(0, 100)}`); }
     assert.doesNotMatch(code, /\blocalStorage\b|\bsessionStorage\b|\bfetch\s*\(|XMLHttpRequest|\bimport\s*\(|\b(?:window|self)\s*\.\s*(?:parent|top)\b|\bparent\s*\.\s*(?:postMessage|document|location|window)\b|https?:\/\/(?!www\.w3\.org)/, `${f}: storage, page or network`);
@@ -496,4 +537,156 @@ test('Start over: it clears what is built and shuffles the tiles again (outer an
   for (const id of ['count-0', 'count-s1', 'count-s2']) p.click(p.doc.getElementById(id)); p.click(p.doc.getElementById('count-f1')); (p.doc.getElementById('typed') as any).value = '4 flats'; assert.equal(p.count('#counts button.wrongbtn'), 1); assert.equal([...p.doc.querySelectorAll('.seg.major .count')].filter((c: any) => c.textContent !== '').length, 3);
   p.click(start); assert.equal(p.count('.seg.major .count') - [...p.doc.querySelectorAll('.seg.major .count')].filter((c: any) => c.textContent === '').length, 0, 'every count is empty again'); assert.match(p.seg('major', 0).getAttribute('class'), /\blit\b/); assert.equal((p.doc.getElementById('typed') as any).value, '', 'the typed entry is cleared'); assert.equal(p.count('#counts button.wrongbtn'), 0); assert.match(p.text('prompt'), /^Exercise: add the number of sharps or flats\. C major is lit: tap or type its count\.$/); assert.match(p.text('sr'), /^Started over\. /);
   for (let k = 0; k < 12; k++) p.click(p.doc.getElementById(countId(k <= 6 ? k : k - 12))); assert.match(p.text('prompt'), /^Exercise done\./); p.click(start); assert.equal(p.count('#counts button:disabled'), 0); assert.equal(p.count('.acc.sig'), 0); assert.match(p.text('prompt'), /C major is lit/); same(p.errors, []);
+});
+
+
+// =====================================================================================================================================================================================================
+// 2026-11-25-1041 (Part C) - the eighth gadget, `circle_exercise_hear_distance.html` (Exercise: hear the distance). One level, no score, no tries, no `New exercise`, only `Start over` (and `Next pair`). The wheel on top; PICK TWO keys (the page writes both keys' notes, how many of the 7 they
+// share, which differ, and Play sounds the first key's scale up, a pause, the second's); then WHICH PAIR SOUNDS CLOSER: two pairs at different distances, each with its own Play, tap A or B; right and wrong both say why in words. Notes are counted BY PITCH CLASS. These tests were written AFTER
+// the template (the pure functions were probed in node first); the mutants that show they bite are in the FEEDBACK. The page is read from the generator's output (HEAR above), like the ring files.
+// =====================================================================================================================================================================================================
+const hear = () => pureOf(scriptOf(read(HEAR)));
+// the shared notes by distance in steps, counted BY PITCH CLASS (checked below for all 12 x 12 pairs against the notes themselves): one step 6, two 5, three 4, four 3, five 2, six 2 (five and six steps both share two)
+const SHARED_BY_PITCH: Record<number, number> = { 0: 7, 1: 6, 2: 5, 3: 4, 4: 3, 5: 2, 6: 2 };
+const HEAR_BUTTONS = ['Play', 'Play', 'Play', 'A', 'B', 'Next pair', 'Start over'];
+const pcsOfKey = (i: number): Set<number> => new Set([0, 2, 4, 5, 7, 9, 11].map((d) => (7 * i + d) % 12));             // from the definition of a major scale, not from the page's own functions
+
+test('hear the distance exists with its title; it carries the explorer\'s piano voice and nothing of the levelled exercises; it ships BARE (2026-11-25-1041 deliberate: no captions.json entry and no caption block yet, because captions-inside-figure needs every captioned gadget embedded and the wizard embeds it after the FEEDBACK; the entry lands in a later drain, as 1025 then 1032 did)', () => {
+  assert.match(read(HEAR), /<title>Exercise: hear the distance<\/title>/);
+  for (const root of [VAULT, path.join(os.homedir(), 'projects/music-theory')]) { const file = path.join(root, 'captions.json'); if (!fs.existsSync(file)) continue; const caps = JSON.parse(fs.readFileSync(file, 'utf8')); assert.equal(caps[`circle_of_fifths/resources/html/${HEAR}`], undefined, root); }
+  assert.doesNotMatch(read(HEAR), /fig-cap|caption BEGIN/, 'no caption block yet');
+});
+
+test('hear the distance: the shared notes of every pair of keys, 12 x 12, counted by pitch class: one step 6, two 5, three 4, four 3, five 2, six 2, the same key 7; the notes that differ are the rest', () => {
+  const x = hear(); let seen = 0; const byDistance: Record<number, Set<number>> = {};
+  for (let i = 0; i < 12; i++) for (let j = 0; j < 12; j++) {
+    const c = x.hdCompare(i, j), a = pcsOfKey(i), b = pcsOfKey(j), want = [...a].filter((pc) => b.has(pc)).length, d = Math.min((i - j + 12) % 12, (j - i + 12) % 12);
+    assert.equal(c.count, want, `${i} and ${j}: counted from the notes`); assert.equal(c.count, SHARED_BY_PITCH[d], `${i} and ${j}: ${d} steps share ${SHARED_BY_PITCH[d]}`); assert.equal(c.count, x.ciSharedByPitch(i, j)); assert.equal(c.count, x.ciShared(i, j)); assert.equal(c.steps, d);
+    assert.equal(c.shared.length + c.onlyA.length, 7); assert.equal(c.shared.length + c.onlyB.length, 7); assert.equal(c.onlyA.length, c.onlyB.length, 'as many notes differ on each side');
+    for (const n of c.onlyA) assert.ok(!b.has(n.pc), `${n.name} is not in the other key`); for (const n of c.onlyB) assert.ok(!a.has(n.pc)); for (const s of c.shared) { assert.equal(s.a.pc, s.b.pc); assert.ok(a.has(s.a.pc) && b.has(s.a.pc)); }
+    (byDistance[d] ??= new Set()).add(c.count); seen++;
+  }
+  assert.equal(seen, 144); same(Object.fromEntries(Object.entries(byDistance).map(([k, v]) => [k, [...v]])), { 0: [7], 1: [6], 2: [5], 3: [4], 4: [3], 5: [2], 6: [2] }, 'one number per distance');
+  assert.equal(x.hdCompare(0, 6).count, 2, 'C and F♯: only B and F (the F♯ key spells it E♯)'); same(x.hdCompare(0, 6).shared.map((s: any) => [s.a.name, s.b.name]), [['F', 'E♯'], ['B', 'B']]);
+});
+
+test('hear the distance: the words of the pick-two panel: both keys\' seven notes, `shares N of 7 notes`, the differing notes; E♯ is always written `E♯ (F)`', () => {
+  const x = hear();
+  same(x.hdPickRows([0, 1]), ['C major: C D E F G A B', 'G major: G A B C D E F♯', 'C major shares 6 of 7 notes with G major, one step apart.', 'Shared: C, D, E, G, A and B. Different: C has F, G has F♯.']);
+  same(x.hdPickRows([0]), ['C major: C D E F G A B'], 'one key: its seven notes'); same(x.hdPickRows([]), []);
+  same(x.hdPickRows([0, 2]), ['C major: C D E F G A B', 'D major: D E F♯ G A B C♯', 'C major shares 5 of 7 notes with D major, two steps apart.', 'Shared: D, E, G, A and B. Different: C has C and F; D has F♯ and C♯.']);
+  same(x.hdPickRows([0, 6]), ['C major: C D E F G A B', 'F♯ major: F♯ G♯ A♯ B C♯ D♯ E♯ (F)', 'C major shares 2 of 7 notes with F♯ major, six steps apart.', 'Shared: E♯ (F) and B. Different: C has C, D, E, G and A; F♯ has F♯, G♯, A♯, C♯ and D♯.']);
+  same(x.hdPickRows([6, 6]).slice(2), ['F♯ major shares 7 of 7 notes with F♯ major: the same key.', 'Shared: F♯, G♯, A♯, B, C♯, D♯ and E♯ (F). Different: none.'], 'the same key twice is allowed: 7 of 7');
+  same(x.hdPickRows([6, 7]).slice(2), ['F♯ major shares 6 of 7 notes with D♭ major, one step apart.', 'Shared: F♯ (G♭), G♯ (A♭), A♯ (B♭), C♯ (D♭), D♯ (E♭) and E♯ (F). Different: F♯ has B, D♭ has C.'], 'the same note spelled two ways: the sharp spelling first, the other in brackets');
+  same(x.hdPickRows([7, 6]).slice(3), ['Shared: C♯ (D♭), D♯ (E♭), E♯ (F), F♯ (G♭), G♯ (A♭) and A♯ (B♭). Different: D♭ has C, F♯ has B.'], 'the order of the keys changes who comes first in the list, never the spelling');
+  for (let i = 0; i < 12; i++) for (let j = 0; j < 12; j++) for (const row of x.hdPickRows([i, j])) assert.doesNotMatch(row, /E♯(?! \(F\))/, `${i},${j}: E♯ without its F: ${row}`);
+  assert.equal(x.hdShown({ name: 'E♯' }), 'E♯ (F)'); assert.equal(x.hdShown({ name: 'F' }), 'F'); assert.equal(x.hdNotesRow(6), 'F♯ major: F♯ G♯ A♯ B C♯ D♯ E♯ (F)');
+  same(x.hdPick([], 3), [3]); same(x.hdPick([3], 5), [3, 5]); same(x.hdPick([3], 3), [3, 3], 'the same key twice'); same(x.hdPick([3, 5], 9), [9], 'a third tap starts a new pair'); same(x.hdPick([3, 3], 0), [0]);
+  assert.equal(x.hdPickPrompt([]), 'Pick two keys on the wheel to compare them.'); assert.equal(x.hdPickPrompt([4]), 'E major is marked. Tap a second key (the same one again is fine).'); assert.equal(x.hdPickPrompt([4, 6]), 'E major and F♯ major are marked. Tap a key to start a new pair.');
+  assert.equal(x.hdPickWords([0, 6]), 'C major and F sharp major. C major shares 2 of 7 notes with F sharp major, six steps apart. C has C, D, E, G and A; F sharp has F sharp, G sharp, A sharp, C sharp and D sharp.', 'for a screen reader: the signs in words');
+});
+
+test('hear the distance: the question draws two pairs at DIFFERENT distances (1 to 6 steps), never two that share the same number of notes (five and six both share two); the closer pair is the one that shares more; the draw is seeded and testable', () => {
+  const x = hear();
+  assert.equal(x.HD_DISTANCES.length, 28, '6 x 5 ordered pairs of distances, less (5,6) and (6,5)'); for (const [a, b] of x.HD_DISTANCES) { assert.notEqual(a, b, 'never equal'); assert.ok(a >= 1 && a <= 6 && b >= 1 && b <= 6); assert.notEqual(SHARED_BY_PITCH[a], SHARED_BY_PITCH[b], `${a} and ${b} would share the same number of notes`); }
+  assert.ok(!x.HD_DISTANCES.some(([a, b]: number[]) => a + b === 11), 'five and six steps are never drawn together'); for (let a = 1; a <= 6; a++) assert.ok(x.HD_DISTANCES.some(([d]: number[]) => d === a) && x.HD_DISTANCES.some(([, d]: number[]) => d === a), `distance ${a} is drawn`);
+  const rng = seeded(41), combos = new Set<string>(), keysSeen = new Set<number>(); let prev: any = null;
+  for (let n = 0; n < 4000; n++) {
+    const q = x.hdDraw(rng, prev), ca = x.hdCompare(q.a[0], q.a[1]), cb = x.hdCompare(q.b[0], q.b[1]);
+    assert.notEqual(ca.steps, cb.steps, `draw ${n}: equal distances`); assert.ok(ca.steps >= 1 && cb.steps >= 1 && ca.steps <= 6 && cb.steps <= 6, 'a pair is 1 to 6 steps, never the same key'); assert.notEqual(ca.count, cb.count, 'different numbers of shared notes: "closer" has an answer in notes');
+    assert.equal(q.closer, ca.steps < cb.steps ? 'A' : 'B', 'the nearer pair is the closer one'); assert.equal(q.closer, ca.count > cb.count ? 'A' : 'B', 'and it shares more'); for (const k of [...q.a, ...q.b]) { assert.ok(Number.isInteger(k) && k >= 0 && k < 12); keysSeen.add(k); }
+    if (prev) assert.notDeepEqual([q.a, q.b], [prev.a, prev.b], 'Next pair is not the same pair again'); combos.add(`${ca.steps}-${cb.steps}`); prev = q;
+  }
+  assert.equal(combos.size, 28, 'every allowed combination of distances comes up'); assert.equal(keysSeen.size, 12, 'every key comes up'); const ans = new Set<string>(); const r2 = seeded(5); for (let n = 0; n < 200; n++) ans.add(x.hdDraw(r2, null).closer); assert.equal(ans.size, 2, 'the closer pair is A about as often as B');
+  same(x.hdDraw(seeded(9), null), x.hdDraw(seeded(9), null), 'the same seed, the same draw'); assert.notDeepEqual(x.hdDraw(seeded(9), null), x.hdDraw(seeded(10), null), 'another seed, another draw');
+  const sh = x.rgShuffle(x.HD_DISTANCES, seeded(2)); same([...sh].map(String).sort(), x.HD_DISTANCES.map(String).sort(), 'the shuffle is a permutation'); assert.notDeepEqual(sh, x.HD_DISTANCES, 'and it shuffles');
+});
+
+test('hear the distance: right and wrong both say why in words (how far apart each pair is and how many notes it shares), with no limit; nothing is said about the answer before a tap; Next pair draws again', () => {
+  const x = hear(); const st = x.hdStart(seeded(1), null);
+  assert.equal(x.hdResult(st), 'Play both pairs, then tap A or B for the pair that sounds closer.', 'no distance, no answer before a tap'); assert.doesNotMatch(x.hdResult(st) + x.hdAnnounce(st, 'start') + x.hdAnnounce(st, 'next'), /apart|share|closer is|is closer|answer/i);
+  const mk = (a: number[], b: number[]) => ({ a, b, closer: x.ciSteps(a[0], a[1]) < x.ciSteps(b[0], b[1]) ? 'A' : 'B' });
+  const q = mk([0, 1], [0, 4]); assert.equal(q.closer, 'A'); const s0 = { ...st, q };
+  assert.equal(x.hdWhy(q), 'A is one step apart: they share six notes. B is four steps apart: they share three.'); assert.equal(x.hdWhy(mk([0, 6], [2, 3])), 'A is six steps apart: they share two notes. B is one step apart: they share six.');
+  assert.equal(x.hdWhy(mk([5, 8], [0, 7])), 'A is three steps apart: they share four notes. B is five steps apart: they share two.', 'three steps share four, five steps share two');
+  const right = x.hdAnswerTap(s0, 'A'); assert.equal(right.event, 'right'); assert.equal(right.state.note, 'Right. A is one step apart: they share six notes. B is four steps apart: they share three.'); assert.equal(right.state.right, true); assert.equal(x.hdResult(right.state), right.state.note);
+  assert.equal(x.hdAnswerTap(right.state, 'B').event, 'ignored', 'after a right answer nothing more is counted');
+  const wrong = x.hdAnswerTap(s0, 'B'); assert.equal(wrong.event, 'wrong'); assert.equal(wrong.state.note, 'Not that one. A is one step apart: they share six notes. B is four steps apart: they share three. The pair that shares more notes sounds closer.'); assert.equal(wrong.state.right, false); same(wrong.state.wrong, ['B']);
+  assert.equal(x.hdAnswerTap(wrong.state, 'B').event, 'ignored', 'the same wrong answer twice is one tap'); const then = x.hdAnswerTap(wrong.state, 'A'); assert.equal(then.event, 'right', 'a wrong answer does not end it: no tries limit');
+  assert.doesNotMatch(wrong.state.note, /\b(tries|score|level|wrong tap|out of)\b/i);
+  assert.equal(x.hdAnnounce(then.state, 'right'), 'Right. A is one step apart: they share six notes. B is four steps apart: they share three.'); assert.match(x.hdAnnounce(wrong.state, 'wrong'), /^Not that one\. A is one step apart/);
+  let s = st; for (let n = 0; n < 60; n++) { const w = x.hdAnswerTap(s, s.q.closer === 'A' ? 'B' : 'A'); assert.equal(w.event, 'wrong'); assert.equal(w.state.right, false); s = x.hdNext(w.state, seeded(100 + n)); same(s.wrong, [], 'Next pair clears the marks'); assert.equal(s.note, ''); assert.equal(s.right, false); }
+  const nx = x.hdNext(st, seeded(3)); assert.notDeepEqual([nx.q.a, nx.q.b], [st.q.a, st.q.b], 'Next pair is a different pair'); assert.equal(nx.picks, st.picks, 'the picks of part 1 are not touched by Next pair');
+});
+
+// ---- the page: real DOM, real clicks ------------------------------------------------------------------------------------------------------------------------------------------------------------
+const facts = (p: any): string[] => [...p.doc.querySelectorAll('#facts div')].map((d: any) => d.textContent);
+const buttons = (p: any): string[] => [...p.doc.querySelectorAll('button')].map((b: any) => b.textContent.trim());
+const hz2pc = (hz: number): number => ((Math.round(69 + 12 * Math.log2(hz / 440)) % 12) + 12) % 12;
+test('hear the distance in a page: the wheel on top, a prompt, no facts; Play is off until two keys are picked; the first tap marks, the second marks the other, a third starts a new pair; both rings answer to a tap; the same key twice shares 7; six o\'clock is F♯', () => {
+  const p = open(HEAR); same(p.errors, []);
+  assert.equal(p.count('.seg.major'), 12); assert.equal(p.count('.seg.minor'), 12); assert.equal(p.count('.seg .count'), 0, 'no counts printed: the exercise is not about the signatures'); assert.equal(p.doc.querySelector('.wrap')!.firstElementChild!.className, 'wheelbox', 'the wheel is on top');
+  assert.equal(p.text('prompt'), 'Pick two keys on the wheel to compare them.'); same(facts(p), []); assert.equal((p.doc.getElementById('play') as any).disabled, true, 'nothing to play yet'); assert.equal(p.count('.seg.lit') + p.count('.seg.second'), 0); assert.equal(p.stub.osc.length, 0, 'nothing plays by itself');
+  p.click(p.seg('major', 0)); assert.equal(p.text('prompt'), 'C major is marked. Tap a second key (the same one again is fine).'); same(facts(p), ['C major: C D E F G A B']); assert.equal(p.count('.seg.lit'), 2, 'the key is marked on both rings'); assert.equal((p.doc.getElementById('play') as any).disabled, true); assert.match(p.text('sr'), /^C major is marked\. Tap a second key\.$/);
+  p.click(p.seg('minor', 1)); assert.equal(p.text('prompt'), 'C major and G major are marked. Tap a key to start a new pair.', 'the inner ring picks the same key'); same(facts(p), ['C major: C D E F G A B', 'G major: G A B C D E F♯', 'C major shares 6 of 7 notes with G major, one step apart.', 'Shared: C, D, E, G, A and B. Different: C has F, G has F♯.']);
+  assert.equal(p.count('.seg.lit'), 2); assert.equal(p.count('.seg.second'), 2); assert.match(p.seg('major', 0).getAttribute('class'), /\blit\b/); assert.match(p.seg('major', 1).getAttribute('class'), /\bsecond\b/); assert.match(p.seg('major', 1).getAttribute('aria-label'), /^G major, second key$/); assert.match(p.seg('major', 0).getAttribute('aria-label'), /^C major, first key$/); assert.equal((p.doc.getElementById('play') as any).disabled, false);
+  assert.equal(p.text('sr'), 'C major and G major. C major shares 6 of 7 notes with G major, one step apart. C has F, G has F sharp.', 'announced in words');
+  p.click(p.seg('major', 8)); assert.equal(p.text('prompt'), 'A♭ major is marked. Tap a second key (the same one again is fine).', 'a third tap starts a new pair'); assert.equal(p.count('.seg.second'), 0); assert.equal(p.count('.seg.lit'), 2); same(facts(p), ['A♭ major: A♭ B♭ C D♭ E♭ F G']);
+  p.click(p.seg('major', 8)); same(facts(p).slice(2), ['A♭ major shares 7 of 7 notes with A♭ major: the same key.', 'Shared: A♭, B♭, C, D♭, E♭, F and G. Different: none.'], 'the same key twice');
+  p.click(p.seg('major', 5)); p.click(p.seg('major', 6)); assert.equal(facts(p)[1], 'F♯ major: F♯ G♯ A♯ B C♯ D♯ E♯ (F)'); assert.equal(facts(p)[2], 'B major shares 6 of 7 notes with F♯ major, one step apart.'); assert.equal(p.count('.seg .name.both') > 0, true); p.click(p.seg('major', 6)); assert.match(p.text('prompt'), /^F♯ major is marked/, 'a tap on six o\'clock is F♯, there is no flat spelling to switch to');
+  same(p.errors, []);
+});
+
+test('hear the distance in a page: Play sounds the first key\'s scale up, a short pause, then the second key\'s scale up (the explorer\'s voice); the key that sounds is marked; Play waits until it has ended; nothing plays by itself', () => {
+  const p = open(HEAR); p.click(p.seg('major', 0)); p.click(p.seg('major', 1)); assert.equal(p.stub.osc.length, 0, 'picking plays nothing');
+  p.click(p.doc.getElementById('play')); assert.equal(p.stub.osc.length, 16, 'two scales of eight notes'); same(p.stub.osc.map(hz2pc), [0, 2, 4, 5, 7, 9, 11, 0, 7, 9, 11, 0, 2, 4, 6, 7], 'C major up, then G major up');
+  const t = p.stub.times; const gap1 = t[8] - t[7], step = t[7] - t[6]; assert.ok(Math.abs(step - 0.45) < 1e-6, `the notes of a scale are ${step} s apart`); assert.ok(gap1 > step + 0.5 && gap1 < step + 0.7, `a short pause between the scales: ${gap1 - step} s more than a step`); assert.equal(p.text('sr'), 'Playing C major, then G major.');
+  assert.equal((p.doc.getElementById('play') as any).disabled, true, 'while it sounds'); assert.equal((p.doc.getElementById('playA') as any).disabled, true); assert.equal((p.doc.getElementById('playB') as any).disabled, true);
+  p.click(p.doc.getElementById('play')); assert.equal(p.stub.osc.length, 16, 'a second press while it sounds adds nothing');
+  p.queue.shift()!.fn(); assert.equal(p.count('.seg.sounding'), 2, 'the first key sounds: marked on both rings'); assert.match(p.seg('major', 0).getAttribute('class'), /\bsounding\b/); p.queue.shift()!.fn(); assert.equal(p.count('.seg.sounding'), 0); p.queue.shift()!.fn(); assert.match(p.seg('major', 1).getAttribute('class'), /\bsounding\b/);
+  p.flush(); assert.equal(p.count('.seg.sounding'), 0, 'nothing is left sounding'); assert.equal((p.doc.getElementById('play') as any).disabled, false); assert.equal((p.doc.getElementById('playA') as any).disabled, false);
+  p.click(p.seg('major', 5)); p.click(p.seg('major', 6)); p.click(p.doc.getElementById('play')); assert.equal(p.stub.osc.length, 32); same(p.stub.osc.slice(16).map(hz2pc), [11, 1, 3, 4, 6, 8, 10, 11, 6, 8, 10, 11, 1, 3, 5, 6], 'B major, then F♯ major'); p.flush();
+  p.click(p.seg('major', 3)); p.click(p.seg('major', 3)); p.click(p.doc.getElementById('play')); assert.equal(p.stub.osc.length, 48, 'the same key twice sounds twice'); p.flush(); same(p.errors, []);
+});
+
+test('hear the distance in a page: two pairs, Pair A and Pair B, each with its own Play; the wheel marks the pair that plays; tap A or B; right and wrong say why in words; no limit; Next pair draws again', () => {
+  const x = hear(); const p = open(HEAR, 21); same(p.errors, []); const q = x.hdDraw(seeded(21), null);
+  assert.deepEqual(buttons(p), HEAR_BUTTONS); assert.match(p.doc.querySelector('.part')!.textContent!, /^Which pair sounds closer\?$/); assert.equal(p.text('keysA'), `${x.hdName(q.a[0])} and ${x.hdName(q.a[1])}`); assert.equal(p.text('keysB'), `${x.hdName(q.b[0])} and ${x.hdName(q.b[1])}`);
+  assert.equal(p.text('result'), 'Play both pairs, then tap A or B for the pair that sounds closer.'); assert.doesNotMatch(p.doc.body.textContent!.replace(/\s+/g, ' '), /apart|they share/, 'nothing about the distances before a tap'); assert.equal(p.stub.osc.length, 0);
+  p.click(p.doc.getElementById('playA')); assert.equal(p.stub.osc.length, 16); same(p.stub.osc.slice(0, 8).map(hz2pc), Array.from(x.scaleMidis(x.ciPc(q.a[0]), 'major', 'up', 60)).map((m: number) => m % 12), 'pair A: the first key of the pair, up'); same(p.stub.osc.slice(8, 16).map(hz2pc), Array.from(x.scaleMidis(x.ciPc(q.a[1]), 'major', 'up', 60)).map((m: number) => m % 12), 'then the second key'); assert.equal(p.text('prompt'), `Pair A is on the wheel: ${x.hdName(q.a[0])} and ${x.hdName(q.a[1])}.`);
+  assert.equal(p.count('.seg.lit'), 2); assert.match(p.seg('major', q.a[0]).getAttribute('class'), /\blit\b/); assert.match(p.seg('major', q.a[1]).getAttribute('class'), /\bsecond\b/); assert.match(p.doc.getElementById('pairA')!.getAttribute('class'), /\bnow\b/); assert.doesNotMatch(p.doc.getElementById('pairB')!.getAttribute('class'), /\bnow\b/); assert.match(p.text('sr'), /^Playing pair A: /);
+  p.flush(); p.click(p.doc.getElementById('playB')); assert.equal(p.stub.osc.length, 32); assert.match(p.seg('major', q.b[0]).getAttribute('class'), /\blit\b/); assert.match(p.doc.getElementById('pairB')!.getAttribute('class'), /\bnow\b/); assert.doesNotMatch(p.doc.getElementById('pairA')!.getAttribute('class'), /\bnow\b/); p.flush();
+  p.click(p.seg('major', 2)); assert.match(p.text('prompt'), /is marked/, 'tapping the wheel goes back to the picks'); assert.doesNotMatch(p.doc.getElementById('pairB')!.getAttribute('class'), /\bnow\b/);
+  const wrongId = q.closer === 'A' ? 'ansB' : 'ansA', rightId = q.closer === 'A' ? 'ansA' : 'ansB', why = x.hdWhy(q);
+  p.click(p.doc.getElementById(wrongId)); assert.equal(p.text('result'), `Not that one. ${why} The pair that shares more notes sounds closer.`); assert.equal(p.doc.getElementById(wrongId)!.getAttribute('class'), 'wrongbtn'); assert.equal((p.doc.getElementById(wrongId) as any).disabled, true); assert.equal((p.doc.getElementById(rightId) as any).disabled, false, 'the other one can still be tapped: no limit'); assert.match(p.text('sr'), /^Not that one\. /);
+  p.click(p.doc.getElementById(rightId)); assert.equal(p.text('result'), `Right. ${why}`); assert.equal((p.doc.getElementById('ansA') as any).disabled, true); assert.equal((p.doc.getElementById('ansB') as any).disabled, true); assert.equal(p.text('sr'), `Right. ${why}`);
+  const before = [p.text('keysA'), p.text('keysB')].join('|'); p.click(p.doc.getElementById('next')); assert.notEqual([p.text('keysA'), p.text('keysB')].join('|'), before, 'a new pair'); assert.equal(p.text('result'), 'Play both pairs, then tap A or B for the pair that sounds closer.'); assert.equal((p.doc.getElementById('ansA') as any).disabled, false); assert.equal((p.doc.getElementById('ansB') as any).disabled, false); assert.equal(p.count('.wrongbtn'), 0); assert.match(p.text('sr'), /^Next pair\. /);
+  for (let n = 0; n < 25; n++) { const q2 = { a: p.text('keysA'), b: p.text('keysB') }; p.click(p.doc.getElementById(n % 2 ? 'ansA' : 'ansB')); p.click(p.doc.getElementById(n % 2 ? 'ansB' : 'ansA')); assert.match(p.text('result'), /^(Right|Not that one)\./); p.click(p.doc.getElementById('next')); assert.notDeepEqual({ a: p.text('keysA'), b: p.text('keysB') }, q2); }
+  same(p.errors, []);
+});
+
+test('hear the distance: Start over clears the picks and the answer and draws two new pairs; it works in the middle and after an answer; it is the only button besides Play, A, B and Next pair; no level, score, tries or New exercise anywhere', () => {
+  const p = open(HEAR, 8); const start = p.doc.getElementById('startover') as any; assert.equal(start.textContent.trim(), 'Start over'); assert.equal(start.tagName, 'BUTTON'); assert.deepEqual(buttons(p), HEAR_BUTTONS);
+  const q0 = [p.text('keysA'), p.text('keysB')].join('|'); p.click(p.seg('major', 3)); p.click(p.seg('major', 4)); p.click(p.doc.getElementById('ansA')); p.click(p.doc.getElementById('ansB')); p.click(p.doc.getElementById('playA')); assert.ok(p.count('.seg.lit') > 0);
+  p.click(start); assert.equal(p.text('prompt'), 'Pick two keys on the wheel to compare them.'); same(facts(p), []); assert.equal(p.count('.seg.lit') + p.count('.seg.second') + p.count('.seg.sounding'), 0, 'the wheel is clear'); assert.equal(p.text('result'), 'Play both pairs, then tap A or B for the pair that sounds closer.'); assert.equal(p.count('.wrongbtn'), 0); assert.equal((p.doc.getElementById('ansA') as any).disabled, false);
+  assert.notEqual([p.text('keysA'), p.text('keysB')].join('|'), q0, 'two new pairs'); assert.equal(p.text('sr'), 'Started over. Pick two keys on the wheel to compare them.'); assert.equal((p.doc.getElementById('play') as any).disabled, true);
+  assert.equal((p.doc.getElementById('playA') as any).disabled, true, 'a sound that was started still has to end before the next one starts'); p.flush(); assert.equal((p.doc.getElementById('playA') as any).disabled, false); assert.equal(p.count('.seg.sounding'), 0);
+  const h = read(HEAR), markup = h.replace(/<script>[\s\S]*?<\/script>/, ''), code = withoutComments(scriptOf(h));
+  for (const id of REMOVED_IDS) { assert.doesNotMatch(markup, new RegExp(`id="${id}"`), `the markup has #${id}`); assert.doesNotMatch(code, new RegExp(`\\$\\("${id}"\\)|getElementById\\("${id}"\\)`), `the code uses #${id}`); assert.ok(p.doc.getElementById(id) === null, `#${id} in the DOM`); }
+  assert.doesNotMatch(markup, /id="level-|<select|linkbtn|class="score"/); assert.doesNotMatch(withoutComments(h.replace(block(h, 'piano voice'), '')).replace(/\(window\.__earRandom \|\| Math\.random\)\(\)/, ''), REMOVED_WORDS, 'no level, score, tries, Random, Reset, New exercise in the markup or the code (the piano voice\'s own `level` parameter, the loudness of a note, is a shared block)');
+  const states: Array<[string, () => void]> = [['fresh', () => {}], ['two picked', () => { p.click(p.seg('major', 0)); p.click(p.seg('major', 6)); }], ['a wrong answer', () => { p.click(p.doc.getElementById('ansA')); p.click(p.doc.getElementById('ansB')); }], ['playing', () => { p.click(p.doc.getElementById('playB')); }], ['after Next pair', () => { p.flush(); p.click(p.doc.getElementById('next')); }]];
+  for (const [what, go] of states) { go(); assert.doesNotMatch(visible(p), REMOVED_WORDS, `${what}: a removed word is on the page`); assert.doesNotMatch(visible(p), FORBIDDEN, `${what}: a forbidden word`); assert.equal(p.count('select'), 0); assert.deepEqual(buttons(p), HEAR_BUTTONS, `${what}: the buttons`); }
+  assert.doesNotMatch(h, /prefers-color-scheme/, 'the palette is fixed light, like the other gadgets'); same(p.errors, []);
+});
+
+test('hear the distance: only a Play button makes a sound (never a tap, a pick, an answer, Next pair or Start over); no hover, no storage, no network, no talk to the page (the same scan as the ring files, above)', () => {
+  const p = open(HEAR, 12); p.click(p.seg('major', 0)); p.click(p.seg('major', 5)); p.click(p.doc.getElementById('ansA')); p.click(p.doc.getElementById('next')); p.click(p.doc.getElementById('startover')); p.click(p.seg('minor', 9)); p.keydown(p.seg('major', 9), 'Enter'); p.keydown(p.seg('major', 9), 'ArrowRight');
+  assert.equal(p.stub.osc.length, 0, 'silent until Play'); assert.equal(p.queue.length, 0, 'no timer was started either'); const code = withoutComments(scriptOf(read(HEAR))); assert.equal((code.match(/pianoVoice\(c, /g) ?? []).length, 1, 'the piano voice is called from one place: playKeys'); assert.equal((code.match(/\bplayKeys\(/g) ?? []).length, 4, 'and playKeys from the three Play buttons (and its definition)');
+  p.click(p.doc.getElementById('playA')); assert.ok(p.stub.osc.length > 0, 'Play sounds');
+});
+
+// 2026-11-25-1041: the seven other circle gadgets are byte for byte as 1038 left them, except the explorer (Part B); the three ring exercises are pinned by SHA-256 (the files of 0.11.133), in the bundle, the live vault and what the generator writes.
+test('the three ring exercises are byte for byte what 1038 left (SHA-256 of 0.11.133) in the bundle, in the live vault and in what the generator writes', () => {
+  const SHA: Record<string, string> = { [OUTER]: '275b68f886595f488f7496255c86788987ac8cd9bc4f8ea32d67569582a87fb7', [INNER]: '5fdae992ca3f92596a76b300602ec7de58e2e9eb32484e95c7d837e679ba4550', [COUNTS]: '7dec4dc53c11803a13bf35c82caedec4cba73d148b77648e8a8a06ef2027fca6' };
+  for (const dir of [DIR, generatedDir(), path.join(os.homedir(), 'projects/music-theory/circle_of_fifths/resources/html')]) for (const f of RING_FILES) if (fs.existsSync(path.join(dir, f))) assert.equal(shaOf(fs.readFileSync(path.join(dir, f))), SHA[f], `${dir}/${f} changed`);
 });

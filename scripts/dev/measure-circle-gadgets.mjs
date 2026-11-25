@@ -1,4 +1,4 @@
-// 2026-11-19-0900 - the four CIRCLE OF FIFTHS gadgets (circle_of_fifths, circle_exercise_key_to_signature, _signature_to_key, _neighbours) and, from 2026-11-23-1025, the three RING exercises (circle_exercise_outer_ring, _inner_ring, _signature_counts) in real headless Chrome, in the SHIPPED mount: a blob: URL inside <iframe sandbox="allow-scripts"> at 800 and at 360 px wide.
+// 2026-11-19-0900 - the four CIRCLE OF FIFTHS gadgets (circle_of_fifths, circle_exercise_key_to_signature, _signature_to_key, _neighbours) and, from 2026-11-23-1025, the three RING exercises (circle_exercise_outer_ring, _inner_ring, _signature_counts) and, from 2026-11-25-1041, `hear the distance` (circle_exercise_hear_distance) and the drawing fifths_on_a_line.svg in real headless Chrome, in the SHIPPED mount: a blob: URL inside <iframe sandbox="allow-scripts"> at 800 and at 360 px wide.
 // Measured: the CONTENT HEIGHT of each file in every state (the explorer on all twelve sectors and both spellings of the sixth; each exercise on every key in its states), that it is ONE height, that the page does not scroll vertically when the iframe is exactly that tall, and not horizontally;
 // one full flow per file with REAL mouse clicks (DevTools Input.dispatchMouseEvent at the real box of each sector, key or button); the explorer's staff, strip and Play (the real Web Audio graph, the pitches heard); and that moving the real pointer over the wheel, the buttons, the staff and the
 // strip changes NOTHING (a screenshot and the DOM compared before and after). Light shots.
@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { openPage, sleep } from './cdp.mjs';
+import { stripSvgCaption } from './caption-core.mjs';
 
 const arg = (name, dflt) => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : dflt; };
 const VAULT = arg('--vault', path.join(os.homedir(), 'projects/music-theory')).replace(/^~/, os.homedir());
@@ -54,17 +55,17 @@ const SIGNED = (i, alt) => i === 6 ? (alt ? -6 : 6) : i < 6 ? i : i - 12;
 const SECTOR_OF = (name) => NAMES.indexOf(name) >= 0 ? NAMES.indexOf(name) : name === 'G♭' ? 6 : -1;
 const verdict = {}, numbers = { heights: {} };
 const keyRandom = (i, alt) => i === 6 ? [(6.5) / 12, alt ? 0.25 : 0.75] : [(i + 0.5) / 12];
-for (const f of ['circle_of_fifths', 'circle_exercise_key_to_signature', 'circle_exercise_signature_to_key', 'circle_exercise_neighbours', 'circle_exercise_outer_ring', 'circle_exercise_inner_ring', 'circle_exercise_signature_counts'].filter((x) => !only || only.split(',').some((o) => x.includes(o)))) {
+for (const f of ['circle_of_fifths', 'circle_exercise_key_to_signature', 'circle_exercise_signature_to_key', 'circle_exercise_neighbours', 'circle_exercise_outer_ring', 'circle_exercise_inner_ring', 'circle_exercise_signature_counts', 'circle_exercise_hear_distance'].filter((x) => !only || only.split(',').some((o) => x.includes(o)))) {
   numbers.heights[f] = {};
   for (const width of [800, 360]) {
     const g = await mount(DIR + f + '.html', width); const hs = new Set(); const tag = `${f}${width}`;
     const click = (sel) => g.probe(`(function(){ var e = document.querySelector(${JSON.stringify(sel)}); e.dispatchEvent(new MouseEvent('click', { bubbles: true })); return 1; })()`);
-    let nSamples = 0; const sample = async (label) => { const h = await g.height(); hs.add(h); nSamples++; if ((await g.hOverflow()) > 0) verdict[`${tag}_${label}_horizontalScroll`] = false; return h; };
+    let nSamples = 0; const byLabel = {}; const sample = async (label) => { const h = await g.height(); hs.add(h); nSamples++; byLabel[label] = h; if ((await g.hOverflow()) > 0) verdict[`${tag}_${label}_horizontalScroll`] = false; return h; };
     const text = (sel) => g.probe(`(function(){ var e = document.querySelector(${JSON.stringify(sel)}); return e ? e.textContent : null; })()`);
     const count = (sel) => g.probe(`document.querySelectorAll(${JSON.stringify(sel)}).length`);
     const seed = (i, alt) => g.probe(`(window.__rnd = ${JSON.stringify(keyRandom(i, alt))}, 1)`);
     // the ring exercises (one level, always from C): read the lit sector, play the right answer, play a wrong one
-    const RING = ['circle_exercise_outer_ring', 'circle_exercise_inner_ring', 'circle_exercise_signature_counts'].includes(f);
+    const RING = ['circle_exercise_outer_ring', 'circle_exercise_inner_ring', 'circle_exercise_signature_counts'].includes(f), ONE_LEVEL = RING || f === 'circle_exercise_hear_distance';
     const lit = async (ring) => Number(await g.probe(`(function(){ var e = document.querySelector('.seg.${ring}.lit'); return e ? e.getAttribute('data-sector') : '-1'; })()`));
     const finished = async () => /^Exercise done/.test(await text('#prompt'));
     const wrongTile = async (litSector) => g.probe(`(function(){ var b = Array.prototype.filter.call(document.querySelectorAll('#bank button'), function (x) { return !x.disabled && x.id !== 'tile-${litSector}' && !x.classList.contains('wrongbtn'); })[0]; return b ? b.id : null; })()`);
@@ -75,7 +76,6 @@ for (const f of ['circle_of_fifths', 'circle_exercise_key_to_signature', 'circle
     if (f === 'circle_of_fifths') {
       for (let k = 0; k < 12; k++) for (const alt of k === 6 ? [false, true] : [false]) {
         await click(`.seg.major[data-sector="${k}"]`); if (alt) await click(`.seg.major[data-sector="6"]`); await sample(`sector${k}${alt ? 'alt' : ''}`);
-        await click('#cw'); await sample(`sector${k}${alt ? 'alt' : ''}_cw`); await click('#ccw'); await click('#ccw'); await sample(`sector${k}${alt ? 'alt' : ''}_ccw`);
       }
     } else if (f === 'circle_exercise_key_to_signature') {
       for (let k = 0; k < 12; k++) for (const alt of k === 6 ? [false, true] : [false]) {
@@ -92,6 +92,17 @@ for (const f of ['circle_of_fifths', 'circle_exercise_key_to_signature', 'circle
         await click(`.seg.major[data-sector="${k}"]`); await sample(`k${k}${alt ? 'alt' : ''}_oneRight`);
         await click(`.seg.minor[data-sector="${(k + 5) % 12}"]`); await sample(`k${k}${alt ? 'alt' : ''}_gaveup`);
       }
+    } else if (f === 'circle_exercise_hear_distance') {
+      // 2026-11-25-1041: every state of the page: fresh; one key picked (all twelve); two keys picked (every one of the 144 pairs: the longest rows are the far pairs and F-sharp's); a new pair after a third tap; the same key twice; Pair A and Pair B marked on the wheel; a wrong answer, a right answer,
+      // Next pair (40 draws, each answered wrong then right); Start over in the middle and after an answer. One height in all of them (the rows have a fixed minimum height).
+      const sectors = [...Array(12).keys()];
+      for (const k of sectors) { await click(`.seg.major[data-sector="${k}"]`); await sample(`one${k}`); for (let j = 0; j < 12; j++) { await click(`.seg.major[data-sector="${k}"]`); await click(`.seg.minor[data-sector="${j}"]`); await sample(`pair${k}_${j}`); } }
+      await click('#playA'); await sample('pairA_playing'); await sleep(8600); await click('#playB'); await sample('pairB_playing'); await sleep(8600);
+      for (let n = 0; n < 40; n++) {
+        await click('#next'); await sample(`next${n}`);
+        const wrongB = n % 2 ? 'ansA' : 'ansB'; await click(`#${wrongB}`); await sample(`answered${n}`); await click('#ansA'); await click('#ansB'); await sample(`answeredBoth${n}`);
+      }
+      await click('#startover'); await sample('startedOver'); await click('.seg.major[data-sector="6"]'); await click('.seg.major[data-sector="0"]'); await click('#ansA'); await click('#startover'); await sample('startedOverAfterAnswer');
     } else if (RING) {
       const tiles = f !== 'circle_exercise_signature_counts', ring = f === 'circle_exercise_inner_ring' ? 'minor' : 'major';
       await sample('fresh');
@@ -112,16 +123,16 @@ for (const f of ['circle_of_fifths', 'circle_exercise_key_to_signature', 'circle
         await click(`.seg.major[data-sector="${(k + 3) % 12}"]`); await sample(`k${k}_gaveup`);
       }
     }
-    numbers.heights[f][width] = [...hs]; numbers[`${tag}_statesSampled`] = nSamples; verdict[`${tag}_oneHeightInEveryState`] = hs.size === 1;
-    if (f !== 'circle_of_fifths' && !RING) { await click('#level-medium'); await click('#reset'); }
+    numbers.heights[f][width] = [...hs]; numbers[`${tag}_statesSampled`] = nSamples; if (hs.size > 1) { /* which states differ, when they do */ const mode = Object.values(byLabel).sort((a, b) => Object.values(byLabel).filter((x) => x === a).length - Object.values(byLabel).filter((x) => x === b).length).pop(); numbers[`${tag}_statesNotAtTheCommonHeight`] = Object.entries(byLabel).filter(([, h]) => h !== mode).slice(0, 12); }  verdict[`${tag}_oneHeightInEveryState`] = hs.size === 1;
+    if (f !== 'circle_of_fifths' && !ONE_LEVEL) { await click('#level-medium'); await click('#reset'); }
     // ---- real mouse flows -----------------------------------------------------------------------------------------------------------------------------
     await g.setHeight([...hs][0] ?? 600);
     if (f === 'circle_of_fifths') {
       await g.press('.seg.major[data-sector="3"]');
       numbers[`${tag}_sectorClick`] = { title: await text('#title'), sig: await count('.acc.sig'), lit: await count('.key.lit'), seg: await count('.seg.lit'), nb: await count('.seg.nb'), opp: await count('.seg.opp') };
       verdict[`${tag}_realClickSectorSetsKey`] = /^A major/.test(await text('#title')) && (await count('.acc.sig')) === 3 && (await count('.key.lit')) === 8 && (await count('.seg.lit')) === 2 && (await count('.seg.nb')) === 4 && (await count('.seg.opp')) === 2;
-      await g.press('#cw'); verdict[`${tag}_realClockwiseSaysWhatChanged`] = /^E major has one more sharp than A major: D becomes D♯\./.test(await text('#change')) && (await count('.acc.sig')) === 4;
-      await g.press('#ccw'); await g.press('#ccw'); verdict[`${tag}_realCounterClockwiseGoesBack`] = /^D major has one fewer sharp than A major: G♯ becomes G\./.test(await text('#change'));
+      verdict[`${tag}_noStepButtons`] = (await count('#cw, #ccw')) === 0 && JSON.stringify(await g.probe(`Array.prototype.map.call(document.querySelectorAll('button'), function (b) { return b.textContent.trim(); })`)) === JSON.stringify(['Play']) && (await text('#change')) === 'Choose a key on the wheel.' && !/Clockwise/.test(await g.probe('document.body.innerText'));
+      await g.press('.seg.major[data-sector="4"]'); verdict[`${tag}_realSecondTapSetsTheKeyToo`] = /^E major/.test(await text('#title')) && (await count('.acc.sig')) === 4;
       await g.press('.seg.major[data-sector="8"]'); verdict[`${tag}_flatKeyShowsFlats`] = (await count('.acc.sig')) === 4 && /^A♭ major/.test(await text('#title'));
       await g.clearHz(); await g.press('#play'); await sleep(4600); const hz = await g.hz();
       verdict[`${tag}_realPlaySoundsTheScale`] = hz.length >= 8 && hz.length % 8 === 0 && JSON.stringify(hz.filter((_, i) => i % (hz.length / 8) === 0).map((x) => (Math.round(69 + 12 * Math.log2(x / 440)) + 1200) % 12)) === JSON.stringify([8, 10, 0, 1, 3, 5, 7, 8]);
@@ -143,6 +154,22 @@ for (const f of ['circle_of_fifths', 'circle_exercise_key_to_signature', 'circle
       for (let k = 0; k < 12; k++) await g.press(`#tile-${k}`);
       verdict[`${tag}_realFlowBuildsTheInnerRing`] = /^Exercise done\. Each relative minor is three half steps below its major: Am under C/.test(await text('#prompt')) && (await count('.seg.minor.found')) === 12;
       await g.press('#startover'); verdict[`${tag}_realStartOverClearsTheRing`] = (await count('.seg.minor.found')) === 0 && /^Exercise: build the inner ring\. /.test(await text('#prompt'));
+    } else if (f === 'circle_exercise_hear_distance') {
+      const facts = () => g.probe(`Array.prototype.map.call(document.querySelectorAll('#facts div'), function (d) { return d.textContent; })`);
+      const silent = async () => { for (let i = 0; i < 60 && (await g.probe(`document.getElementById('playA').disabled`)); i++) await sleep(250); };
+      await g.press('#startover'); await g.press('.seg.major[data-sector="3"]'); await g.press('.seg.minor[data-sector="4"]');
+      verdict[`${tag}_realPickTwoWritesTheNotes`] = JSON.stringify(await facts()) === JSON.stringify(['A major: A B C♯ D E F♯ G♯', 'E major: E F♯ G♯ A B C♯ D♯', 'A major shares 6 of 7 notes with E major, one step apart.', 'Shared: A, B, C♯, E, F♯ and G♯. Different: A has D, E has D♯.']) && (await count('.seg.lit')) === 2 && (await count('.seg.second')) === 2;
+      await g.clearHz(); await g.press('#play'); await sleep(9200); const hz = await g.hz();
+      verdict[`${tag}_realPlaySoundsTheTwoScales`] = hz.length >= 16 && hz.length % 16 === 0 && JSON.stringify(hz.filter((_, i) => i % (hz.length / 16) === 0).map((x) => (Math.round(69 + 12 * Math.log2(x / 440)) + 1200) % 12)) === JSON.stringify([9, 11, 1, 2, 4, 6, 8, 9, 4, 6, 8, 9, 11, 1, 3, 4]);
+      await silent();
+      await g.clearHz(); await g.press('#playB'); await sleep(300); verdict[`${tag}_realPlayMarksThePairAndLocksPlay`] = /\bnow\b/.test(await g.probe(`document.getElementById('pairB').className`)) && (await g.probe(`document.getElementById('playA').disabled`)) === true && (await count('.seg.sounding')) === 2; await sleep(8800); await silent();
+      verdict[`${tag}_realPlayPairBSoundsSixteenNotes`] = (await g.hz()).length >= 16 && (await g.hz()).length % 16 === 0;
+      await g.press('#ansA'); const r1 = await text('#result'); const first = /^Right\. /.test(r1); if (!first) await g.press('#ansB'); const r2 = await text('#result');
+      const why = /A is \w+ steps? apart: they share \w+ notes\. B is \w+ steps? apart: they share \w+\./;
+      verdict[`${tag}_realAnswersSayWhy`] = first ? /^Right\. /.test(r1) && why.test(r1) : /^Not that one\. /.test(r1) && why.test(r1) && /The pair that shares more notes sounds closer\.$/.test(r1) && /^Right\. /.test(r2) && why.test(r2);
+      await g.press('#next'); verdict[`${tag}_realNextPairClearsTheAnswer`] = /^Play both pairs, then tap A or B/.test(await text('#result'));
+      await g.press('#startover'); verdict[`${tag}_realStartOverClearsThePicks`] = (await facts()).length === 0 && (await count('.seg.lit')) === 0 && /^Pick two keys on the wheel/.test(await text('#prompt'));
+      verdict[`${tag}_noRemovedControl`] = (await count('#levels, #choose, #start, #random, #again, #reset, #counter, #board, #hint, #nostaff, select, [id^="level-"]')) === 0 && JSON.stringify(await g.probe(`Array.prototype.map.call(document.querySelectorAll('button'), function (b) { return b.textContent.trim(); })`)) === JSON.stringify(['Play', 'Play', 'Play', 'A', 'B', 'Next pair', 'Start over']);
     } else if (f === 'circle_exercise_signature_counts') {
       await g.press('#count-s1'); verdict[`${tag}_realWrongSaysWhichWay`] = /where the sharps and the flats start/.test(await text('#prompt'));
       for (let k = 0; k < 12; k++) await g.press(`#${countId(SIGNED(k, false))}`);
@@ -157,7 +184,7 @@ for (const f of ['circle_of_fifths', 'circle_exercise_key_to_signature', 'circle
     }
     if (RING) verdict[`${tag}_noRemovedControl`] = (await count('#levels, #choose, #start, #random, #again, #reset, #counter, #board, #hint, #nostaff, select, [id^="level-"]')) === 0 && (await g.probe(`Array.prototype.filter.call(document.querySelectorAll('button'), function (b) { return !/^(tile-|count-)/.test(b.id) && b.id !== 'startover' && b.id !== 'typedgo'; }).length`)) === 0 && (await text('#startover')) === 'Start over';
     // ---- the pointer resting changes nothing --------------------------------------------------------------------------------------------------------
-    if (f !== 'circle_of_fifths' && !RING) await g.press('#level-medium');
+    if (f !== 'circle_of_fifths' && !ONE_LEVEL) await g.press('#level-medium');
     const snap = async () => ({ dom: await g.probe('document.body.innerHTML.length + ":" + Array.prototype.reduce.call(document.body.innerHTML, function (a, c) { return (a * 31 + c.charCodeAt(0)) | 0; }, 7)'), px: (await g.page.send('Page.captureScreenshot', { format: 'png' })).data });
     const before = await snap(); let moved = 0;
     for (const sel of ['.seg', 'button', '#staff', '#strip', '#prompt', '.wheelbox']) {
@@ -170,6 +197,21 @@ for (const f of ['circle_of_fifths', 'circle_exercise_key_to_signature', 'circle
     await sleep(150); verdict[`${tag}_realNoErrors`] = (await g.errs()).length === 0;
     await g.shot(`${f}-${width}`, [...hs][0] ?? 600);
     g.page.close();
+  }
+}
+// ---- the drawing fifths_on_a_line.svg (2026-11-25-1041): its rendered height as an <img> in a 800 px and a 360 px wide column, with its caption and without it, and a screenshot of each -----------------------------------------------------------------------------------
+if (!only || only.split(',').some((o) => 'fifths_on_a_line'.includes(o) || o.includes('fifths_on_a_line'))) {
+  const REL = 'circle_of_fifths/resources/images/fifths_on_a_line.svg';
+  if (fs.existsSync(path.join(VAULT, REL))) {
+    const withCap = fs.readFileSync(path.join(VAULT, REL), 'utf8'), bare = stripSvgCaption(withCap); numbers.svg = {};
+    for (const [label, svg] of [['captioned', withCap], ['bare', bare]]) for (const width of [800, 360]) {
+      const html = `<!doctype html><meta charset="utf-8"><body style="margin:0;background:#fff"><div style="width:${width}px"><img id="i" alt="" src="data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}" style="display:block;max-width:100%;height:auto"></div>`;
+      const page = await openPage({ dir: VAULT, width: width + 20, height: 700, pageHtml: html }); await sleep(500);
+      const box = await page.ev(`(function () { var b = document.getElementById('i').getBoundingClientRect(); return { w: b.width, h: b.height, doc: document.documentElement.scrollWidth - document.documentElement.clientWidth }; })()`);
+      numbers.svg[`${label}${width}`] = { w: Math.round(box.w * 100) / 100, h: Math.round(box.h * 100) / 100 }; verdict[`svg_${label}${width}_noHorizontalScroll`] = box.doc <= 0 && box.w <= width + 0.01;
+      await page.shot(path.join(OUT, `fifths_on_a_line-${label}-${width}.png`), { x: 0, y: 0, width, height: Math.ceil(box.h) });
+      page.close();
+    }
   }
 }
 console.log(JSON.stringify(numbers));
