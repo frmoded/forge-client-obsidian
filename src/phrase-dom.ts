@@ -974,7 +974,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
         const out = await producePhraseNote(deps, note as NoteText, title);
         if (out.kind === 'score' && !disposed) {
           const bars = barsOfPayload(out.payload);
-          if (bars !== null) { scoreBars = bars; notebookHandle?.setScore({ count: bars.length, rows: Array.from(new Set(bars.flatMap((b) => Object.keys(b.channels)))) }); setSelection(limitTo(selection, bars.length), 'redraw'); }
+          if (bars !== null) { scoreBars = bars; notebookHandle?.setScore({ count: bars.length, rows: Array.from(new Set(bars.flatMap((b) => Object.keys(b.channels ?? {})))) }); setSelection(limitTo(selection, bars.length), 'redraw'); }          // 2026-11-24-1031: a melody bar has no channel rows
         }
         return out;
       },
@@ -1047,6 +1047,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
       if (r.ok) current = r.params;                                          // the vault's modify event for this write brings the Score
       return;
     }
+    if (current.kind === 'extend' && current.style === 'repeat') { f.notify('Edit this bar: that button copies a bar of beats. For a melody phrase make a melody bar (New melody bar), say its notes, then say "Bar N is replaced by [[bar_NNN]]."'); return; }          // 2026-11-24-1031
     const data = barsData?.[action.barNumber - 1];
     if (!data) { f.notify(`Edit this bar: the Score has no data for bar ${action.barNumber} yet (wait for it to draw).`); return; }
     const r = await editThisBar(forkPorts, { params: current, barNumber: action.barNumber, phraseNoteId: phraseNoteId(notePath), barData: data });

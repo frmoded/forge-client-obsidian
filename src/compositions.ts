@@ -255,7 +255,7 @@ export class CompositionView extends EditableFileView {
   /** The Score is on screen: keep its lineage and shape (the lighting and the tree need them), say "<N> sections, <B> bars, <t> min" in the header, and draw the tree again with the bars each section covers. */
   private scoreShown(file: TFile, note: unknown, payload: Record<string, unknown>): void {
     const bars = barsOfPayload(payload);
-    if (bars !== null) this.notebook?.setScore({ count: bars.length, rows: Array.from(new Set(bars.flatMap((b) => Object.keys(b.channels)))) });     // M17c: how many bars the Score has and the rows they have
+    if (bars !== null) this.notebook?.setScore({ count: bars.length, rows: Array.from(new Set(bars.flatMap((b) => Object.keys(b.channels ?? {})))) });     // 2026-11-24-1031: a melody bar has no channel rows. M17c: how many bars the Score has and the rows they have
     const l = bars === null ? null : readCompositionLineage(payload.composition_lineage, bars.length);
     this.lineage = l === null || typeof l === 'string' ? null : l;
     const s = payload[FORGE_COMPOSITION_KEY];

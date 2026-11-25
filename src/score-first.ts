@@ -522,8 +522,8 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
       const prepareScoreNote = async (file: TFile): Promise<void> => {
         const family = familyOfPath(file.path);
         if (family === null || !hasNoCacheFence(await app.vault.read(file))) return;
-        const names = (folder: string): string[] => app.vault.getFiles().filter((f) => f.path.startsWith(`${folder}/`)).map((f) => f.basename).filter((n) => n !== 'README');
-        const vault = { bars: names(BAR_FOLDER_NAME), phrases: names(PHRASE_FOLDER), arrangements: names('arrangements'), compositions: names('compositions'), kits: names('kits') };
+        const names = (folder: string, melody = false): string[] => app.vault.getFiles().filter((f) => f.path.startsWith(`${folder}/`) && (!melody || app.metadataCache?.getFileCache?.(f)?.frontmatter?.melody === true)).map((f) => f.basename).filter((n) => n !== 'README');
+        const vault = { bars: names(BAR_FOLDER_NAME), phrases: names(PHRASE_FOLDER), arrangements: names('arrangements'), compositions: names('compositions'), kits: names('kits'), melody: names(BAR_FOLDER_NAME, true), melodyPhrases: names(PHRASE_FOLDER, true) };          // 2026-11-24-1031: a melody phrase's own cache is repaired with the same lists
         await app.vault.process(file, (current) => repairForOpen(current, file.basename, family, vault));
         console.info(`[forge-open] computed the cache of ${file.path} (it had no json block)`);
       };

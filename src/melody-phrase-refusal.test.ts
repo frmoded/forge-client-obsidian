@@ -1,5 +1,7 @@
-// 2026-11-23-1030 (pitch in bars, Stage 1a): no phrase verb takes a melody bar yet. A phrase sentence that NAMES a melody bar is refused AT SENTENCE TIME, in one plain sentence about melodies, never at draw time in the Beat Box's words
+// 2026-11-23-1030 (pitch in bars, Stage 1a): no phrase verb took a melody bar. A phrase sentence that NAMES a melody bar was refused AT SENTENCE TIME, in one plain sentence about melodies, never at draw time in the Beat Box's words
 // (`Not rhythm data: missing required field "channels"`). The grammar knows a melody bar by the vault's `melody` list (names, as the others are); a vault without the list (every vault of today, the lean edition) is read exactly as it was.
+// 2026-11-24-1031 (deliberate): Stage 1b moved the words. A melody bar is now taken by the plain repeat (`Repeat [[bar]] for N bars.`, melody-phrase-grammar.test.ts); the verbs that work on HITS (Extend, Mix, Morph) refuse it in `That works on beats, not on notes.`
+// (still at sentence time, still never in the Beat Box's words), and `A melody bar cannot be used in a phrase yet.` is gone.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -9,23 +11,23 @@ import { parseRecipe } from './recipe-grammar-core.ts';
 import { descriptionPortsFor } from './description-wiring.ts';
 import { VAULT } from './test-support/sentence-list-fixtures.ts';
 
-const WORDS = 'A melody bar cannot be used in a phrase yet.';
+const WORDS = 'That works on beats, not on notes.';          // 2026-11-24-1031 (deliberate): was 'A melody bar cannot be used in a phrase yet.'
 const MELODY_VAULT: GrammarVault = { ...VAULT, bars: [...(VAULT.bars as string[]), 'bar_021'], melody: ['bar_021'] };
 const say = (text: string, vault: GrammarVault = MELODY_VAULT): string => { const r = parse(text, vault); return r.ok ? 'ok' : r.error.message; };
 
-test('every phrase verb that takes a bar refuses a melody bar in the one plain sentence, naming nothing of the Beat Box', () => {
+test('every phrase verb that works on hits refuses a melody bar in the one plain sentence, naming nothing of the Beat Box', () => {
   for (const s of ['Extend [[bar_021]] to 4 bars, repeating with fills.', 'Mix [[bar_001]] and [[bar_021]], 50 percent [[bar_001]], as a vote.', 'Mix [[bar_021]] and [[bar_001]], 50 percent [[bar_021]], as a vote.', 'Morph [[bar_021]] into [[bar_001]] over 4 bars, in musical order.', 'Morph [[bar_001]] into [[bar_021]] over 4 bars, in musical order.']) {
     const m = say(s);
     assert.match(m, new RegExp(WORDS.replace(/\./g, '\\.')), s);
     assert.doesNotMatch(m, /rhythm data|channels|Beat Box|Rhythm Box/i, s);
   }
   const fork = parse('Extend [[bar_001]] to 4 bars, repeating with fills. Bar 2 is replaced by [[bar_021]].', MELODY_VAULT);
-  assert.equal(fork.ok, false); if (!fork.ok) assert.match(fork.error.message, /melody bar cannot be used in a phrase yet/);
+  assert.equal(fork.ok, false); if (!fork.ok) assert.match(fork.error.message, /A phrase is all rhythm bars or all melody bars/);          // 2026-11-24-1031 (deliberate): was 'melody bar cannot be used in a phrase yet'
 });
 
 test('the sentence is the same in a recipe (a phrase\'s Recipe is read by the same grammar)', () => {
   const r = parseRecipe('Take [[bar_021]]. Repeat it for 4 bars with fills.', MELODY_VAULT);
-  assert.equal(r.ok, false); if (!r.ok) assert.match(JSON.stringify(r), /melody bar cannot be used in a phrase yet/);
+  assert.equal(r.ok, false); if (!r.ok) assert.match(JSON.stringify(r), /That works on beats, not on notes/);          // 2026-11-24-1031 (deliberate)
 });
 
 test('NOTHING ELSE CHANGES: a rhythm bar is read as it was, the same sentences parse the same with and without a melody list, and a vault with no list reads a melody bar\'s name as any bar\'s', () => {

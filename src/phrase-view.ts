@@ -151,9 +151,9 @@ export class PhraseView extends EditableFileView {
   }
 
   /** The notes a sentence of the list may name, as the description controller sees them (the strip's write replays the list against them). */
-  private vaultNames(): { bars: string[]; phrases: string[]; arrangements: string[]; compositions: string[]; kits: string[] } {
-    const names = (folder: string): string[] => this.app.vault.getFiles().filter((f) => f.path.startsWith(`${folder}/`)).map((f) => f.basename).filter((n) => n !== 'README');
-    return { bars: names('bars'), phrases: names('phrases'), arrangements: names('arrangements'), compositions: names('compositions'), kits: names('kits') };
+  private vaultNames(): { bars: string[]; phrases: string[]; arrangements: string[]; compositions: string[]; kits: string[]; melody: string[]; melodyPhrases: string[] } {
+    const names = (folder: string, melody = false): string[] => this.app.vault.getFiles().filter((f) => f.path.startsWith(`${folder}/`) && (!melody || this.app.metadataCache?.getFileCache?.(f)?.frontmatter?.melody === true)).map((f) => f.basename).filter((n) => n !== 'README');          // 2026-11-24-1031: `melody` names the melody bars and phrases (their front matter says so)
+    return { bars: names('bars'), phrases: names('phrases'), arrangements: names('arrangements'), compositions: names('compositions'), kits: names('kits'), melody: names('bars', true), melodyPhrases: names('phrases', true) };
   }
 
   async onUnloadFile(file: TFile): Promise<void> {

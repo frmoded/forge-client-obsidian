@@ -88,14 +88,14 @@ test('[real plugin] "New melody bar": the command makes bars/bar_NNN.md (one pas
   } finally { w.done(); }
 });
 
-test('[real plugin] a phrase sentence that names a melody bar (its front matter says `melody: true`) is refused at once in one plain sentence', async () => {
+test('[real plugin] an Extend that names a melody bar (its front matter says `melody: true`) is refused at once in one plain sentence about beats and notes', async () => {
   const real = await realMusicPlugin(); const { w } = await world(real);
   try {
     const leaf = await w.restoreTab(PHRASE_VIEW_TYPE, 'phrases/phrase_001.md'); const tab = w.viewOf(leaf);
     const n0 = tab.contentEl.querySelectorAll('.forge-chat-msg').length;
     await w.say(tab, 'Extend [[bar_021]] to 4 bars, repeating with fills.');
     const said = [...tab.contentEl.querySelectorAll('.forge-chat-msg')].slice(n0).map((m: any) => m.querySelector('.forge-chat-text')?.textContent ?? '').join(' | ');
-    assert.match(said, /A melody bar cannot be used in a phrase yet\./);
+    assert.match(said, /That works on beats, not on notes\./);          // 2026-11-24-1031 (deliberate): was 'A melody bar cannot be used in a phrase yet.' (Stage 1b: Extend works on hits; the melody bar is repeated)
     assert.doesNotMatch(said, /Not rhythm data/);
   } finally { w.done(); }
 });

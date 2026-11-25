@@ -12,7 +12,7 @@ import {
   FOLDER_OF, Fail, Scan, followForks, note, orderFromWords, parse, placeOf, readRange, readStructureStep, sentencesOf, type GrammarError, type GrammarVault, type ParseResult, type Sentence,
 } from './phrase-grammar-core.ts';
 import {
-  MIX_DEFAULTS, MORPH_DEFAULTS, MORPH_ORDERS, PHRASE_BARS_MAX, PHRASE_BARS_MIN, PHRASE_DEFAULTS, PHRASE_PCT_MAX, PHRASE_PCT_MIN, TRANSFORM_DEFAULTS, TRANSFORM_OPS_MAX, validatePhrase,
+  MIX_DEFAULTS, MORPH_DEFAULTS, MORPH_ORDERS, REPEAT_STYLE, PHRASE_BARS_MAX, PHRASE_BARS_MIN, PHRASE_DEFAULTS, PHRASE_PCT_MAX, PHRASE_PCT_MIN, TRANSFORM_DEFAULTS, TRANSFORM_OPS_MAX, validatePhrase,
   type ExtendPhrase, type MixPhrase, type MorphOrder, type MorphPhrase, type PhraseStyle, type StructureOp, type TransformOp, type TransformPhrase,
 } from './phrase-core.ts';
 import { phraseRecipeSteps } from './phrase-notes-core.ts';
@@ -81,16 +81,17 @@ function readOrder(sc: Scan): MorphOrder {
 function takeBars(s: Sentence, vault: GrammarVault, two: boolean): string[] {
   const sc = new Scan(s.text, s.start);
   sc.kw('take');
-  const a = note(sc, vault, ['bar'], two ? 'the first bar' : 'the bar to extend').name;
+  const beats = (): string => 'That works on beats, not on notes. A Mix or a Morph takes rhythm bars.';          // 2026-11-24-1031: two bars are a Mix or a Morph (rhythm only); one bar may be a melody bar (the plain repeat)
+  const a = note(sc, vault, ['bar'], two ? 'the first bar' : 'the bar to extend', two ? beats : undefined).name;
   if (!two) { sc.end(); return [a]; }
   if (!sc.kw('and')) sc.fail('"and"');
-  const b = note(sc, vault, ['bar'], 'the second bar').name;
+  const b = note(sc, vault, ['bar'], 'the second bar', beats).name;
   sc.end();
   return [a, b];
 }
 
 /** 2026-11-19-0980: what follows a head's own step in a Recipe: the STRUCTURE steps (said as a take's are) and the forks ("Bar 9 is replaced by [[bar_009]]."), in any order; the forks number the bars after the steps. */
-function stepsAndForks(ss: Sentence[], vault: GrammarVault, bars: () => number): { ops?: StructureOp[]; overrides?: Record<string, string> } {
+function stepsAndForks(ss: Sentence[], vault: GrammarVault, bars: () => number, melody = false): { ops?: StructureOp[]; overrides?: Record<string, string> } {
   const ops: StructureOp[] = [], forks: Sentence[] = [];
   for (const s of ss) {
     const f = new Scan(s.text, s.start);
@@ -99,18 +100,22 @@ function stepsAndForks(ss: Sentence[], vault: GrammarVault, bars: () => number):
     if (step !== null) { ops.push(step); continue; }
     f.fail('"Keep ...", "Delete ...", "Copy ...", "Move ..." or "Bar N is replaced by [[a bar]]"');
   }
-  return { ...(ops.length > 0 ? { ops } : {}), ...followForks(forks, vault, () => (ops.length > 0 ? Number.MAX_SAFE_INTEGER : bars())) };
+  return { ...(ops.length > 0 ? { ops } : {}), ...followForks(forks, vault, () => (ops.length > 0 ? Number.MAX_SAFE_INTEGER : bars()), melody) };
 }
 
 function parseExtendRecipe(ss: Sentence[], vault: GrammarVault): ExtendPhrase {
   const [source] = takeBars(ss[0], vault, false);
   const sc = new Scan(ss[1].text, ss[1].start);
-  let bars: number, style: PhraseStyle;
+  const melody = vault.melody?.includes(source) === true;          // 2026-11-24-1031: a melody bar is repeated as it is ("Repeat it for 10 bars."), a rhythm bar with fills or ghost notes
+  let bars: number, style: PhraseStyle | typeof REPEAT_STYLE;
   if (sc.kw('repeat it for')) {
     bars = sc.whole('a number of bars', PHRASE_BARS_MIN, PHRASE_BARS_MAX);
     if (!(sc.kw('bars') || sc.kw('bar'))) sc.fail('"bars"');
-    if (!sc.kw('with')) sc.fail('"with fills" or "with ghost notes"');
-    if (sc.kw('ghost notes')) style = 'ghost_notes'; else if (sc.kw('fills')) style = 'repeat_with_fills'; else sc.fail('"fills" or "ghost notes"');
+    if (melody) { sc.ws(); if (sc.s[sc.i] === 'w' || sc.s[sc.i] === 'W') sc.failAt('That works on beats, not on notes. A melody bar is repeated as it is: "Repeat it for N bars."', sc.at, 'head'); style = REPEAT_STYLE; }
+    else {
+      if (!sc.kw('with')) sc.fail('"with fills" or "with ghost notes"');
+      if (sc.kw('ghost notes')) style = 'ghost_notes'; else if (sc.kw('fills')) style = 'repeat_with_fills'; else sc.fail('"fills" or "ghost notes"');
+    }
   } else if (sc.kw('build it up over')) {
     bars = sc.whole('a number of bars', PHRASE_BARS_MIN, PHRASE_BARS_MAX);
     if (!(sc.kw('bars') || sc.kw('bar'))) sc.fail('"bars"');
@@ -127,7 +132,8 @@ function parseExtendRecipe(ss: Sentence[], vault: GrammarVault): ExtendPhrase {
     pct = slower ? noNegZero(-n.value) : n.value;
   }
   sc.end();
-  return { kind: 'extend', source, bars, style, tempo_change_pct: pct, ...stepsAndForks(ss.slice(2), vault, () => bars) };
+  if (melody && style !== REPEAT_STYLE) sc.failAt('That works on beats, not on notes. A melody bar is repeated as it is: "Repeat it for N bars."', ss[1].start, 'head');
+  return { kind: 'extend', source, bars, style, tempo_change_pct: pct, ...stepsAndForks(ss.slice(2), vault, () => bars, melody) };
 }
 
 function parseMorphRecipe(ss: Sentence[], vault: GrammarVault): MorphPhrase {

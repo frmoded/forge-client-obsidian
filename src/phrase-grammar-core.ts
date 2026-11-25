@@ -12,10 +12,10 @@
 // and is restored: extend bars 4, style repeat_with_fills, tempo 0; mix share 50, threshold 50, ghost off, vote; morph bars 5, musical order, seed 0; thin out by half keeping the downbeat; double up grid 16.
 // canonical(params) is what the text can carry: a field the text cannot say (a seed on an order that ignores it, `mode: "vote"` which is the same as no mode, a track with `mute: false`, `solo: false` or `volume: 100`, -0) is dropped.
 import {
-  MORPH_ORDERS, NOTE_NAME, STRUCTURE_RUNS_MAX, PHRASE_BARS_MAX, PHRASE_BARS_MIN, PHRASE_DEFAULTS, PHRASE_PCT_MAX, PHRASE_PCT_MIN, PHRASE_STYLES, MIX_DEFAULTS, MORPH_DEFAULTS, TRANSFORM_DEFAULTS, TRANSFORM_KEEPS, TRANSFORM_OPS_MAX, validatePhrase,
+  MORPH_ORDERS, NOTE_NAME, REPEAT_STYLE, STRUCTURE_RUNS_MAX, PHRASE_BARS_MAX, PHRASE_BARS_MIN, PHRASE_DEFAULTS, PHRASE_PCT_MAX, PHRASE_PCT_MIN, PHRASE_STYLES, MIX_DEFAULTS, MORPH_DEFAULTS, TRANSFORM_DEFAULTS, TRANSFORM_KEEPS, TRANSFORM_OPS_MAX, validatePhrase,
   type ExtendPhrase, type MixPhrase, type BarRun, type MorphOrder, type MorphPhrase, type PhraseParams, type StructureOp, type PhraseStyle, type TransformOp, type TransformPhrase,
 } from './phrase-core.ts';
-import { isStructureOp, runsWords } from './bar-structure-core.ts';
+import { isRunsOp, isStructureOp, runsWords } from './bar-structure-core.ts';
 import { validateArrangement, type ArrangementParams, type ArrangementTrack } from './arrangement-core.ts';
 import { COMPOSITION_LENGTH_MAX, COMPOSITION_REPEAT_MAX, validateComposition, type CompositionParams, type CompositionSection } from './composition-core.ts';
 import { STYLE_WORDS, canonical, complementOf100, describe, link, noNegZero, orderWords, percentOf, plain, shiftDecimal, sortedOverrides, type GrammarParams } from './phrase-describe-core.ts';
@@ -24,7 +24,7 @@ import { STYLE_WORDS, canonical, complementOf100, describe, link, noNegZero, ord
 export { canonical, complementOf100, describe, orderWords, plain, shiftDecimal, type GrammarParams } from './phrase-describe-core.ts';
 
 /** The notes of the vault a description may name (basenames, no folder, no .md). `arrangements` and `kits` are optional: a list that is not given is not checked (names are then only checked for their spelling). */
-export interface GrammarVault { bars: readonly string[]; phrases: readonly string[]; arrangements?: readonly string[]; compositions?: readonly string[]; kits?: readonly string[]; melody?: readonly string[] }
+export interface GrammarVault { bars: readonly string[]; phrases: readonly string[]; arrangements?: readonly string[]; compositions?: readonly string[]; kits?: readonly string[]; melody?: readonly string[]; melodyPhrases?: readonly string[] }
 /** `code` says WHY for the few refusals a caller must tell from the rest (2026-11-19-0980): `order` = a structure step after a Thin out or a Double up; `head` = a line the grammar understood but the phrase's head cannot take (a tempo after a Morph, a Thin out after an Extend), or a step with no head yet; `refused` (2026-11-19-0996b) = a line the grammar read and will not do ("Move bar 3 two bars left.").
  *  The sentence service cannot fix either: the person changes the order or the head. */
 export interface GrammarError { message: string; line: number; column: number; code?: 'order' | 'head' | 'refused' }
@@ -134,7 +134,7 @@ export type NoteKind = 'bar' | 'phrase' | 'arrangement' | 'composition' | 'kit';
 const LIST_OF: Record<NoteKind, (v: GrammarVault) => readonly string[] | undefined> = { bar: (v) => v.bars, phrase: (v) => v.phrases, arrangement: (v) => v.arrangements, composition: (v) => v.compositions, kit: (v) => v.kits };
 const KIND_WORDS: Record<NoteKind, string> = { bar: 'a bar', phrase: 'a phrase', arrangement: 'an arrangement', composition: 'a composition', kit: 'a kit' };
 export const FOLDER_OF = { phrase: 'phrases', arrangement: 'arrangements', composition: 'compositions' } as const;
-export function note(sc: Scan, vault: GrammarVault, kinds: NoteKind[], what: string): { name: string; kind: NoteKind } {
+export function note(sc: Scan, vault: GrammarVault, kinds: NoteKind[], what: string, melodyRefusal?: (name: string) => string): { name: string; kind: NoteKind; melody: boolean } {
   sc.ws();
   const at = sc.at;
   let name: string;
@@ -154,9 +154,10 @@ export function note(sc: Scan, vault: GrammarVault, kinds: NoteKind[], what: str
   const unchecked = kinds.find((k) => LIST_OF[k](vault) === undefined);
   const hits = named.length > 0 || unchecked === undefined ? named : [unchecked];
   if (hits.length === 0) sc.failAt(`Expected ${kinds.length > 2 ? `${kinds.slice(0, -1).map((k) => KIND_WORDS[k]).join(', ')} or ${KIND_WORDS[kinds[kinds.length - 1]]}` : kinds.map((k) => KIND_WORDS[k]).join(' or ')} of this vault for ${what}, but "${name}" is not one.`, at);
-  if (hits[0] === 'bar' && vault.melody?.includes(name) === true) sc.failAt('A melody bar cannot be used in a phrase yet.', at);          // 2026-11-23-1030: a melody bar (the vault's `melody` names) is refused HERE, in words about melodies, not at draw time in the Beat Box's
+  const melody = (hits[0] === 'bar' ? vault.melody : hits[0] === 'phrase' ? vault.melodyPhrases : undefined)?.includes(name) === true;          // 2026-11-24-1031: the vault's `melody` (bars) and `melodyPhrases` names say which notes are melody; each verb says what it does with one
+  if (melody && melodyRefusal !== undefined) sc.failAt(melodyRefusal(name), at, 'head');
   if (hits.length > 1) sc.failAt(`Expected one note for ${what}, but "${name}" is both ${KIND_WORDS[hits[0]]} and ${KIND_WORDS[hits[1]]}; rename one of them.`, at);
-  return { name, kind: hits[0] };
+  return { name, kind: hits[0], melody };
 }
 
 export interface Sentence { text: string; start: number }
@@ -182,8 +183,13 @@ export function sentencesOf(text: string): Sentence[] {
 
 /** The sentences only a composition has: refused, by name, in a description of any other kind. */
 const COMPOSITION_ONLY: Array<{ re: RegExp; verb: string }> = [{ re: /^then\s+play\b/i, verb: 'Then play' }, { re: /^repeat\s+that\b/i, verb: 'Repeat that' }, { re: /^for\s+\S+\s+bars?\s+play\b/i, verb: 'For N bars play' }];
-const OPEN_VERBS: Array<{ re: RegExp; kind: 'extend' | 'mix' | 'morph' | 'transform' | 'arrangement' }> = [
-  { re: /^extend\b/i, kind: 'extend' }, { re: /^mix\b/i, kind: 'mix' }, { re: /^morph\b/i, kind: 'morph' }, { re: /^take\b/i, kind: 'transform' }, { re: /^play\b/i, kind: 'arrangement' },
+/** 2026-11-24-1031 (pitch in bars, Stage 1b): a phrase is all rhythm bars or all melody bars. What works on hits is refused on notes in these words, at sentence time (never the Beat Box's). */
+const BEATS = 'That works on beats, not on notes.';
+const BEATS_MIX = (): string => `${BEATS} A Mix takes rhythm bars.`;
+const BEATS_MORPH = (): string => `${BEATS} A Morph takes rhythm bars.`;
+const BEATS_EXTEND = (name: string): string => `${BEATS} A melody bar is repeated as it is: "Repeat [[${name}]] for ${PHRASE_DEFAULTS.bars} bars."`;
+const OPEN_VERBS: Array<{ re: RegExp; kind: 'extend' | 'mix' | 'morph' | 'transform' | 'arrangement' | 'repeat' }> = [
+  { re: /^extend\b/i, kind: 'extend' }, { re: /^mix\b/i, kind: 'mix' }, { re: /^morph\b/i, kind: 'morph' }, { re: /^take\b/i, kind: 'transform' }, { re: /^play\b/i, kind: 'arrangement' }, { re: /^repeat\b/i, kind: 'repeat' },
 ];
 const OPEN_EXAMPLES = 'Extend, Mix, Morph, Take or Play';
 
@@ -197,12 +203,13 @@ const styleFromWords = (sc: Scan): PhraseStyle | null => {
 };
 
 /** The sentences after the first that every kind with forks takes. */
-function fork(sc: Scan, vault: GrammarVault, max: number): { bar: number; note: string } {
+function fork(sc: Scan, vault: GrammarVault, max: number, melodyHead: boolean): { bar: number; note: string } {
   const at = sc.at;                                                     // the caller has read the word "Bar"
   const bar = sc.whole('a bar number', 1);
   if (bar > max) sc.failAt(`Expected a bar of this phrase (1 to ${max}), but found ${bar}.`, at);
   if (!sc.kw('is replaced by') && !sc.kw('is')) sc.fail('"is replaced by"');
-  const n = note(sc, vault, ['bar'], `bar ${bar}`);
+  const nameAt = sc.at, n = note(sc, vault, ['bar'], `bar ${bar}`);
+  if (n.melody !== melodyHead) sc.failAt(`A phrase is all rhythm bars or all melody bars: ${n.name} is a ${n.melody ? 'melody' : 'rhythm'} bar and this phrase is made of ${melodyHead ? 'melody' : 'rhythm'} bars.`, nameAt, 'head');          // 2026-11-24-1031
   sc.end();
   return { bar, note: n.name };
 }
@@ -435,7 +442,7 @@ function segments(sc: Scan, tries: Array<{ name: string; read: () => boolean }>,
 function parseExtend(ss: Sentence[], vault: GrammarVault): ExtendPhrase {
   const sc = new Scan(ss[0].text, ss[0].start);
   sc.kw('extend');
-  const source = note(sc, vault, ['bar'], 'the bar to extend').name;
+  const source = note(sc, vault, ['bar'], 'the bar to extend', BEATS_EXTEND).name;
   let bars: number = PHRASE_DEFAULTS.bars, style: PhraseStyle = PHRASE_DEFAULTS.style, pct: number = PHRASE_DEFAULTS.tempo_change_pct;
   segments(sc, [
     { name: '"to N bars"', read: () => { if (!sc.kw('to')) return false; bars = sc.whole('a number of bars', PHRASE_BARS_MIN, PHRASE_BARS_MAX); if (!(sc.kw('bars') || sc.kw('bar'))) sc.fail('"bars"'); return true; } },
@@ -444,6 +451,35 @@ function parseExtend(ss: Sentence[], vault: GrammarVault): ExtendPhrase {
   ], `"to N bars", a style (${PHRASE_STYLES.map((s) => STYLE_WORDS[s]).join(', ')}) or "N percent slower" / "N percent faster"`);
   const tail = readTail(ss.slice(1), vault, 'extend', { bars, pct });
   return { kind: 'extend', source, bars: tail.bars, style, tempo_change_pct: tail.pct, ...tail.overrides, ...(tail.ops.length > 0 ? { ops: tail.ops } : {}) };
+}
+
+/**
+ * 2026-11-24-1031 (pitch in bars, Stage 1b) - "Repeat [[bar_101]] for 10 bars.": the PLAIN REPEAT, the head of a MELODY phrase (an extend whose style is `repeat`: the bar N times, nothing added; an Extend's fills are about beats). A melody phrase then takes `Bar N is replaced by [[a melody bar]].`
+ * and the structure steps Keep, Delete, Copy (with its place words) and Move; everything that works on hits (a tempo change, a length by "Make it", Thin out, Double up, the steps Mix, Morph and Extend) is refused in plain words, with the code `head` (the service cannot fix it).
+ */
+function parseRepeat(ss: Sentence[], vault: GrammarVault): ExtendPhrase {
+  const sc = new Scan(ss[0].text, ss[0].start);
+  sc.kw('repeat');
+  const at = sc.at, src = note(sc, vault, ['bar'], 'the melody bar to repeat');
+  if (!src.melody) sc.failAt(`Repeat is for melody bars, and ${src.name} is a rhythm bar. A rhythm bar is extended: "Extend [[${src.name}]] to ${PHRASE_DEFAULTS.bars} bars, repeating with fills."`, at, 'head');
+  if (!sc.kw('for')) sc.fail('"for N bars"');
+  const bars = sc.whole('a number of bars', PHRASE_BARS_MIN, PHRASE_BARS_MAX);
+  if (!(sc.kw('bars') || sc.kw('bar'))) sc.fail('"bars"');
+  sc.end();
+  const ops: StructureOp[] = [], forks: Sentence[] = [];
+  for (const s of ss.slice(1)) {
+    const f = new Scan(s.text, s.start);
+    reservedGuard(f);
+    if (f.peekKw('bar')) { forks.push(s); continue; }
+    const no = (more: string): never => f.failAt(`${BEATS} ${more}`, s.start, 'head');
+    if (f.peekKw('make it')) { const tempo = /^\s*make\s+it\s+\S+\s*(?:percent|%)/i.test(f.s); no(tempo ? 'A melody bar has its own tempo: say it in the bar, Set the tempo to 72.' : `To change how many bars there are, change the number in the first line: Repeat [[${src.name}]] for N bars.`); }
+    const step = readStructureStep(f, false);
+    if (step !== null) { if (!isRunsOp(step)) no('A melody phrase keeps, deletes, copies and moves bars.'); ops.push(step); continue; }
+    if (f.peekKw('thin out') || f.peekKw('double up')) no('A melody phrase keeps, deletes, copies and moves bars.');
+    f.fail('"Keep ...", "Delete ...", "Copy ...", "Move ..." or "Bar N is replaced by [[a melody bar]]"');
+  }
+  if (ops.length > TRANSFORM_OPS_MAX) throw new Fail(ss[0].start, `Expected at most ${TRANSFORM_OPS_MAX} changes, but found ${ops.length}.`);
+  return { kind: 'extend', source: src.name, bars, style: REPEAT_STYLE, tempo_change_pct: 0, ...followForks(forks, vault, () => (ops.length > 0 ? Number.MAX_SAFE_INTEGER : bars), true), ...(ops.length > 0 ? { ops } : {}) };
 }
 
 /**
@@ -502,13 +538,13 @@ function densityRefusal(sc: Scan, head: 'extend' | 'morph' | 'mix'): void {
 }
 
 /** The sentences after the head of a kind that only has forks after it: each is "Bar N is replaced by [[a bar]]". */
-export function followForks(ss: Sentence[], vault: GrammarVault, max: () => number): { overrides?: Record<string, string> } {
+export function followForks(ss: Sentence[], vault: GrammarVault, max: () => number, melodyHead = false): { overrides?: Record<string, string> } {
   const found: Record<string, string> = {};
   for (const s of ss) {
     const sc = new Scan(s.text, s.start);
     reservedGuard(sc);
     if (!sc.kw('bar')) sc.fail('"Bar N is replaced by [[a bar]]"');
-    const f = fork(sc, vault, max());
+    const f = fork(sc, vault, max(), melodyHead);
     if (Object.prototype.hasOwnProperty.call(found, String(f.bar))) sc.failAt(`Expected bar ${f.bar} to be replaced once, but it is replaced twice.`, s.start);
     found[String(f.bar)] = `bars/${f.note}`;
   }
@@ -522,9 +558,9 @@ function reservedGuard(sc: Scan): void {
 function parseMorph(ss: Sentence[], vault: GrammarVault): MorphPhrase {
   const sc = new Scan(ss[0].text, ss[0].start);
   sc.kw('morph');
-  const a = note(sc, vault, ['bar'], 'the bar to start from').name;
+  const a = note(sc, vault, ['bar'], 'the bar to start from', BEATS_MORPH).name;
   if (!sc.kw('into') && !sc.kw('to')) sc.fail('"into"');
-  const b = note(sc, vault, ['bar'], 'the bar to end at').name;
+  const b = note(sc, vault, ['bar'], 'the bar to end at', BEATS_MORPH).name;
   let bars: number = MORPH_DEFAULTS.bars, order: MorphOrder = MORPH_DEFAULTS.order, seed: number | null = null, position: number | null = null, seedAt = -1, positionAt = -1;
   segments(sc, [
     { name: '"over N bars"', read: () => { if (!sc.kw('over')) return false; bars = sc.whole('a number of bars', PHRASE_BARS_MIN, PHRASE_BARS_MAX); if (!(sc.kw('bars') || sc.kw('bar'))) sc.fail('"bars"'); return true; } },
@@ -544,9 +580,9 @@ function parseMorph(ss: Sentence[], vault: GrammarVault): MorphPhrase {
 function parseMix(ss: Sentence[], vault: GrammarVault): MixPhrase {
   const sc = new Scan(ss[0].text, ss[0].start);
   sc.kw('mix');
-  const a = note(sc, vault, ['bar'], 'the first bar').name;
+  const a = note(sc, vault, ['bar'], 'the first bar', BEATS_MIX).name;
   if (!sc.kw('and') && !sc.kw('with')) sc.fail('"and"');
-  const b = note(sc, vault, ['bar'], 'the second bar').name;
+  const b = note(sc, vault, ['bar'], 'the second bar', BEATS_MIX).name;
   let weight: number = MIX_DEFAULTS.weight, mode: 'vote' | 'path' | null = null, order: MorphOrder | null = null, seed: number | null = null, orderAt = -1, seedAt = -1;
   segments(sc, [
     { name: 'the share', read: () => {
@@ -602,7 +638,7 @@ function parseMix(ss: Sentence[], vault: GrammarVault): MixPhrase {
 function parseTransform(ss: Sentence[], vault: GrammarVault): TransformPhrase & { source: string } {
   const sc = new Scan(ss[0].text, ss[0].start);
   sc.kw('take');
-  const src = note(sc, vault, ['phrase', 'arrangement', 'composition'], 'the note to take');
+  const src = note(sc, vault, ['phrase', 'arrangement', 'composition'], 'the note to take', () => `${BEATS} A melody phrase is not taken: Keep, Delete, Copy and Move work on the phrase itself.`);
   sc.end();
   const ops: TransformOp[] = [];
   const forks: Sentence[] = [];                                          // the "Bar N is replaced by" sentences, between or after the changes
@@ -706,7 +742,7 @@ function parseArrangement(ss: Sentence[], vault: GrammarVault): ArrangementParam
       if (!sc.kw('volume')) sc.fail('"volume"'); sc.end();
       known(sc, k.name, at).volume = volume; continue;
     }
-    const p = note(sc, vault, ['phrase'], 'the phrase to play');
+    const p = note(sc, vault, ['phrase'], 'the phrase to play', () => 'A melody phrase cannot be played on a kit: a kit plays beats, and a melody needs a track of its own (an instrument, not a kit), which does not exist yet.');          // 2026-11-24-1031
     if (!sc.kw('on the') && !sc.kw('on')) sc.fail('"on the"');
     const kitAt = sc.at; const k = note(sc, vault, ['kit'], 'the kit to play it on');
     if (!sc.kw('kit')) sc.fail('"kit"'); sc.end();
@@ -734,6 +770,7 @@ function repeatCount(sc: Scan): number {
 /** A composition (M17b): "Play [[a]] for 8 bars." opens, "Then play [[b]] for 4 bars." follows (each also said "For 8 bars play [[a]]."), "Repeat that 2 more times." plays the section before it 2 more times. A section with no "for N bars" is all of its note, once. */
 function parseComposition(ss: Sentence[], vault: GrammarVault): CompositionParams {
   const sections: CompositionSection[] = [];
+  let notes: boolean | null = null;                                      // 2026-11-24-1031: a composition plays beats or notes, never both: the first phrase says which (an arrangement or a composition plays beats here; the engine checks what is inside)
   ss.forEach((s, i) => {
     const sc = new Scan(s.text, s.start);
     if (sc.kw('repeat that')) {
@@ -746,7 +783,7 @@ function parseComposition(ss: Sentence[], vault: GrammarVault): CompositionParam
     }
     const lengthOf = (): number => { const n = sc.whole('a number of bars', 1, COMPOSITION_LENGTH_MAX); if (!(sc.kw('bars') || sc.kw('bar'))) sc.fail('"bars"'); return n; };
     let length: number | undefined;
-    let src: { name: string; kind: NoteKind };
+    let src: { name: string; kind: NoteKind; melody: boolean };
     if (sc.kw('for')) {                                                    // "For 8 bars play [[a]]."
       length = lengthOf();
       if (!sc.kw('play')) sc.fail('"play"');
@@ -757,6 +794,8 @@ function parseComposition(ss: Sentence[], vault: GrammarVault): CompositionParam
       if (sc.kw('for')) length = lengthOf();
     }
     sc.end();
+    const said = src.kind === 'composition' ? null : src.kind === 'phrase' && src.melody;                  // true = notes, false = beats, null = a composition (the engine looks inside it)
+    if (said !== null) { if (notes !== null && notes !== said) throw new Fail(s.start, `A composition plays beats or notes, not both: ${src.name} ${said ? 'is a melody phrase' : 'plays beats'}, and an earlier section ${said ? 'plays beats' : 'plays notes'}.`, 'head'); notes = said; }
     sections.push({ source: `${FOLDER_OF[src.kind as 'phrase' | 'arrangement' | 'composition']}/${src.name}`, ...(length !== undefined ? { length } : {}) });
   });
   return { kind: 'composition', sections };
@@ -796,7 +835,7 @@ export function parse(text: string, vault: GrammarVault): ParseResult {
     if (asStep) first.failAt(`A phrase starts with Extend, Mix, Morph or Take: ${STEP_EXAMPLES[asStep[1].toLowerCase()]} works on the bars the phrase already has, so it comes after the first line.`, ss[0].start, 'head');          // 2026-11-19-0996b: a step, not a head (2026-11-19-0999b: Mix and Extend too)
     const open = OPEN_VERBS.find((v) => v.re.test(ss[0].text));
     if (!open) first.fail(`a description that starts with ${OPEN_EXAMPLES}`);
-    const params: GrammarParams = open.kind === 'extend' ? parseExtend(ss, vault) : open.kind === 'mix' ? parseMix(ss, vault) : open.kind === 'morph' ? parseMorph(ss, vault) : open.kind === 'transform' ? parseTransform(ss, vault) : parseArrangement(ss, vault);
+    const params: GrammarParams = open.kind === 'extend' ? parseExtend(ss, vault) : open.kind === 'mix' ? parseMix(ss, vault) : open.kind === 'morph' ? parseMorph(ss, vault) : open.kind === 'transform' ? parseTransform(ss, vault) : open.kind === 'repeat' ? parseRepeat(ss, vault) : parseArrangement(ss, vault);
     // the last gate: what the grammar gives is what the plugin's own validators accept (since M15b a transform may take a phrase OR an arrangement as its source, so there is nothing the grammar says that the validators check differently)
     if (params.kind === 'arrangement') {
       const v = validateArrangement(params);

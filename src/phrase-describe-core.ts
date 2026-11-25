@@ -1,7 +1,7 @@
 // 2026-10-30-1050 (M15b) - the SAYING half of the description grammar (phrase-grammar-core.ts, M15a): `describe` (the canonical text of a phrase or an arrangement), `canonical` (the params as that text carries them) and the
 // words and numbers they use. Split out of phrase-grammar-core.ts so the note writers in phrase-core.ts and arrangement-core.ts can call `describe` without importing the parser (which imports them): this file takes from phrase-core.ts
 // only the three DEFAULTS objects, read INSIDE functions (never at load), so the two modules may load in either order (a test loads each first, in its own process). Pure: no Obsidian.
-import { MIX_DEFAULTS, MORPH_DEFAULTS, TRANSFORM_DEFAULTS, type MorphOrder, type PhraseParams, type StructureOp, type TransformOp } from './phrase-core.ts';
+import { MIX_DEFAULTS, MORPH_DEFAULTS, REPEAT_STYLE, TRANSFORM_DEFAULTS, type MorphOrder, type PhraseParams, type StructureOp, type TransformOp } from './phrase-core.ts';
 import { structureSentence, isStructureOp } from './bar-structure-core.ts';
 import { STYLE_WORDS, orderWords } from './step-words-core.ts';
 import type { ArrangementParams, ArrangementTrack } from './arrangement-core.ts';
@@ -113,7 +113,7 @@ export function describe(params: GrammarParams): string {
     if (solo.length > 0) out.push(`Only ${kitsPlay(solo)}.`);
     out.push('Together.');
   } else if (p.kind === 'extend') {
-    const parts = [`Extend ${link(p.source)} to ${p.bars} ${barsWord(p.bars)}`, STYLE_WORDS[p.style]];
+    const parts = p.style === REPEAT_STYLE ? [`Repeat ${link(p.source)} for ${p.bars} ${barsWord(p.bars)}`] : [`Extend ${link(p.source)} to ${p.bars} ${barsWord(p.bars)}`, STYLE_WORDS[p.style]];          // 2026-11-24-1031: the plain repeat of a melody phrase
     if (p.tempo_change_pct !== 0) parts.push(`${plain(Math.abs(p.tempo_change_pct))} percent ${p.tempo_change_pct < 0 ? 'slower' : 'faster'}`);
     out.push(`${parts.join(', ')}.`, ...stepSentences(p.ops), ...forkSentences(p.overrides));
   } else if (p.kind === 'morph') {

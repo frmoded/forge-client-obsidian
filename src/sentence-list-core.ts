@@ -117,12 +117,12 @@ export function subjectOf(sentence: string, kind: ListKind): string | null {
 }
 
 // ---- the conflict subjects of a phrase (2026-11-19-0980): a SHAPE reading, like the arrangement's above -------------------------------------------------------------------------------------------------------------------
-const HEAD_LINE = /^\s*(?:take|(?:extend|mix|morph)(?!\s+bars?\s+\d))\b/i;       // 2026-11-19-0996b: "Morph bars 2 and 3 across 5 bars." is a STEP of the phrase, not a head (2026-11-19-0999b: so are "Mix bars 2 and 3." and "Extend bar 2 to 4 bars.")
+const HEAD_LINE = /^\s*(?:take|repeat(?!\s+that\b)|(?:extend|mix|morph)(?!\s+bars?\s+\d))\b/i;       // 2026-11-19-0996b: "Morph bars 2 and 3 across 5 bars." is a STEP of the phrase, not a head (2026-11-19-0999b: so are "Mix bars 2 and 3." and "Extend bar 2 to 4 bars.")
 const TEMPO_LINE = /^\s*make\s+it\s+[^\s]+\s*(?:percent|%)\s*(?:slower|faster)\b/i;
 const LENGTH_LINE = /^\s*make\s+it\s+[^\s]+\s+bars?\s+long\b/i;
 const FORK_LINE = /^\s*bar\s+(\d+)\s+is\b/i;
 const DENSITY_LINE = /^\s*(thin\s+out|double\s+up)\s+bars?\s+(\d+)(?:\s+to\s+(\d+))?\b(.*)$/i;
-/** Is this line a HEAD of a phrase (it opens a phrase: Extend, Mix, Morph or Take)? */
+/** Is this line a HEAD of a phrase (it opens a phrase: Extend, Mix, Morph, Take, or 2026-11-24-1031 the plain Repeat of a melody phrase)? */
 export const isHeadLine = (sentence: string): boolean => HEAD_LINE.test(sentence);
 function phraseSubjectOf(sentence: string): string | null {
   const s = sentence.trim();

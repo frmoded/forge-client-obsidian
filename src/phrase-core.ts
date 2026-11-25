@@ -13,7 +13,7 @@
 // score-first.ts, like every other score-first decision.
 
 import { extractDescription } from './v2-note-core.ts';
-import { editabilityProblem, parseFrontmatter, readRhythmNote, type RhythmData, type Validation } from './rhythm-edit-core.ts';
+import { editabilityProblem, extractJsonBlock, parseFrontmatter, readRhythmNote, type RhythmData, type Validation } from './rhythm-edit-core.ts';
 import { extractPhraseJsonBlock, handEditRefusalOf, isCustomNote, keepRecipeSource, newPhraseNote, renderPhraseNote } from './phrase-notes-core.ts';
 import { EMPTY_SOURCE, emptyPhraseNote, isEmptyNote } from './empty-note-core.ts';
 import { nameTakenMessage } from './note-name-rules-core.ts';
@@ -43,6 +43,8 @@ const SOURCE_NAME = /^[A-Za-z0-9_-]+$/;
 /** The three styles `extend_rhythm` knows (`_RHYTHM_EXTEND_STYLES` in forge/music/lib.py). */
 export const PHRASE_STYLES = ['repeat_with_fills', 'building', 'ghost_notes'] as const;
 export type PhraseStyle = typeof PHRASE_STYLES[number];
+/** 2026-11-24-1031 (pitch in bars, Stage 1b): the style of a MELODY phrase, the PLAIN REPEAT ("Repeat [[bar_101]] for 10 bars."): the bar N times, nothing added. It is not in PHRASE_STYLES on purpose (the strip's choices, the words `styleFromWords` reads and an Extend's style stay the rhythm ones). */
+export const REPEAT_STYLE = 'repeat';
 
 /** What each style does, in plain words, for the strip next to the style's name (drain 2026-10-22-2100: the driver noticed bar 4 differs and nothing said why). Each is what `extend_rhythm` really does
  *  (forge/music/lib.py docstring; a real-engine test in phrase-engine.test.ts pins the fill rule), not a paraphrase of what its name suggests. */
@@ -62,7 +64,7 @@ export interface ExtendPhrase {
   kind: 'extend';
   source: string;
   bars: number;
-  style: PhraseStyle;
+  style: PhraseStyle | typeof REPEAT_STYLE;
   tempo_change_pct: number;
   /** M9 (fork on edit): bar number (1-based, as a string key) -> the bar note that stands in for that generated bar (`bars/bar_NNN`, no .md). Absent = every bar is generated. */
   overrides?: Record<string, string>;
@@ -196,18 +198,19 @@ export function validatePhrase(raw: unknown): Validation<PhraseParams> {
     return bad(`bars must be a whole number from ${PHRASE_BARS_MIN} to ${PHRASE_BARS_MAX}, got ${JSON.stringify(raw.bars)}.`);
   }
   const style = raw.style === undefined ? PHRASE_DEFAULTS.style : raw.style;
-  if (typeof style !== 'string' || !(PHRASE_STYLES as readonly string[]).includes(style)) {
+  if (typeof style !== 'string' || !((PHRASE_STYLES as readonly string[]).includes(style) || style === REPEAT_STYLE)) {
     return bad(`style must be one of ${PHRASE_STYLES.join(', ')}, got ${JSON.stringify(raw.style)}.`);
   }
   const pct = raw.tempo_change_pct === undefined ? PHRASE_DEFAULTS.tempo_change_pct : raw.tempo_change_pct;
   if (typeof pct !== 'number' || !Number.isFinite(pct) || pct < PHRASE_PCT_MIN || pct > PHRASE_PCT_MAX) {
     return bad(`tempo_change_pct must be a number from ${PHRASE_PCT_MIN} to ${PHRASE_PCT_MAX}, got ${JSON.stringify(raw.tempo_change_pct)}.`);
   }
+  if (style === REPEAT_STYLE && pct !== 0) return bad('a plain repeat keeps the tempo of the bar: tempo_change_pct must be 0 (That works on beats, not on notes).');
   const steps = validateHeadSteps(raw.ops);
   if (typeof steps === 'string') return bad(steps);
   const overrides = validateOverrides(raw.overrides, steps ? Number.MAX_SAFE_INTEGER : bars);          // with steps the forks number the bars AFTER them (what the head's own length cannot bound)
   if (typeof overrides === 'string') return bad(overrides);
-  return { ok: true, value: { kind: 'extend', source, bars, style: style as PhraseStyle, tempo_change_pct: pct, ...(overrides ? { overrides } : {}), ...(steps ? { ops: steps } : {}) } };
+  return { ok: true, value: { kind: 'extend', source, bars, style: style as ExtendPhrase['style'], tempo_change_pct: pct, ...(overrides ? { overrides } : {}), ...(steps ? { ops: steps } : {}) } };
 }
 
 /** 2026-11-19-0980: the `ops` of an extend, a mix or a morph: STRUCTURE steps only (Keep, Delete, Copy, Move; a thin out and a double up are for a take). `[]` and absent are the same: none. Returns the steps, undefined for none, or a refusal. */
@@ -1056,6 +1059,16 @@ export async function producePhrase(deps: PhraseScoreDeps, raw: unknown, title: 
 /** How far a chain of transforms may go (a transform of a transform of ...), and the guard against one that loops back to itself. */
 export const TRANSFORM_DEPTH_MAX = 6;
 
+/** 2026-11-24-1031 (pitch in bars, Stage 1b): a bar of EITHER kind. A melody bar is a data note whose json has `notes` and no `channels`; it goes to the engine as it is (`melody_data_to_stream` checks it there, and the tab and the list checked it when it was written), so nothing of the melody core is needed here. */
+function readBar(text: string): { ok: true; data: RhythmData; melody: boolean } | { ok: false; message: string } {
+  const r = readRhythmNote(text);
+  if (r.ok === true) return { ok: true, data: r.value.data, melody: false };
+  const fm = parseFrontmatter(text), block = fm !== null && editabilityProblem(fm.fields) === null ? extractJsonBlock(text) : null;
+  if (block?.ok === true) { try { const d = JSON.parse(text.slice(block.contentStart, block.contentEnd)); if (d !== null && Array.isArray(d.notes) && !('channels' in d)) return { ok: true, data: d as RhythmData, melody: true }; } catch { /* not json: the rhythm refusal below */ } }
+  return { ok: false, message: (r as { message: string }).message };
+}
+const BEATS = 'That works on beats, not on notes.';
+
 async function produceValidated(deps: PhraseScoreDeps, params: PhraseParams, title: string, chain: string[]): Promise<ScoreOutcome> {
   if (params.kind !== 'transform' && params.ops !== undefined && params.ops.length > 0) return produceWithSteps(deps, params, title, chain);       // 2026-11-19-0980: a head followed by structure steps
   if (params.kind === 'mix') return produceMix(deps, params, title);
@@ -1068,8 +1081,9 @@ async function produceValidated(deps: PhraseScoreDeps, params: PhraseParams, tit
   } catch (e) {
     return { kind: 'refusal', message: `Phrase: the source bar ${params.source} (${path}) was not found or could not be read (${(e as Error)?.message ?? e}).` };
   }
-  const bar = readRhythmNote(text);
-  if (bar.ok === false) return { kind: 'refusal', message: `Phrase: the source ${params.source} is not usable: ${bar.message}` };
+  const read = readBar(text);
+  if (read.ok === false) return { kind: 'refusal', message: `Phrase: the source ${params.source} is not usable: ${read.message}` };
+  if ((params.style === REPEAT_STYLE) !== read.melody) return { kind: 'refusal', message: `Phrase: ${read.melody ? `${BEATS} ${params.source} is a melody bar, so it is repeated as it is: "Repeat [[${params.source}]] for ${params.bars} bars."` : `a plain repeat is for melody bars, and ${params.source} is a rhythm bar.`}` };
   // 2026-10-31-1135 (CCQA smoke 10, B5x): extend_rhythm's refusal of a bar that is not on a 16-step grid is the person's data, not a fault: one plain sentence naming the bar, not a traceback in the Score area
   let refused: string | null = null;
   const asked = async (data: RhythmData, p: PhraseParams, t: string): Promise<unknown> => {
@@ -1079,13 +1093,13 @@ async function produceValidated(deps: PhraseScoreDeps, params: PhraseParams, tit
       throw e;
     }
   };
-  if (!params.overrides) { const out = await computeScore((data, t) => asked(data as RhythmData, params, t), bar.value.data, title); return refused !== null ? { kind: 'refusal', message: `Phrase: ${refused}` } : out; }
+  if (!params.overrides) { const out = await computeScore((data, t) => asked(data as RhythmData, params, t), read.data, title); return refused !== null ? { kind: 'refusal', message: `Phrase: ${refused}` } : out; }
   // M9: forked bars. The fork notes are read FRESH (a bar edited in the Beat Box is what the phrase shows), checked against the source's grid, and handed to the engine as `override_bars`; the engine
   // glue lays each over the generated bar of that number. A phrase without overrides never reaches this line, so its engine call is exactly what it was.
-  const forks = await readForks(deps, params.overrides, bar.value.data, `the source ${params.source}`);
+  const forks = await readForks(deps, params.overrides, read.data, `the source ${params.source}`);
   if (typeof forks === 'string') return { kind: 'refusal', message: `Phrase: ${forks}` };
   const withForks = { ...params, override_bars: forks } as unknown as PhraseParams;
-  const out = await computeScore((data, t) => asked(data as RhythmData, withForks, t), bar.value.data, title);
+  const out = await computeScore((data, t) => asked(data as RhythmData, withForks, t), read.data, title);
   return refused !== null ? { kind: 'refusal', message: `Phrase: ${refused}` } : out;
 }
 
@@ -1181,9 +1195,10 @@ async function readForks(deps: PhraseScoreDeps, overrides: Record<string, string
       } catch (e) {
         return `bar ${n} is forked to ${noteId} (${path}) but that note was not found or could not be read (${(e as Error)?.message ?? e}).`;
       }
-      const read = readRhythmNote(text);
+      const read = readBar(text);
       if (read.ok === false) return `bar ${n} is forked to ${noteId} but that note is not usable: ${read.message}`;
-      data = read.value.data;
+      if (read.melody !== ('notes' in source)) return `bar ${n} (${noteId}) is a ${read.melody ? 'melody' : 'rhythm'} bar, and a phrase is all rhythm bars or all melody bars (${sourceLabel} is a ${read.melody ? 'rhythm' : 'melody'} bar).`;
+      data = read.data;
       reads.set(noteId, data);
     }
     const differs = (['time_signature', 'steps', 'group_size'] as const).filter((f) => data![f] !== source[f]);
@@ -1342,9 +1357,10 @@ async function produceMorph(deps: PhraseScoreDeps, params: MorphPhrase, title: s
       }
       reads.set(path, text);
     }
-    const bar = readRhythmNote(text);
+    const bar = readBar(text);
     if (bar.ok === false) return { kind: 'refusal', message: `Phrase: the bar for ${side}, ${name}, is not usable: ${bar.message}` };
-    bars[side] = bar.value.data;
+    if (bar.melody) return { kind: 'refusal', message: `Phrase: ${BEATS} ${name} is a melody bar.` };
+    bars[side] = bar.data;
   }
   // Phase B (fork on edit): a bar the person edited is its own note; its data stands in for the generated bar of that number. Read FRESH, checked against bar a's grid, handed to the engine as `override_bars`.
   let asked: PhraseParams = params;
@@ -1398,9 +1414,10 @@ async function produceMix(deps: PhraseScoreDeps, params: MixPhrase, title: strin
       }
       reads.set(path, text);
     }
-    const bar = readRhythmNote(text);
+    const bar = readBar(text);
     if (bar.ok === false) return { kind: 'refusal', message: `Phrase: the bar for ${side}, ${name}, is not usable: ${bar.message}` };
-    bars[side] = bar.value.data;
+    if (bar.melody) return { kind: 'refusal', message: `Phrase: ${BEATS} ${name} is a melody bar.` };
+    bars[side] = bar.data;
   }
   let refused: string | null = null;
   const outcome = await computeScore(async (_data, t) => {

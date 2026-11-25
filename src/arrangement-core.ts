@@ -248,6 +248,7 @@ export async function produceArrangement(deps: ArrangementDeps, note: string | {
     const drawn = await drawPhraseBars(deps.phrases, track.phrase);
     if (typeof drawn === 'string') return { kind: 'refusal', message: `Arrangement: ${drawn}` };
     const { bars, params } = drawn;
+    if (bars.some((b) => 'notes' in b)) return { kind: 'refusal', message: `Arrangement: ${track.phrase} is a melody phrase, and a kit plays beats, not notes: a melody track (an instrument instead of a kit) does not exist yet.` };          // 2026-11-24-1031
     phrasesRead[track.phrase] = params;
     tracks.push({ kit: kit.name, channels: kit.channels, bars, phrase: track.phrase, ...(track.mute !== undefined ? { mute: track.mute } : {}), ...(track.solo !== undefined ? { solo: track.solo } : {}), ...(track.volume !== undefined ? { volume: track.volume } : {}) });
   }

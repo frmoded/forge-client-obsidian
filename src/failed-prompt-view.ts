@@ -19,8 +19,8 @@ export interface ReviewQueueSetup { enabled(): boolean; build(): string }
 export interface ReviewQueueHandle { port: FailedPromptsPort; open(): Promise<void> }
 
 const vaultOf = (app: App): GrammarVault => {
-  const names = (folder: string): string[] => app.vault.getFiles().filter((f) => f.path.startsWith(`${folder}/`) && f.extension === 'md').map((f) => f.basename).filter((n) => n !== 'README');
-  return { bars: names(BAR_FOLDER_NAME), phrases: names(PHRASE_FOLDER), arrangements: names('arrangements'), compositions: names('compositions'), kits: names('kits') };
+  const names = (folder: string, melody = false): string[] => app.vault.getFiles().filter((f) => f.path.startsWith(`${folder}/`) && f.extension === 'md' && (!melody || app.metadataCache?.getFileCache?.(f)?.frontmatter?.melody === true)).map((f) => f.basename).filter((n) => n !== 'README');
+  return { bars: names(BAR_FOLDER_NAME), phrases: names(PHRASE_FOLDER), arrangements: names('arrangements'), compositions: names('compositions'), kits: names('kits'), melody: names(BAR_FOLDER_NAME, true), melodyPhrases: names(PHRASE_FOLDER, true) };          // 2026-11-24-1031
 };
 
 class ReviewView extends ItemView {

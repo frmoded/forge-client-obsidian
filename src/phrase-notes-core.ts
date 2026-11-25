@@ -37,7 +37,7 @@ const stepsWords = (p: PhraseParams): string => (p.kind !== 'transform' && p.ops
 
 export function phraseDescription(name: string, p: PhraseParams): string {
   let sentence: string;
-  if (p.kind === 'extend') sentence = `${name} — ${link(p.source)} extended to ${p.bars} bars: ${words(p.style)}, ${tempoWords(p.tempo_change_pct)}.`;
+  if (p.kind === 'extend') sentence = p.style === 'repeat' ? `${name} — ${link(p.source)} repeated for ${p.bars} bars.` : `${name} — ${link(p.source)} extended to ${p.bars} bars: ${words(p.style)}, ${tempoWords(p.tempo_change_pct)}.`;          // 2026-11-24-1031: a melody phrase
   else if (p.kind === 'transform') sentence = p.ops.length === 0 ? `${name} — a copy of ${link(baseName(p.source))}.` : `${name} — a transform of ${link(baseName(p.source))}: ${p.ops.map(transformOpWords).join('; ')}.`;       // 2026-11-19-0980: no change at all is a copy
   else if (p.kind === 'morph') sentence = `${name} — a morph from ${link(p.a)} to ${link(p.b)} in ${p.bars} bars, ${p.order} order${p.order === 'seeded' ? ` (seed ${p.seed})` : ''}.`;
   else if (p.mode === 'path') sentence = `${name} — a mix of ${link(p.a)} and ${link(p.b)} as a path of single-hit changes: weight 1 is all of ${p.a}, 0 is all of ${p.b}, ${p.order ?? 'musical'} order.`;
@@ -54,7 +54,7 @@ export function phraseRecipeSteps(p: PhraseParams): string[] {
   const steps: string[] = [];
   if (p.kind === 'extend') {
     const tempo = p.tempo_change_pct < 0 ? `, ${-p.tempo_change_pct} % slower` : p.tempo_change_pct > 0 ? `, ${p.tempo_change_pct} % faster` : '';
-    const how = p.style === 'building' ? `Build it up over ${p.bars} bars` : `Repeat it for ${p.bars} bars with ${p.style === 'ghost_notes' ? 'ghost notes' : 'fills'}`;
+    const how = p.style === 'building' ? `Build it up over ${p.bars} bars` : p.style === 'repeat' ? `Repeat it for ${p.bars} bars` : `Repeat it for ${p.bars} bars with ${p.style === 'ghost_notes' ? 'ghost notes' : 'fills'}`;
     steps.push(`Take ${link(p.source)}.`, `${how}${tempo}.`);
   } else if (p.kind === 'transform') {
     steps.push(`Take ${link(baseName(p.source))}.`, ...p.ops.map((o) => { const w = transformOpWords(o); return `${w[0].toUpperCase()}${w.slice(1)}.`; }));
@@ -220,6 +220,8 @@ export interface SourceChainParts {
   sentence: string;
   recipe: string[];
   python: string;
+  /** 2026-11-24-1031: a MELODY phrase says so in its front matter (`melody: true`, as a melody bar does: the sentences that name a phrase read it synchronously from the metadata cache). Absent (an arrangement, a kit) = the front matter is left as it is; false takes a stale line away. */
+  melody?: boolean;
 }
 
 /** The sections between the frontmatter and the json fence: Description, Recipe, Python and the Cache heading with its comment (the heading ends the Python section, so the Python hash covers the Python only). */
@@ -258,7 +260,8 @@ export function renderSourceChainNote(text: string, parts: SourceChainParts, fen
   const front = splitFront(text);
   if (!front) return text;
   const eol = front.eol;
-  const lines = withDerivedFront(front.lines, parts.description, parts.links);
+  const derived = withDerivedFront(front.lines, parts.description, parts.links);
+  const lines = parts.melody === undefined ? derived : (parts.melody ? setLines(derived, [['melody', 'true']], []) : setLines(derived, [], ['melody']));
   const assemble = (l: string[]): string => `---${eol}${l.join(eol)}${eol}---${eol}${eol}${sourceChainSections(parts).join(eol)}${eol}${eol}${text.slice(fenceStart)}`;
   return assemble(withSourceChainStamps(lines, sourceChainStamps(assemble(lines))));
 }
@@ -395,7 +398,7 @@ export const keepRecipeSource = (before: string, after: string): string => (sour
 
 /** The parts of a phrase note: the `# Description` is the grammar's sentence for `p` (`describe`), the frontmatter `description` stays the words with wikilinks for the graph, Recipe and Python derive from `p` as they always did. */
 /** 2026-11-19-0980: `sentence` is the `# Description` body when it is not the grammar's single paragraph (a phrase's LIST, written by sentence-list-note-core.ts). */
-export const phraseParts = (name: string, p: PhraseParams, sentence?: string): SourceChainParts => ({ description: phraseDescription(name, p), links: phraseLinks(p), sentence: sentence ?? describe(p), recipe: phraseRecipeSteps(p), python: phrasePython(p) });
+export const phraseParts = (name: string, p: PhraseParams, sentence?: string): SourceChainParts => ({ description: phraseDescription(name, p), links: phraseLinks(p), sentence: sentence ?? describe(p), recipe: phraseRecipeSteps(p), python: phrasePython(p), melody: p.kind === 'extend' && p.style === 'repeat' });          // 2026-11-24-1031: `melody` = the plain repeat of a melody phrase
 
 /** The whole phrase note with its source chain regenerated from `p`; the text from the fence on is kept byte for byte. */
 export function renderPhraseNote(text: string, name: string, p: PhraseParams, fenceStart: number, sentence?: string): string {
