@@ -26,11 +26,25 @@ Two steps apart and you share five notes. C and D share D E G A B. Three steps, 
 
 So the wheel is a map of distance. Close on the wheel means similar notes; far on the wheel means a different world. Keep that in your pocket: later, when you see which chords belong together, the same closeness comes back.
 
+Look at the wheel before you answer anything. Tap a key. The key across the wheel shades differently, and the page counts how many of the seven notes the two share. Press Play to hear the scale.
+
+```html-embed
+circle_of_fifths/resources/html/circle_of_fifths.html
+674
+```
+
 Try it: you get a key, and you find its two neighbours and the key directly across.
 
 ```html-embed
 circle_of_fifths/resources/html/circle_exercise_neighbours.html
 584
+```
+
+Now listen. Tap any two keys and press Play: the first key's scale, then the second's. Keys that sit next to each other sound like the same room. Keys across the wheel sound like another building. Then play two pairs and say which sounds closer.
+
+```html-embed
+circle_of_fifths/resources/html/circle_exercise_hear_distance.html
+729
 ```
 
 <div style="

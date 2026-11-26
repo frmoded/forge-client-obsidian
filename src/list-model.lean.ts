@@ -21,7 +21,7 @@ export const listModel: ListModel = {
     dispose() {},
   }),
   createBarBoxHost: () => null,
-  melody: { read: () => null, template: () => '' },          // 2026-11-23-1030: lean has no melody bar
+  melody: { read: () => null, template: () => '', names: (app, folder) => app.vault.getFiles().filter((f) => f.path.startsWith(`${folder}/`) && app.metadataCache?.getFileCache?.(f as never)?.frontmatter?.melody === true).map((f) => f.basename), mark() {} },          // 2026-11-23-1030: lean has no melody bar
   withBarLines: (text) => text,
   duplicate: {
     readActionText: () => ({ kind: 'none' }),

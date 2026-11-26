@@ -551,10 +551,10 @@ const SHARED_BY_PITCH: Record<number, number> = { 0: 7, 1: 6, 2: 5, 3: 4, 4: 3, 
 const HEAR_BUTTONS = ['Play', 'Play', 'Play', 'A', 'B', 'Next pair', 'Start over'];
 const pcsOfKey = (i: number): Set<number> => new Set([0, 2, 4, 5, 7, 9, 11].map((d) => (7 * i + d) % 12));             // from the definition of a major scale, not from the page's own functions
 
-test('hear the distance exists with its title; it carries the explorer\'s piano voice and nothing of the levelled exercises; it ships BARE (2026-11-25-1041 deliberate: no captions.json entry and no caption block yet, because captions-inside-figure needs every captioned gadget embedded and the wizard embeds it after the FEEDBACK; the entry lands in a later drain, as 1025 then 1032 did)', () => {
+test('hear the distance exists with its title; its caption is in captions.json and inside the file (2026-11-25-1042 (deliberate): the wizard embedded it, so the caption landed)', () => {
   assert.match(read(HEAR), /<title>Exercise: hear the distance<\/title>/);
-  for (const root of [VAULT, path.join(os.homedir(), 'projects/music-theory')]) { const file = path.join(root, 'captions.json'); if (!fs.existsSync(file)) continue; const caps = JSON.parse(fs.readFileSync(file, 'utf8')); assert.equal(caps[`circle_of_fifths/resources/html/${HEAR}`], undefined, root); }
-  assert.doesNotMatch(read(HEAR), /fig-cap|caption BEGIN/, 'no caption block yet');
+  for (const root of [VAULT, path.join(os.homedir(), 'projects/music-theory')]) { const file = path.join(root, 'captions.json'); if (!fs.existsSync(file)) continue; const caps = JSON.parse(fs.readFileSync(file, 'utf8')); assert.deepEqual(caps[`circle_of_fifths/resources/html/${HEAR}`], { title: 'Exercise: hear the distance', line: 'Tap two keys to hear how close they sound, then pick the closer of two pairs' }, root); }
+  assert.match(read(HEAR), /<div class="fig-cap"><div class="t">Exercise: hear the distance<\/div>/, 'the caption is inside the file');
 });
 
 test('hear the distance: the shared notes of every pair of keys, 12 x 12, counted by pitch class: one step 6, two 5, three 4, four 3, five 2, six 2, the same key 7; the notes that differ are the rest', () => {

@@ -103,5 +103,13 @@ export function melodyNoteTemplate(name: string): string {
   return ['---', 'type: data', 'content_type: json', 'melody: true', `description: ${JSON.stringify(`${name} - a melody bar: say its notes in sentences, like Note G3 on step 1 for 1 step.`)}`, 'lines: []', '---', '', '```json', formatMelodyJson(MELODY_BASE), '```', ''].join('\n');
 }
 
+/** 2026-11-25-1042: the paths THIS session wrote with `melody: true` in their front matter (a melody bar made, a phrase whose head is a Repeat of one). Obsidian's metadata cache lags a write by a moment: until it has the front matter, the session's own word stands in. */
+const wroteMelody = new Set<string>();
+/** Remember (or forget) what a write of `path` said: the text's front matter holds the line `melody: true` or it does not. */
+export const markMelody = (path: string, text: string): void => { (/^---\r?\n(?:(?!---)[^\n]*\n)*?melody: true\r?\n/.test(text) ? wroteMelody.add(path) : wroteMelody.delete(path)); };
+/** The basenames in `folder` whose note says `melody: true`: the cache's word when it has the front matter (it is believed), this session's own writes when it has none yet. */
+export const melodyNames = (app: { vault: { getFiles(): Array<{ path: string; basename: string }> }; metadataCache?: { getFileCache?(f: never): { frontmatter?: { melody?: unknown } } | null | undefined } }, folder: string): string[] =>
+  app.vault.getFiles().filter((f) => { const fm = app.metadataCache?.getFileCache?.(f as never)?.frontmatter; return f.path.startsWith(`${folder}/`) && (fm === undefined || fm === null ? wroteMelody.has(f.path) : fm.melody === true); }).map((f) => f.basename);
+
 /** Is this note a melody bar? (The tab, the list and the phrase machinery ask this; a rhythm bar and every other note: false.) */
 export const isMelodyNote = (text: string): boolean => readMelodyNote(text).ok;

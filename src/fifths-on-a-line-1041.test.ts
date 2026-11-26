@@ -95,12 +95,10 @@ test('1041 A: for a screen reader: role img and an aria-label in words that says
   for (const g of d.querySelectorAll('[aria-label]')) if (g !== root) assert.fail('the parts carry no label of their own: the drawing is one picture with one label');
 });
 
-test('1041 A (2026-11-25-1041 deliberate): the drawing ships BARE: no caption inside and no captions.json entry yet (captions-inside-figure needs every captioned figure embedded, so the entry lands after the wizard embeds it, as 1025 then 1032 did for the gadgets); the caption to add later is applied exactly and strips back to the bare file', { skip }, () => {
-  const caps = JSON.parse(file(LIVE, 'captions.json')); assert.equal(caps[REL], undefined, 'no entry yet'); assert.ok(caps[WHEEL], 'the wheel\'s entry is the model');
-  const cap = { title: 'Fifths on a line', line: 'Seven half steps from C to G, and from B to F♯ in the next octave' };
-  const svg = file(LIVE); assert.equal(C.svgCaptionOf(svg), null, 'no caption rows in the bare file'); const vb = /viewBox="([^"]+)"/.exec(svg)![1].split(' ').map(Number); assert.deepEqual(vb, [0, 0, 600, 400]);
-  const captioned = C.applySvgCaption(svg, cap); assert.deepEqual(C.svgCaptionOf(captioned), cap); assert.equal(C.stripSvgCaption(captioned), svg, 'strip gives the bare file back'); assert.equal(C.applySvgCaption(C.stripSvgCaption(captioned), cap), captioned);
-  const cvb = /viewBox="([^"]+)"/.exec(captioned)![1].split(' ').map(Number); assert.equal(cvb[2], 600, 'the caption does not widen the drawing'); assert.ok(cvb[3] > 400, 'it only adds height');
+test('1041 A (2026-11-25-1042 (deliberate): the captions landed once the wizard embedded both pieces): the captions.json entry exists (a title and one line, like the wheel\'s) and the file is exactly what the caption script writes for it; strip then apply is exact', { skip }, () => {
+  const caps = JSON.parse(file(LIVE, 'captions.json')); const cap = caps[REL]; assert.deepEqual(cap, { title: 'Fifths on a line', line: 'Seven half steps from C to G, and from B to F♯ in the next octave' }); assert.ok(caps[WHEEL], 'the wheel\'s entry is the model');
+  const svg = file(LIVE); assert.deepEqual(C.svgCaptionOf(svg), cap, 'the two text rows in the file are the entry'); assert.equal(C.applySvgCaption(svg, cap), svg, 'the file is what the script writes'); assert.equal(C.applySvgCaption(C.stripSvgCaption(svg), cap), svg);
+  const box = (s: string): number[] => /viewBox="([^"]+)"/.exec(s)![1].split(' ').map(Number); assert.deepEqual(box(C.stripSvgCaption(svg)), [0, 0, 600, 400], 'the bare drawing'); assert.equal(box(svg)[2], 600, 'the caption did not widen the drawing'); assert.ok(box(svg)[3] > 400, 'it only adds height');
 });
 
 test('1041 A: once the vault is synced, the bundle\'s copy of the drawing and of captions.json are the live vault\'s (nothing yet to compare before the sync)', { skip }, () => {

@@ -1,13 +1,17 @@
 ---
-description: "See why twelve stacked fifths close into a ring that brings you back to C, and where the sharp keys hand off to the flat keys."
+description: "See why twelve jumps of seven half steps close into a ring back at C, why we call it the circle of fifths, and where the sharp keys hand off to the flat keys."
 ---
-Pick a note. Count five letters up, counting the one you start on: C D E F G. That distance, C to G, is a fifth. It's seven half steps, and it's the same distance whatever note you start on.
+Pick any note. Jump up seven half steps: seven keys on the piano, black ones too. From C you land on G. From G you land on D. That jump is the whole idea, and the circle of fifths should really be called the circle of seven half steps. The name stuck anyway. More on why in a minute.
 
-Here are all the notes in a line, two octaves of them, black keys too. The first arrow goes from C up to G. Count it: seven half steps. A fifth.
+![[circle_of_fifths/resources/images/fifths_on_a_line.svg]]
 
-The second arrow starts on B and climbs the same seven half steps. It lands on F♯, in the second octave. That is why the line runs two octaves: past B in one octave there is nothing, and the arrow would have to double back. The notes don't stop at B. They start over, same names, higher up.
+Here are all the notes in a line, two octaves of them, black keys too. The first arrow goes from C up to G. Count it: seven half steps.
 
-Start on C and go up a fifth. You land on G. Go up another from G and you're on D. Keep climbing and something odd happens: you never run out of new keys, and then, suddenly, you're home.
+The second arrow starts on B and climbs the same seven half steps: C, C♯, D, D♯, E, F, F♯. It lands on F♯, seven half steps from B, the same jump wherever you start. That's why the line runs two octaves: past B in one octave there is nothing, and the arrow would have to double back. The notes don't stop at B. They start over, same names, higher up.
+
+Start on C and jump seven half steps. You land on G. Jump again from G and you're on D. Keep climbing and something odd happens: you never run out of new keys, and then, suddenly, you're home.
+
+So why fifths? Count letters. From C: C D E F G. G is the fifth letter, and G is seven half steps up. Seven half steps always lands on the fifth letter, every time. From B it is B C D E F: the fifth letter is F, and the seven half steps make it F♯. The letters give the name. The half steps give the sharp or the flat. That's why the circle of seven half steps is called the circle of fifths.
 
 Stack those fifths and you get C, G, D, A, E, B, F♯, then D♭, A♭, E♭, B♭, F, and the next fifth up from F is C again. Twelve steps, twelve keys, one loop.
 
@@ -46,7 +50,7 @@ Try it: tap any key on the wheel and watch its signature, its scale and its neig
 
 ```html-embed
 circle_of_fifths/resources/html/circle_of_fifths.html
-692
+674
 ```
 
 <div style="

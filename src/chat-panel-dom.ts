@@ -125,7 +125,7 @@ export function mountChatPanel(host: HTMLElement, ports: ChatPanelPorts, initial
     return out;
   };
   let shown: readonly DialogEntry[] = [], copyTimer: unknown = null;
-  const said = (t: string): void => { copy.textContent = t; if (copyTimer !== null) disarm(copyTimer); copyTimer = arm(() => { copyTimer = null; if (!disposed) copy.textContent = 'Copy'; }, 2000); };
+  const said = (t: string): void => { if (disposed) return; copy.textContent = t; if (copyTimer !== null) disarm(copyTimer); copyTimer = arm(() => { copyTimer = null; if (!disposed) copy.textContent = 'Copy'; }, 2000); };
   copy.addEventListener('click', () => {
     const under = (panel.querySelector('.forge-composer-error')?.textContent ?? '').trim();
     const lines = shown.flatMap((e) => [`${LABEL[e.kind]}: ${e.text}`, ...(e.suggestion ? [e.suggestion.description, ...(e.suggestion.recipe === '' ? [] : [e.suggestion.recipe])] : [])]);

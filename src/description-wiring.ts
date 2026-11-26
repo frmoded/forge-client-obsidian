@@ -5,6 +5,14 @@ import { BAR_FOLDER_NAME, PHRASE_FOLDER } from './phrase-core.ts';
 import type { undoCopy } from './duplicate-undo-core.ts';
 import { listModel } from './list-model-selected.ts';       // 2026-11-19-0997: Duplicate's cores come through the list-model seam (lean: stubs that refuse), not by import
 
+/** 2026-11-25-1042: the notes a sentence may name, read from the vault, for the three places that replay a list outside the composer (a note opened without its cache, the phrase tab's strip, the review queue): ONE reading, the melody lists from the list-model seam
+ *  (the cache's word, or this session's own writes while the cache has no front matter). `mdOnly`: only `.md` files are notes (the review queue's reading, as it was). */
+export const vaultListsOf = (app: { vault: { getFiles(): Array<{ path: string; basename: string; extension: string }> }; metadataCache?: Parameters<typeof listModel.melody.names>[0]['metadataCache'] }, mdOnly = false) => {
+  const names = (folder: string): string[] => app.vault.getFiles().filter((f) => f.path.startsWith(`${folder}/`) && (!mdOnly || f.extension === 'md')).map((f) => f.basename).filter((n) => n !== 'README');
+  const bars = names(BAR_FOLDER_NAME), phrases = names(PHRASE_FOLDER), melody = (folder: string, of: string[]): string[] => listModel.melody.names(app, folder).filter((n) => of.includes(n));          // a melody note is one of the notes listed (no README, `mdOnly` as asked)
+  return { bars, phrases, arrangements: names('arrangements'), compositions: names('compositions'), kits: names('kits'), melody: melody(BAR_FOLDER_NAME, bars), melodyPhrases: melody(PHRASE_FOLDER, phrases) };
+};
+
 /** What the plugin supplies from Obsidian (the vault, the workspace, window timers, the console, a modal). */
 export interface DescriptionEnv {
   read(path: string): Promise<string>;

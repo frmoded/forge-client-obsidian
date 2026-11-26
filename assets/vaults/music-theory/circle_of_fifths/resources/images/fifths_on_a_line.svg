@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="600" height="400" viewBox="0 0 600 400" role="img" aria-label="Two octaves of keys in a line. An arrow runs from C to G, seven half steps, a fifth. A second arrow runs from B to F sharp in the next octave, also seven half steps.">
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="600" height="457" viewBox="0 0 600 457" role="img" aria-label="Two octaves of keys in a line. An arrow runs from C to G, seven half steps, a fifth. A second arrow runs from B to F sharp in the next octave, also seven half steps.">
 <!-- own background: a solid panel so no ink depends on the page colour (dark mode); the wheel's panel, palette and font -->
-<rect x="0" y="0" width="600" height="400" rx="10" ry="10" fill="#fdfcfa"/>
+<rect x="0" y="0" width="600" height="457" rx="10" ry="10" fill="#fdfcfa"/>
 <defs>
 <marker id="head1" markerUnits="userSpaceOnUse" markerWidth="16" markerHeight="14" refX="15" refY="7" orient="auto"><path d="M0 0 L15 7 L0 14 Z" fill="#2B2B2B"/></marker>
 <marker id="head2" markerUnits="userSpaceOnUse" markerWidth="16" markerHeight="14" refX="15" refY="7" orient="auto"><path d="M0 0 L15 7 L0 14 Z" fill="#D72027"/></marker>
@@ -71,4 +71,11 @@
 <text class="octave" x="160" y="378" font-size="16" font-weight="500" fill="#555555">1st octave</text>
 <text class="octave" x="440" y="378" font-size="16" font-weight="500" fill="#555555">2nd octave</text>
 </g>
+<!-- caption BEGIN -->
+<!-- caption-box 0 0 600 400|600|400 -->
+<g font-family="system-ui, -apple-system, Segoe UI, sans-serif">
+<text x="12" y="426" font-size="15" fill="#2B2B2B" text-anchor="start" font-weight="600">Fifths on a line</text>
+<text x="12" y="445" font-size="12" fill="#555555" text-anchor="start">Seven half steps from C to G, and from B to F♯ in the next octave</text>
+</g>
+<!-- caption END -->
 </svg>

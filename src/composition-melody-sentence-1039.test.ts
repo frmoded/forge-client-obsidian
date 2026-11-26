@@ -58,19 +58,25 @@ test('[real plugin] (d) the reverse order: `Play [[phrase_001]].` then `Then pla
   assert.deepEqual(one.dialog, ['you: Play [[phrase_001]]. Then play [[phrase_101]] for 2 bars.', `notice: ${BEATS_AND_NOTES('phrase_101', 'notes')}`]);
 });
 
-test('[real plugin] the driver\'s ENTRY: `Play [[phrase_101]]. then Then play [[phrase_001]] for 2 bars` (the word "then" typed in the middle) is an unreadable sentence, NOT a beats-and-notes refusal: the grammar says `found "then"`, the service is asked about it (not set up here), and the note holds the very line the driver left', async () => {
+// 2026-11-25-1042 (deliberate): this was the driver's entry read as ONE unreadable sentence (`found "then"`, the service asked, `Kept as line 1, waiting for a translation`). `then` between two sentences is read now (src/then-connective-1042.test.ts): the entry is
+// the two sentences `Play [[phrase_101]].` and `Then play [[phrase_001]] for 2 bars.`, and with the melody phrase and the beats phrase of this table it is the beats-and-notes refusal AT SENTENCE TIME (row (c) of the 1039 table), the service never mentioned; with two
+// beats phrases it is two lines.
+test('[real plugin] the driver\'s ENTRY: `Play [[phrase_101]]. then Then play [[phrase_001]] for 2 bars` (the word "then" typed in the middle) is read as the two sentences: a melody phrase then a beats phrase is the beats-and-notes refusal at sentence time, nothing written, no waiting line, no service', async () => {
   const r = await run('comp_f', ['Play [[phrase_101]]. then Then play [[phrase_001]] for 2 bars']);
-  assert.match(r.dialog[1], /^rejected: The grammar did not accept this sentence \(line 2, column 1: Expected "Then play \[\[a note\]\] for N bars\.", "For N bars play \[\[a note\]\]\." or "Repeat that N more times\.", but found "then"\.\)\.$/);
-  assert.match(r.dialog.join('\n'), /The sentence service is not set up: add its URL and token in Settings → Forge Actions \(Beta\)\./);
-  assert.match(r.dialog.join('\n'), /Kept as line 1, waiting for a translation\./);
-  assert.doesNotMatch(r.dialog.join('\n'), /beats or notes/);
-  assert.deepEqual(r.list, ['Waiting: Play phrase_101 . then Then play phrase_001 for 2 bars'], 'the same line as compositions/comp_002.md of the scratch vault');
-  assert.match(r.under, /^The grammar did not accept this sentence \(line 2, column 1: .*but found "then"\.\)\. The sentence service is not set up: add its URL and token in Settings → Forge Actions \(Beta\)\.$/, 'the long line under the composer: the driver\'s `The grammar did not accept...` (Part B: now selectable, and in the dialog\'s Copy)');
+  assert.deepEqual(r.list, [], 'nothing written, not even a waiting line'); noService(r);
+  assert.deepEqual(r.dialog, ['you: Play [[phrase_101]]. then Then play [[phrase_001]] for 2 bars', `notice: ${BEATS_AND_NOTES('phrase_001', 'beats')}`]);
+  assert.equal(r.under, BEATS_AND_NOTES('phrase_001', 'beats')); assert.doesNotMatch(r.note, /Waiting:|then Then/);
+});
+test('[real plugin] the same entry with two BEATS phrases is two lines, written canonically (the connective is not part of either)', async () => {
+  const r = await run('comp_f2', ['Play [[phrase_001]]. then Then play [[phrase_002]] for 2 bars']);
+  assert.deepEqual(r.list, ['Play [[phrase_001]].', 'Then play [[phrase_002]] for 2 bars.']); noService(r); assert.doesNotMatch(r.note, /Waiting:|then Then/);
+  assert.deepEqual(r.dialog.map((l) => l.split(':')[0]), ['you', 'applied']);
 });
 
-// KNOWN LIMIT, measured not fixed (1031 said it: "the `melody: true` mark on a just-made note can lag the metadata cache a moment"): while the cache holds NO front matter for phrase_101 (a note made a moment ago), the composer cannot know it is a melody phrase,
-// reads both phrases as beats, and writes both lines; the engine is what refuses a mixed composition, at draw time. It is also the CONTROL of the tests above (they turn red if the lists lose `melodyPhrases`). When the lists learn a just-made note, move this test on purpose.
-test('[real plugin] COLD cache (a just-made melody phrase, front matter not in the cache yet): both sentences are written as beats; nothing says "service"', async () => {
+// 2026-11-25-1042 (deliberate): the 1031 caveat is closed for a note THIS SESSION wrote (src/melody-cold-cache-1042.test.ts: the plugin remembers the paths it wrote with `melody: true` while the cache has no front matter for them, and the same two sentences are
+// refused at sentence time). What stays, measured: a melody phrase that ARRIVES from outside the session (a sync, another editor, a note copied in by hand) and whose front matter the cache has not read yet: the plugin never wrote it, so it cannot know; both
+// phrases read as beats, both lines are written, and the engine refuses the mix at draw time. It is also the CONTROL of the tests above (they turn red if the lists lose `melodyPhrases`).
+test('[real plugin] COLD cache, a melody phrase that did NOT come from this session (it arrived with the note on disk; its front matter is not in the cache yet): both sentences are written as beats; nothing says "service" (the remaining limit)', async () => {
   const r = await run('comp_g', ['Play [[phrase_101]].', 'Then play [[phrase_001]] for 2 bars.'], { cold: true });
   assert.deepEqual(r.list, ['Play [[phrase_101]].', 'Then play [[phrase_001]] for 2 bars.']); noService(r);
 });

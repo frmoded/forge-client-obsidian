@@ -9,6 +9,7 @@ import { test } from 'node:test';
 import { parse, type GrammarVault } from './phrase-grammar-core.ts';
 import { parseRecipe } from './recipe-grammar-core.ts';
 import { descriptionPortsFor } from './description-wiring.ts';
+import { melodyNames } from './melody-bar-core.ts';
 import { VAULT } from './test-support/sentence-list-fixtures.ts';
 
 const WORDS = 'That works on beats, not on notes.';          // 2026-11-24-1031 (deliberate): was 'A melody bar cannot be used in a phrase yet.'
@@ -47,7 +48,10 @@ test('the vault of the composer says which bars are melody bars (the metadata ma
   assert.deepEqual(marked.melody, ['bar_021']);
 });
 
-test('the real plugin builds that list from the vault\'s metadata cache: a bar whose front matter says `melody: true`', () => {
+test('the real plugin builds that list from the vault\'s metadata cache: a bar whose front matter says `melody: true` (2026-11-25-1042 (deliberate): through the list-model seam; the cache is believed when it has the front matter)', () => {
   const src = fs.readFileSync(path.join(process.cwd(), 'src/score-first.ts'), 'utf8');
-  assert.match(src, /melodyIn: \(folder\) => app\.vault\.getFiles\(\)[^\n]*frontmatter\?\.melody === true/);
+  assert.match(src, /melodyIn: \(folder\) => listModel\.melody\.names\(app, folder\)/);
+  const files = ['bars/bar_021.md', 'bars/bar_022.md', 'phrases/phrase_009.md'].map((p) => ({ path: p, basename: p.slice(p.indexOf('/') + 1, -3) }));
+  const app = { vault: { getFiles: () => files }, metadataCache: { getFileCache: (f: { basename: string }) => ({ frontmatter: { melody: f.basename !== 'bar_022' } }) } };
+  assert.deepEqual(melodyNames(app, 'bars'), ['bar_021']);
 });

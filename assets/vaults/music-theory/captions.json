@@ -1,4 +1,8 @@
 {
+  "circle_of_fifths/resources/html/circle_exercise_hear_distance.html": {
+    "title": "Exercise: hear the distance",
+    "line": "Tap two keys to hear how close they sound, then pick the closer of two pairs"
+  },
   "circle_of_fifths/resources/html/circle_exercise_inner_ring.html": {
     "title": "Exercise: build the inner ring",
     "line": "Tap the relative minor of each major key to fill the inner ring"
@@ -30,6 +34,10 @@
   "circle_of_fifths/resources/images/circle_of_fifths_wheel.svg": {
     "title": "The circle of fifths",
     "line": "Twelve keys, a fifth apart, closing into a ring"
+  },
+  "circle_of_fifths/resources/images/fifths_on_a_line.svg": {
+    "title": "Fifths on a line",
+    "line": "Seven half steps from C to G, and from B to F♯ in the next octave"
   },
   "music_instruments/resources/html/guitar_fretboard.html": {
     "title": "Guitar fretboard",

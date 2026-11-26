@@ -10,6 +10,7 @@ import { familyOfPath } from './note-family-core.ts';
 import { BAR_FOLDER_NAME, PHRASE_FOLDER, isBarPath } from './phrase-core.ts';
 import type { FailKind } from './failed-prompt-core.ts';
 import type { GrammarVault } from './phrase-grammar-core.ts';
+import { vaultListsOf } from './description-wiring.ts';
 
 export const REVIEW_VIEW_TYPE = 'forge-review-queue';
 export const REVIEW_COMMAND_ID = 'review-unprocessed-sentences';
@@ -18,10 +19,7 @@ export const FAILURE_LIST_COMMAND_ID = 'copy-failure-list';
 export interface ReviewQueueSetup { enabled(): boolean; build(): string }
 export interface ReviewQueueHandle { port: FailedPromptsPort; open(): Promise<void> }
 
-const vaultOf = (app: App): GrammarVault => {
-  const names = (folder: string, melody = false): string[] => app.vault.getFiles().filter((f) => f.path.startsWith(`${folder}/`) && f.extension === 'md' && (!melody || app.metadataCache?.getFileCache?.(f)?.frontmatter?.melody === true)).map((f) => f.basename).filter((n) => n !== 'README');
-  return { bars: names(BAR_FOLDER_NAME), phrases: names(PHRASE_FOLDER), arrangements: names('arrangements'), compositions: names('compositions'), kits: names('kits'), melody: names(BAR_FOLDER_NAME, true), melodyPhrases: names(PHRASE_FOLDER, true) };          // 2026-11-24-1031
-};
+const vaultOf = (app: App): GrammarVault => vaultListsOf(app, true);
 
 class ReviewView extends ItemView {
   private tab: ReviewTab | null = null;

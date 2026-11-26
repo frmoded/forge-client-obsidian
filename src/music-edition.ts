@@ -136,7 +136,9 @@ export interface ListModel {
     track: typeof import('./failed-prompt-setup-core.ts').createTracker;
   };
   /** 2026-11-23-1030 (pitch in bars, Stage 1a): melody-bar-core.ts: a MELODY bar (a bar note whose json has `notes`, no `channels`). `read` gives its data or null (every rhythm bar and every other note: null); `template` is the text of a NEW melody bar. Lean: always null and ''. */
-  melody: { read(text: string): import('./melody-bar-core.ts').MelodyData | null; template: typeof import('./melody-bar-core.ts').melodyNoteTemplate };
+  melody: { read(text: string): import('./melody-bar-core.ts').MelodyData | null; template: typeof import('./melody-bar-core.ts').melodyNoteTemplate;
+    /** 2026-11-25-1042: the basenames in a folder whose note says `melody: true` (the four lists of the composers: the cache's word, or, while the cache has no front matter for a note, the session's own writes); `mark` records a write's text (the plugin's own writes of a note). Lean: the cache only, `mark` does nothing. */
+    names: typeof import('./melody-bar-core.ts').melodyNames; mark: typeof import('./melody-bar-core.ts').markMelody };
   /** 2026-11-20-1003: service-lines-core.ts: the sentence service as the FLUENT FRONT END: the extra request fields (the grammar table, the note's lines, the Score's bar numbers) and the reader of an answer of canonical LINES or one clarifying QUESTION (every line is checked by the grammar first). `fields` null = lean: nothing is added and every answer is LEGACY (read as it always was). */
   service: {
     fields(input: Parameters<typeof import('./service-lines-core.ts').linesRequestFields>[0]): ReturnType<typeof import('./service-lines-core.ts').linesRequestFields> | null;

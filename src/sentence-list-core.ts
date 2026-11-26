@@ -64,9 +64,9 @@ export function withSaid(line: string, said: string): string { const t = saidTex
 // ---- parse and render ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 const withStop = (t: string): string => (/[.!?]$/.test(t) ? t : `${t}.`);
-/** The sentences of a text, each with its full stop (the grammar's own splitter drops it); an arrangement's "Together." is the closing of its description, not one of them. What the composer splits a typed text into. */
+/** The sentences of a text, each with its full stop (the grammar's own splitter drops it; 2026-11-25-1042: a leading `please` / `Please,` and a trailing `, please` are not part of the sentence; 1042: `, then play` / ` and then play` is a full stop, and a stray `then` at the start of a later sentence is dropped); an arrangement's "Together." is the closing of its description, not one of them. What the composer splits a typed text into. */
 export function sentencesOfText(text: string, kind: ListKind): string[] {
-  return sentencesOf(text).map((s) => s.text).filter((t) => !(kind === 'arrangement' && TOGETHER.test(t))).map(withStop);
+  return sentencesOf(text.replace(/(?:,|\band)\s+(?=then\s+play\b)(?![^\[]*\]\])/gi, '. ')).map((s, i) => s.text.replace(/^please\b[\s,]*(?=\S)|[\s,]+please$/gi, '').replace(i === 0 ? /$^/ : /^then\s+(?!play\b)/i, '')).filter((t) => !(kind === 'arrangement' && TOGETHER.test(t))).map(withStop);
 }
 
 /** The Description section's text -> the list. A numbered list is read item by item (an item with two sentences is two lines; a wrapped item is one); anything else is the legacy paragraph. Never throws. */

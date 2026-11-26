@@ -26,6 +26,7 @@ export interface PhraseStructureHooks {
 import { isFileExistsError, type ScorePanelPlan } from './score-first-core.ts';
 import type { NotebookDomPorts } from './notebook-dom.ts';
 import { messageDelivery } from './score-first-messages-core.ts';
+import { vaultListsOf } from './description-wiring.ts';
 import { headerResync } from './header-resync.ts';
 import { SCORE_ZOOM_LEVELS, createZoomMemory } from './zoom-memory-core.ts';
 
@@ -151,10 +152,7 @@ export class PhraseView extends EditableFileView {
   }
 
   /** The notes a sentence of the list may name, as the description controller sees them (the strip's write replays the list against them). */
-  private vaultNames(): { bars: string[]; phrases: string[]; arrangements: string[]; compositions: string[]; kits: string[]; melody: string[]; melodyPhrases: string[] } {
-    const names = (folder: string, melody = false): string[] => this.app.vault.getFiles().filter((f) => f.path.startsWith(`${folder}/`) && (!melody || this.app.metadataCache?.getFileCache?.(f)?.frontmatter?.melody === true)).map((f) => f.basename).filter((n) => n !== 'README');          // 2026-11-24-1031: `melody` names the melody bars and phrases (their front matter says so)
-    return { bars: names('bars'), phrases: names('phrases'), arrangements: names('arrangements'), compositions: names('compositions'), kits: names('kits'), melody: names('bars', true), melodyPhrases: names('phrases', true) };
-  }
+  private vaultNames(): ReturnType<typeof vaultListsOf> { return vaultListsOf(this.app); }
 
   async onUnloadFile(file: TFile): Promise<void> {
     this.release();

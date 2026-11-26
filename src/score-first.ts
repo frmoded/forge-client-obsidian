@@ -20,7 +20,7 @@ import { BAR_FOLDER, createNewBar, isFileExistsError, newBarAvailable, scorePane
 import { messageDelivery } from './score-first-messages-core.ts';
 import { musicEdition } from './music-edition-selected.ts';
 import { refreshLine, refreshNoteLinks, refreshNotice } from './refresh-notes-core.ts';
-import { descriptionPortsFor } from './description-wiring.ts';
+import { descriptionPortsFor, vaultListsOf } from './description-wiring.ts';
 import { BAR_FOLDER_NAME, PHRASE_FOLDER, PHRASE_VIEW_TYPE, createNewMix, isBarPath, createNewMorph, createNewEmptyPhrase, createNewPhrase, createNewPhraseFromParams, isPhrasePath, type NewPhraseResult, newMixAvailable, newMorphAvailable, newPhraseAvailable, readPhraseKind, turnMixIntoMorph, turnMixIntoMorphAvailable, type PhraseParams } from './phrase-core.ts';
 import { computeArrangementScoreViaEngine, computeCompositionScoreViaEngine, computePhraseScoreViaEngine, morphChangesViaEngine } from './phrase-engine.ts';
 import { installNotePreflight, makeNotePreflight } from './note-preflight-core.ts';
@@ -135,7 +135,7 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
     createFolder: async () => { await app.vault.createFolder(BAR_FOLDER); },
     listBarBasenames: () => app.vault.getFiles().filter((f) => f.path.startsWith(`${BAR_FOLDER}/`)).map((f) => f.basename),
     exists: (p) => app.vault.getAbstractFileByPath(p) !== null,
-    create: (p, content) => app.vault.create(p, content),
+    create: async (p, content) => { const f = await app.vault.create(p, content); listModel.melody.mark(p, content); return f; },          // 2026-11-25-1042: a new melody bar is remembered while the cache has no front matter for it
     open: (file) => hooks.openRhythmNote(file),
     notify: (message) => { loggedNotice(message); },
   });
@@ -522,8 +522,7 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
       const prepareScoreNote = async (file: TFile): Promise<void> => {
         const family = familyOfPath(file.path);
         if (family === null || !hasNoCacheFence(await app.vault.read(file))) return;
-        const names = (folder: string, melody = false): string[] => app.vault.getFiles().filter((f) => f.path.startsWith(`${folder}/`) && (!melody || app.metadataCache?.getFileCache?.(f)?.frontmatter?.melody === true)).map((f) => f.basename).filter((n) => n !== 'README');
-        const vault = { bars: names(BAR_FOLDER_NAME), phrases: names(PHRASE_FOLDER), arrangements: names('arrangements'), compositions: names('compositions'), kits: names('kits'), melody: names(BAR_FOLDER_NAME, true), melodyPhrases: names(PHRASE_FOLDER, true) };          // 2026-11-24-1031: a melody phrase's own cache is repaired with the same lists
+        const vault = vaultListsOf(app);          // 2026-11-24-1031: a melody phrase's own cache is repaired with the same lists (2026-11-25-1042: one reading of them)
         await app.vault.process(file, (current) => repairForOpen(current, file.basename, family, vault));
         console.info(`[forge-open] computed the cache of ${file.path} (it had no json block)`);
       };
@@ -540,9 +539,9 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
       // 2026-11-13-1211: the ports are built by description-wiring.ts (no obsidian import) so a test runs this very mapping: settings -> askPlan / configured, folders -> bar and phrase names.
       const descriptions = createDescriptionController(descriptionPortsFor({
         read: async (p) => app.vault.read(noteFile(p)),
-        process: async (p, fn) => { await app.vault.process(noteFile(p), fn); },
+        process: async (p, fn) => { let out = ''; await app.vault.process(noteFile(p), (c) => (out = fn(c))); listModel.melody.mark(p, out); },          // 2026-11-25-1042: what the plugin wrote says whether the note is a melody note before the cache does
         basenamesIn: (folder) => app.vault.getFiles().filter((f) => f.path.startsWith(`${folder}/`)).map((f) => f.basename),
-        melodyIn: (folder) => app.vault.getFiles().filter((f) => f.path.startsWith(`${folder}/`) && app.metadataCache?.getFileCache?.(f)?.frontmatter?.melody === true).map((f) => f.basename),          // 2026-11-23-1030: a melody bar says so in its front matter (the phrase sentences read it synchronously; a host without a metadata cache has no melody bars)
+        melodyIn: (folder) => listModel.melody.names(app, folder),          // 2026-11-23-1030: a melody bar says so in its front matter (the phrase sentences read it synchronously; a host without a metadata cache has no melody bars)
         setTimer: (fn, ms) => window.setTimeout(fn, ms), clearTimer: (h) => window.clearTimeout(h as number),
         trace: (line) => { console.info(line); },
         warn: (line) => { console.warn(line); },
@@ -554,7 +553,7 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
         },
         confirm: (message) => new ConfirmModal(app, { title: 'Revert to generated', message, confirmText: 'Revert', cancelText: 'Keep my Python' }).openAndWait(),        // 2026-11-02-1155 (M16b): names what is lost
         // 2026-11-19-0992 (Duplicate [[bar_007]].): a copy is a NEW note, made by `create` (which refuses to overwrite: "File already exists." tries the next number); nothing is opened (the dialog's link opens it)
-        create: async (p, content) => { await app.vault.create(p, content); },
+        create: async (p, content) => { await app.vault.create(p, content); listModel.melody.mark(p, content); },
         exists: (p) => app.vault.getAbstractFileByPath(p) !== null,
         isAlreadyExists: isFileExistsError,
         // 2026-11-19-0992a (Cmd/Ctrl+Z takes a fresh copy back): L12 - Obsidian's trash NO-OPS on a note a tab still shows, so every tab that shows it is closed FIRST (a Beat Box, a Score, the text), then `vault.trash(file, true)` (the SYSTEM trash, recoverable),

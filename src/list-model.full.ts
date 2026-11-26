@@ -2,7 +2,7 @@
 // reaches this module, so none of the cores is in lean's main.js.
 import type { ListModel } from './music-edition.ts';
 import { createBarListWithMelody, LIST_MODEL_SENTINEL_MELODY_LIST_CONTROLLER } from './melody-list-controller.ts';
-import { LIST_MODEL_SENTINEL_MELODY_BAR_CORE, melodyNoteTemplate, readMelodyNote } from './melody-bar-core.ts';
+import { LIST_MODEL_SENTINEL_MELODY_BAR_CORE, markMelody, melodyNames, melodyNoteTemplate, readMelodyNote } from './melody-bar-core.ts';
 import { LIST_MODEL_SENTINEL_MELODY_GRAMMAR_CORE } from './melody-grammar-core.ts';
 import { LIST_MODEL_SENTINEL_MELODY_LIST_CORE } from './melody-list-core.ts';
 import { createBarBoxHost } from './bar-box-host-core.ts';
@@ -44,7 +44,7 @@ export const listModel: ListModel = {
   ],
   createBarList: createBarListWithMelody,          // 2026-11-23-1030: the rhythm bar's controller, untouched, and the melody bar's, each call sent to the kind the note is
   createBarBoxHost,
-  melody: { read: (text) => { const r = readMelodyNote(text); return r.ok ? r.value.data : null; }, template: melodyNoteTemplate },          // 2026-11-23-1030
+  melody: { read: (text) => { const r = readMelodyNote(text); return r.ok ? r.value.data : null; }, template: melodyNoteTemplate, names: melodyNames, mark: markMelody },          // 2026-11-23-1030
   withBarLines,
   duplicate: { readActionText, barNumberOf, barClickText, linkInsertion, idParts, resolveDuplicateTarget, duplicatePreviewLine, copyNoteText, createdLine, duplicateNote, undoCopy },
   steps: { annotate: annotateWithSteps, lineageOf: stepLineageOf },
