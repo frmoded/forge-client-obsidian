@@ -868,7 +868,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     let failure: string | null = null;
     try { await proc(path, (c) => { if (c !== from) { failure = 'The note changed while you were looking; ask again.'; return c; } return to; }); } catch (e) { failure = `${which === 'undo' ? 'Undo' : 'Redo'}: ${(e as Error)?.message ?? e}`; }
     if (failure !== null) { stackOf(path).clear(); say(path, { type: 'failed', message: failure }); return { ok: false, message: failure }; }
-    const message = which === 'undo' ? 'Taken back: the note is as it was before the Recipe change.' : 'Done again: the Recipe change is back.';
+    const message = which === 'undo' ? 'Taken back: the note is as it was before Forge.' : 'Done again: Forge is back.';
     told.delete(path); set(path, null); say(path, { type: 'notice', message }); await evaluate(path, false);                // a note with a hand-edited Recipe or Python says so again
     return { ok: true, message };
   }

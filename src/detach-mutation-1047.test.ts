@@ -169,10 +169,10 @@ test('1047 Forge over a hand-edited Recipe says `Forged.` in the dialog; its und
   assert.deepEqual(last(), ['notice', 'Forged.']);
   assert.ok(r.noticesInTab().at(-1)!.includes('Forged.'), 'on the tab');
   assert.equal((await r.ctl.undoLast(PATH)).ok, true); await r.settle();
-  assert.deepEqual(last(), ['notice', 'Taken back: the note is as it was before the Recipe change.']);
-  assert.ok(r.noticesInTab().at(-1)!.includes('Taken back: the note is as it was before the Recipe change.'), 'on the tab');
+  assert.deepEqual(last(), ['notice', 'Taken back: the note is as it was before Forge.']);          // 2026-11-27-1049z (deliberate): was "before the Recipe change"
+  assert.ok(r.noticesInTab().at(-1)!.includes('Taken back: the note is as it was before Forge.'), 'on the tab');          // 2026-11-27-1049z (deliberate)
   assert.equal((await r.ctl.redoLast(PATH)).ok, true); await r.settle();
-  assert.deepEqual(last(), ['notice', 'Done again: the Recipe change is back.']);
+  assert.deepEqual(last(), ['notice', 'Done again: Forge is back.']);          // 2026-11-27-1049z (deliberate): was "the Recipe change is back"
 });
 
 test('1047 after the undo of a Forge the pending Description edit it brings back is said to be held again (even when the editor had been there and back meanwhile)', async () => {

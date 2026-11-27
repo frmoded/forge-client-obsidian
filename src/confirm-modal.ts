@@ -16,6 +16,8 @@ export interface ConfirmModalOptions {
   message: string;
   confirmText?: string;
   cancelText?: string;
+  /** 2026-11-27-1049z: focus Cancel instead of the confirm button, so Enter cancels (for what cannot be undone). */
+  focusCancel?: boolean;
 }
 
 /** Obsidian Modal subclass that resolves a Promise<boolean> when the
@@ -74,7 +76,7 @@ export class ConfirmModal extends Modal {
       this.resolveOnce(true);
       this.close();
     });
-    confirmBtn.focus();
+    (this.opts.focusCancel ? cancelBtn : confirmBtn).focus();
   }
 
   onClose() {

@@ -551,7 +551,7 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
           app.workspace.iterateAllLeaves((leaf) => { const v = leaf.view as unknown as { file?: TFile | null; contentEl?: HTMLElement }; if (v?.file && v.contentEl && (familyOfPath(v.file.path) !== null || isBarPath(v.file.path))) out.push({ path: v.file.path, contentEl: v.contentEl, tab: plan === 'score' && SCORE_VIEW_TYPES.includes(leaf.view.getViewType()) || plan === 'score' && isBarPath(v.file.path) && leaf.view.getViewType() === RHYTHM_EDIT_VIEW_TYPE }); });   // 2026-11-12-1203: the docked prompt box lives on a score tab of the music edition only (the lean edition's tabs are as they were: P3). 2026-11-19-0993: and on a bar's Beat Box tab (its list is the bar grammar's)
           return out;
         },
-        confirm: (message) => new ConfirmModal(app, { title: 'Detach', message, confirmText: 'Detach', cancelText: 'Cancel' }).openAndWait(),        // 2026-11-26-1047: says it cannot be undone
+        confirm: (message) => new ConfirmModal(app, { title: 'Detach', message, confirmText: 'Detach', cancelText: 'Cancel', focusCancel: true }).openAndWait(),        // 2026-11-26-1047: says it cannot be undone (2026-11-27-1049z: so Enter cancels)
         // 2026-11-19-0992 (Duplicate [[bar_007]].): a copy is a NEW note, made by `create` (which refuses to overwrite: "File already exists." tries the next number); nothing is opened (the dialog's link opens it)
         create: async (p, content) => { await app.vault.create(p, content); listModel.melody.mark(p, content); },
         exists: (p) => app.vault.getAbstractFileByPath(p) !== null,

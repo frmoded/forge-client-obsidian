@@ -59,9 +59,9 @@ const forgedOver = async () => { const r = rig(); const a = r.pane(); const edit
 test('M3 undo and redo of a Forge write say what they did; undo refuses when the Recipe was hand-edited AGAIN since (the list is the same, the note is not): nothing is written and the entry is spent; a failing write says so', async () => {          // 2026-11-26-1047 (deliberate): the write was the rewrite from the script
   const { r } = await forgedOver();
   const undone = await r.ctl.undoLast(PATH);
-  assert.deepEqual([undone.ok, undone.message], [true, 'Taken back: the note is as it was before the Recipe change.']);          // 2026-11-23-1022 (deliberate): the Description and Recipe wording
+  assert.deepEqual([undone.ok, undone.message], [true, 'Taken back: the note is as it was before Forge.']);          // 2026-11-27-1049z (deliberate): was "before the Recipe change"
   const redone = await r.ctl.redoLast(PATH);
-  assert.deepEqual([redone.ok, redone.message], [true, 'Done again: the Recipe change is back.']);          // 2026-11-23-1022 (deliberate): the Description and Recipe wording
+  assert.deepEqual([redone.ok, redone.message], [true, 'Done again: Forge is back.']);          // 2026-11-27-1049z (deliberate): was "the Recipe change is back"
   // a write that fails on undo
   r.flags.fail = true; const bad = await r.ctl.undoLast(PATH);
   assert.deepEqual([bad.ok, bad.message], [false, 'Undo: disk full']); r.flags.fail = false;
