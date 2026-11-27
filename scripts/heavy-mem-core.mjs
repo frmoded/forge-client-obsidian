@@ -10,13 +10,17 @@ import { parsePs, parseSwapUsage, parseMemoryPressure, parseVmStat } from './dev
 export const DEFAULT_LIMITS = Object.freeze({
   rssMb: 6144,                // FORGE_HEAVY_RSS_MB            stop the run when its whole process tree holds more than this (6 GB)
   compressedRefuseMb: 8192,   // FORGE_HEAVY_COMPRESSED_MB     do not START while the memory compressor holds more than this (8 GB)
-  swapRefuseMb: 2048,         // FORGE_HEAVY_SWAP_MB           do not START while more swap than this is used (2 GB)
+  swapRefuseMb: 2048,         // FORGE_HEAVY_SWAP_MB           more swap than this (2 GB) refuses a START only with a sign of pressure (2026-11-26-1042z, swapCauses below) or when nothing says whether it is growing
   freePctMin: 35,             // FORGE_HEAVY_FREE_PCT          do not START while `memory_pressure` says the free percentage is under this (one extra signal, never the only one)
   compressedKillMb: 10240,    // FORGE_HEAVY_KILL_COMPRESSED_MB stop the run when the compressor passes this (10 GB: the freeze of 2026-11-20 happened at 10.7 to 11.2 GB, so a limit of 12 GB would never have fired)
   swapKillMb: 4096,           // FORGE_HEAVY_KILL_SWAP_MB      stop the run when used swap passes this (4 GB)
   pollMs: 500,                // FORGE_HEAVY_POLL_MS           how often the tree is looked at (a runaway grows 1 to 3 GB a second)
   sysEveryMs: 2000,           // FORGE_HEAVY_SYS_MS            how often the system numbers (compressor, swap) are read while a run is going
   alsoRunningMb: 500,         // FORGE_HEAVY_ALSO_MB           a program (or family of programs) at least this big is named in the refusal message
+  swapGrowMb: 256,            // FORGE_HEAVY_SWAP_GROW_MB      a sign: swap grew by more than this over the window (scaled down when the history is shorter than the window)
+  swapWindowS: 60,            // FORGE_HEAVY_SWAP_WINDOW_S     the window of that growth, seconds
+  swapinPagesPerS: 200,       // FORGE_HEAVY_SWAPIN_PPS        a sign: more pages a second than this are swapped back in (`Swapins:` of vm_stat, between the two readings)
+  sampleGapS: 10,             // FORGE_HEAVY_SAMPLE_GAP_S      seconds between the two readings taken when swap is over its level
 });
 export const EXIT_REFUSED = 75;     // the guard did not start the command (memory pressure high, wait)
 export const EXIT_STOPPED = 76;     // the guard started the command and stopped it (memory): not a test failure
@@ -34,6 +38,8 @@ export function limitsFromEnv(env = process.env, { rssMb } = {}) {
     compressedKillMb: Math.max(positive(env.FORGE_HEAVY_KILL_COMPRESSED_MB, d.compressedKillMb), compressedRefuseMb),
     swapKillMb: Math.max(positive(env.FORGE_HEAVY_KILL_SWAP_MB, d.swapKillMb), swapRefuseMb),
     pollMs: positive(env.FORGE_HEAVY_POLL_MS, d.pollMs), sysEveryMs: positive(env.FORGE_HEAVY_SYS_MS, d.sysEveryMs), alsoRunningMb: positive(env.FORGE_HEAVY_ALSO_MB, d.alsoRunningMb),
+    swapGrowMb: positive(env.FORGE_HEAVY_SWAP_GROW_MB, d.swapGrowMb), swapWindowS: positive(env.FORGE_HEAVY_SWAP_WINDOW_S, d.swapWindowS),
+    swapinPagesPerS: positive(env.FORGE_HEAVY_SWAPIN_PPS, d.swapinPagesPerS), sampleGapS: positive(env.FORGE_HEAVY_SAMPLE_GAP_S, d.sampleGapS),
   };
 }
 
@@ -100,9 +106,10 @@ export function tailTrend(samples, { fraction = 0.25, risePct = 10, minSamples =
 // ---- the machine ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 const pageCount = (t, name) => Number(new RegExp(`${name}:\\s+(\\d+)`).exec(String(t))?.[1] ?? 0);
+const counterOrNull = (t, name) => { const m = new RegExp(`${name}:\\s+(\\d+)`).exec(String(t)); return m ? Number(m[1]) : null; };   // a counter the text lacks is unknown, not 0
 /**
- * One reading of the machine from the text of its commands: { memsizeMb, swapTotalMb, swapUsedMb, compressedMb, freeMb, activeMb, inactiveMb, wiredMb, pages: { free, active, inactive, wired, compressor }, freePct }.
- * `compressedMb` is `Pages occupied by compressor` (what the cron logger prints as `compressed`): the RAM the compressor itself holds. A figure the text does not give is null.
+ * One reading of the machine from the text of its commands: { memsizeMb, swapTotalMb, swapUsedMb, compressedMb, freeMb, activeMb, inactiveMb, wiredMb, pages: { free, active, inactive, wired, compressor }, freePct, swapins }.
+ * `compressedMb` is `Pages occupied by compressor` (what the cron logger prints as `compressed`): the RAM the compressor itself holds. `swapins` is `Swapins:` of vm_stat: pages swapped back in since the boot. A figure the text does not give is null.
  */
 export function machineSnapshot({ memsize = '', swap = '', vmStat = '', pressure = '' } = {}) {
   const bytes = Number(String(memsize).trim());
@@ -114,7 +121,7 @@ export function machineSnapshot({ memsize = '', swap = '', vmStat = '', pressure
     memsizeMb: Number.isFinite(bytes) && bytes > 0 ? Math.round(bytes / 1048576) : null,
     swapTotalMb: sw ? Math.round(sw.totalMb) : null, swapUsedMb: sw ? Math.round(sw.usedMb) : null,
     compressedMb: vm ? vm.compressorMb : null, freeMb: vm ? vm.freeMb : null, activeMb: pages ? toMb(pages.active) : null, inactiveMb: vm ? vm.inactiveMb : null, wiredMb: vm ? vm.wiredMb : null,
-    pages, freePct: parseMemoryPressure(pressure),
+    pages, freePct: parseMemoryPressure(pressure), swapins: hasVm ? counterOrNull(vmStat, 'Swapins') : null,
   };
 }
 const show = (v, unit = 'MB') => (v === null || v === undefined ? 'unknown' : `${v} ${unit}`);
@@ -154,11 +161,71 @@ export const tsvLine = (s) => [s.tSec.toFixed(1), s.totalMb, s.count, s.top[0]?.
 
 // ---- the guard: refuse, stop ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-/** Why a run must not START now: [] when the machine is fine. `mem` is a machineSnapshot (any figure may be null: an unknown figure never refuses). */
-export function refusalReasons(mem, limits) {
+// 2026-11-26-1042z - the swap rule of a START. Until then used swap over its level (2048 MB) refused alone, and on 2026-11-26 it refused a quiet machine: 2279 MB, flat, the compressor at 2.4 GB (macOS gives swap back late). Now the level
+// refuses only WITH a sign of pressure: (a) it grew, (b) pages are being swapped back in, (c) the compressor holds more than half of its start limit, (d) the free percentage is low; or when nothing says whether it is growing (as before).
+const swapOverLevel = (mem, limits) => mem.swapUsedMb != null && mem.swapUsedMb > limits.swapRefuseMb;
+/** Signs (c) and (d): what ONE reading shows. */
+function swapPressure(mem, limits) {
+  const half = limits.compressedRefuseMb / 2, out = [];
+  if (mem.compressedMb != null && mem.compressedMb > half) out.push(`compressed memory ${mem.compressedMb} MB is over ${half} MB (half of the FORGE_HEAVY_COMPRESSED_MB limit)`);
+  if (mem.freePct != null && mem.freePct < limits.freePctMin) out.push(`the free percentage ${mem.freePct} % is under ${limits.freePctMin} %`);
+  return out;
+}
+/** Is a second reading needed? Only when swap is over its level and the first reading alone shows no sign (a reading that shows one is refused at once). */
+export const swapNeedsHistory = (mem, limits) => swapOverLevel(mem, limits) && swapPressure(mem, limits).length === 0;
+
+/** The file of scripts/dev/sample-memory.sh -> [{ atMs, swapUsedMb }] (its first column is the LOCAL time, its third the used swap in MB; the header, a row without the figure and a half-written line are dropped). */
+export function sampleLogPoints(text) {
+  const out = [];
+  for (const line of String(text).split('\n')) {
+    const m = /^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)\t[^\t]*\t(\d+)\t/.exec(line);
+    if (m) out.push({ atMs: new Date(m[1]).getTime(), swapUsedMb: Number(m[2]) });
+  }
+  return out;
+}
+/**
+ * What the swap has been doing: from two readings `first` (taken at `atMs`) and `second` (`gapS` seconds later) and from the sample log's points (used only when 2 or more of them are inside the window that ends at the second reading).
+ * { growMb, spanS, thresholdMb, swapinsPerS }: growMb = the latest swap figure minus the lowest one of the history (null when there is no history: no log and no second figure); thresholdMb = swapGrowMb, scaled down when the history covers
+ * less than the window; swapinsPerS = pages swapped in a second between the two readings (null when a reading lacks the counter, or it went backwards). The log has no such counter.
+ */
+export function swapTrend({ first, second, gapS, atMs = 0, logPoints = [] }, limits) {
+  const endMs = atMs + gapS * 1000;
+  const inWindow = logPoints.filter((p) => p.atMs >= endMs - limits.swapWindowS * 1000 && p.atMs <= endMs);
+  const log = inWindow.length >= 2 ? inWindow : [];
+  const swapinsPerS = first?.swapins != null && second?.swapins != null && second.swapins >= first.swapins ? (second.swapins - first.swapins) / gapS : null;
+  const secondKnown = second?.swapUsedMb != null;
+  if (log.length === 0 && !secondKnown) return { growMb: null, spanS: null, thresholdMb: null, swapinsPerS };
+  const points = [...log];
+  if (first?.swapUsedMb != null) points.push({ atMs, swapUsedMb: first.swapUsedMb });
+  if (secondKnown) points.push({ atMs: endMs, swapUsedMb: second.swapUsedMb });
+  points.sort((a, b) => a.atMs - b.atMs);
+  const latest = points[points.length - 1];
+  const spanS = (latest.atMs - points[0].atMs) / 1000;
+  return { growMb: latest.swapUsedMb - Math.min(...points.map((p) => p.swapUsedMb)), spanS, thresholdMb: limits.swapGrowMb * Math.min(1, spanS / limits.swapWindowS), swapinsPerS };
+}
+const oneDecimal = (v) => Math.round(v * 10) / 10;
+/** The end of the swap refusal, or null when this swap level does not refuse. `trend` is a swapTrend; without one (a caller with a single reading) the level refuses, as before 1042z. */
+function swapCauses(mem, limits, trend) {
+  const signs = [];
+  if (trend?.growMb != null && trend.growMb > trend.thresholdMb) signs.push(`it grew +${trend.growMb} MB in ${oneDecimal(trend.spanS)} s (more than +${Math.floor(trend.thresholdMb)} MB: FORGE_HEAVY_SWAP_GROW_MB per FORGE_HEAVY_SWAP_WINDOW_S)`);
+  if (trend?.swapinsPerS != null && trend.swapinsPerS > limits.swapinPagesPerS) signs.push(`swap-ins run at ${Math.ceil(trend.swapinsPerS)} pages/s (more than ${limits.swapinPagesPerS}: FORGE_HEAVY_SWAPIN_PPS)`);
+  signs.push(...swapPressure(mem, limits));
+  if (signs.length > 0) return signs.map((s) => `, and ${s}`).join('');
+  if (trend?.growMb != null) return null;
+  return trend?.why ? `, and nothing says whether it is growing (${trend.why}): refused on the level` : '';
+}
+/** The one line of a start that a swap level over its limit did NOT refuse. */
+export function swapStartLine(mem, limits, trend) {
+  const skipped = trend.swapinsPerS === null ? ' (swap-ins not read: that signal was skipped)' : '';
+  return `heavy-guard: swap ${mem.swapUsedMb} MB is over ${limits.swapRefuseMb} MB but flat (+${trend.growMb} MB in ${oneDecimal(trend.spanS)} s), compressed ${show(mem.compressedMb)}: starting${skipped}`;
+}
+
+/** Why a run must not START now: [] when the machine is fine. `mem` is a machineSnapshot (any figure may be null: an unknown figure never refuses); `trend` (a swapTrend) is what the swap has been doing, when it was looked at. */
+export function refusalReasons(mem, limits, trend) {
   const why = [];
   if (mem.compressedMb != null && mem.compressedMb > limits.compressedRefuseMb) why.push(`compressed memory ${mem.compressedMb} MB is over ${limits.compressedRefuseMb} MB (FORGE_HEAVY_COMPRESSED_MB)`);
-  if (mem.swapUsedMb != null && mem.swapUsedMb > limits.swapRefuseMb) why.push(`swap used ${mem.swapUsedMb} MB is over ${limits.swapRefuseMb} MB (FORGE_HEAVY_SWAP_MB)`);
+  const swap = swapOverLevel(mem, limits) ? swapCauses(mem, limits, trend) : null;
+  if (swap !== null) why.push(`swap used ${mem.swapUsedMb} MB is over ${limits.swapRefuseMb} MB (FORGE_HEAVY_SWAP_MB)${swap}`);
   if (mem.freePct != null && mem.freePct < limits.freePctMin) why.push(`memory_pressure free percentage ${mem.freePct} % is under ${limits.freePctMin} % (FORGE_HEAVY_FREE_PCT)`);
   return why;
 }

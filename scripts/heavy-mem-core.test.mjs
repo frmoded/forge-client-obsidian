@@ -7,6 +7,7 @@ import { test } from 'node:test';
 import {
   DEFAULT_LIMITS, alsoRunning, alsoRunningLine, createGuard, formatReport, labelOf, limitsFromEnv, machineLines, machineSnapshot, parsePs, peakOf, refusalReasons, refusalText, sampleOf, stopReason, stopText, tailTrend, treeRows, treeStats, tsvLine,
 } from './heavy-mem-core.mjs';
+import * as core from './heavy-mem-core.mjs';
 
 // a process table as `ps -Ao pid,ppid,rss,command` prints it: 100 is the command, 101 and 102 its children, 103 a grandchild; 200 and 201 are somebody else's tree; 1 is launchd
 const PS = `  PID  PPID    RSS COMMAND
@@ -130,18 +131,20 @@ test('formatReport: the peak in MB, the five biggest at the peak, the tail verdi
 
 // ---- the guard's rules ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 test('the limits: the defaults, each overridden by its variable, a caller\'s tree cap below the user\'s FORGE_HEAVY_RSS_MB, junk ignored, a stop limit never under its refuse limit', () => {
-  assert.deepEqual(limitsFromEnv({}), { rssMb: 6144, compressedRefuseMb: 8192, swapRefuseMb: 2048, freePctMin: 35, compressedKillMb: 10240, swapKillMb: 4096, pollMs: 500, sysEveryMs: 2000, alsoRunningMb: 500 });
+  // 2026-11-26-1042z (deliberate): four numbers more (the signs that make a swap level refuse)
+  assert.deepEqual(limitsFromEnv({}), { rssMb: 6144, compressedRefuseMb: 8192, swapRefuseMb: 2048, freePctMin: 35, compressedKillMb: 10240, swapKillMb: 4096, pollMs: 500, sysEveryMs: 2000, alsoRunningMb: 500, swapGrowMb: 256, swapWindowS: 60, swapinPagesPerS: 200, sampleGapS: 10 });
   assert.equal(limitsFromEnv({}, { rssMb: 12288 }).rssMb, 12288, 'a caller\'s own default for its tree');
   assert.equal(limitsFromEnv({ FORGE_HEAVY_RSS_MB: '150' }, { rssMb: 12288 }).rssMb, 150, 'the user\'s word wins');
-  const all = limitsFromEnv({ FORGE_HEAVY_RSS_MB: '1', FORGE_HEAVY_COMPRESSED_MB: '2', FORGE_HEAVY_SWAP_MB: '3', FORGE_HEAVY_FREE_PCT: '4', FORGE_HEAVY_KILL_COMPRESSED_MB: '5', FORGE_HEAVY_KILL_SWAP_MB: '6', FORGE_HEAVY_POLL_MS: '7', FORGE_HEAVY_SYS_MS: '8', FORGE_HEAVY_ALSO_MB: '9' });
-  assert.deepEqual(all, { rssMb: 1, compressedRefuseMb: 2, swapRefuseMb: 3, freePctMin: 4, compressedKillMb: 5, swapKillMb: 6, pollMs: 7, sysEveryMs: 8, alsoRunningMb: 9 });
+  const all = limitsFromEnv({ FORGE_HEAVY_RSS_MB: '1', FORGE_HEAVY_COMPRESSED_MB: '2', FORGE_HEAVY_SWAP_MB: '3', FORGE_HEAVY_FREE_PCT: '4', FORGE_HEAVY_KILL_COMPRESSED_MB: '5', FORGE_HEAVY_KILL_SWAP_MB: '6', FORGE_HEAVY_POLL_MS: '7', FORGE_HEAVY_SYS_MS: '8', FORGE_HEAVY_ALSO_MB: '9', FORGE_HEAVY_SWAP_GROW_MB: '10', FORGE_HEAVY_SWAP_WINDOW_S: '11', FORGE_HEAVY_SWAPIN_PPS: '12', FORGE_HEAVY_SAMPLE_GAP_S: '0.5' });
+  assert.deepEqual(all, { rssMb: 1, compressedRefuseMb: 2, swapRefuseMb: 3, freePctMin: 4, compressedKillMb: 5, swapKillMb: 6, pollMs: 7, sysEveryMs: 8, alsoRunningMb: 9, swapGrowMb: 10, swapWindowS: 11, swapinPagesPerS: 12, sampleGapS: 0.5 });
   assert.equal(limitsFromEnv({ FORGE_HEAVY_RSS_MB: 'abc', FORGE_HEAVY_SWAP_MB: '-5', FORGE_HEAVY_COMPRESSED_MB: '' }).rssMb, 6144);
   assert.equal(limitsFromEnv({ FORGE_HEAVY_SWAP_MB: '-5' }).swapRefuseMb, 2048);
   assert.equal(limitsFromEnv({ FORGE_HEAVY_COMPRESSED_MB: '20000' }).compressedKillMb, 20000, 'a raised refuse limit raises the stop limit with it');
   assert.equal(limitsFromEnv({ FORGE_HEAVY_SWAP_MB: '9000' }).swapKillMb, 9000);
 });
 
-test('refusalReasons: compressed over 8 GB, swap over 2 GB, free percentage under 35 - each alone refuses; an unknown figure never does; the free percentage alone is NOT what decides when the compressor says otherwise', () => {
+// 2026-11-26-1042z (deliberate): "swap over 2 GB alone refuses" now holds only WITHOUT a history of the swap (the call has none here); with a history that is flat it does not (the 1042z tests below)
+test('refusalReasons without a swap history: compressed over 8 GB, swap over 2 GB, free percentage under 35 - each alone refuses; an unknown figure never does; the free percentage alone is NOT what decides when the compressor says otherwise', () => {
   const lim = limitsFromEnv({});
   assert.deepEqual(refusalReasons({ compressedMb: 4000, swapUsedMb: 100, freePct: 72 }, lim), []);
   assert.match(refusalReasons({ compressedMb: 9000, swapUsedMb: 0, freePct: 90 }, lim).join(), /compressed memory 9000 MB is over 8192 MB/);
@@ -210,7 +213,7 @@ test('createGuard: feeds the rule from a process table the caller already has; t
 
 test('the numbers in the header of scripts/heavy-guard.sh are the numbers of DEFAULT_LIMITS (one table, no drift)', () => {
   const header = fs.readFileSync(path.join(import.meta.dirname, 'heavy-guard.sh'), 'utf8').split('\n').filter((l) => l.startsWith('#')).join('\n');
-  const rowFor = (label, value, variable) => assert.match(header, new RegExp(`${label}\\s+${value}\\s*(MB|%|ms)\\s+${variable}`), `${label}: ${value} ${variable}`);
+  const rowFor = (label, value, variable) => assert.match(header, new RegExp(`${label}\\s+${value}\\s*(MB|%|ms|s|pages/s)\\s+${variable}`), `${label}: ${value} ${variable}`);
   rowFor('tree cap', DEFAULT_LIMITS.rssMb, 'FORGE_HEAVY_RSS_MB');
   rowFor('refuse: compressed', DEFAULT_LIMITS.compressedRefuseMb, 'FORGE_HEAVY_COMPRESSED_MB');
   rowFor('refuse: swap used', DEFAULT_LIMITS.swapRefuseMb, 'FORGE_HEAVY_SWAP_MB');
@@ -219,4 +222,85 @@ test('the numbers in the header of scripts/heavy-guard.sh are the numbers of DEF
   rowFor('stop: swap used', DEFAULT_LIMITS.swapKillMb, 'FORGE_HEAVY_KILL_SWAP_MB');
   rowFor('look every', DEFAULT_LIMITS.pollMs, 'FORGE_HEAVY_POLL_MS');
   rowFor('named in "also running"', DEFAULT_LIMITS.alsoRunningMb, 'FORGE_HEAVY_ALSO_MB');
+  // 2026-11-26-1042z (deliberate): the four numbers of the new start rule, and the variable that names a sample log
+  rowFor('refuse: swap growth', DEFAULT_LIMITS.swapGrowMb, 'FORGE_HEAVY_SWAP_GROW_MB');
+  rowFor('swap growth window', DEFAULT_LIMITS.swapWindowS, 'FORGE_HEAVY_SWAP_WINDOW_S');
+  rowFor('refuse: swap-ins', DEFAULT_LIMITS.swapinPagesPerS, 'FORGE_HEAVY_SWAPIN_PPS');
+  rowFor('second sample after', DEFAULT_LIMITS.sampleGapS, 'FORGE_HEAVY_SAMPLE_GAP_S');
+  assert.match(header, /FORGE_HEAVY_SAMPLE_LOG/);
+});
+
+// ---- 2026-11-26-1042z (deliberate): a swap LEVEL alone no longer refuses a start ------------------------------------------------------------------------------------------------------------------------------------------------
+test('1042z: machineSnapshot reads the `Swapins:` counter of vm_stat (pages swapped in since the boot); a vm_stat without that line, or none, says null', () => {
+  const withCounter = `${VM_STAT}Swapins:                                  613767.\nSwapouts:                                1050327.\n`;
+  assert.equal(machineSnapshot({ vmStat: withCounter }).swapins, 613767);
+  assert.equal(machineSnapshot({ vmStat: VM_STAT }).swapins, null, 'no such line: unknown, not 0');
+  assert.equal(machineSnapshot({}).swapins, null);
+});
+
+const at = (h, m, s) => new Date(2026, 10, 26, h, m, s).getTime();   // the sampler writes the LOCAL time without a zone
+const LOG = [
+  'time\tcompressor_mb\tswap_used_mb\tfree_mb\tchrome_rss_mb',
+  '2026-11-26T12:58:50\t2400\t900\t900\t1',
+  '2026-11-26T12:59:10\t2400\t1700\t900\t1',
+  '2026-11-26T12:59:30\t2400\t\t900\t1',
+  '2026-11-26T12:59:50\t2400\t2000\t900\t1',
+  '2026-11-26T13:00:30\t2400\t9999\t900\t1',
+  '2026-11-26T13:00:00\t2400\t22',
+].join('\n');
+test('1042z: sampleLogPoints takes the time and the swap column of the sampler\'s file; the header, a row with no swap figure and a half-written last line are dropped', () => {
+  assert.deepEqual(core.sampleLogPoints(LOG), [{ atMs: at(12, 58, 50), swapUsedMb: 900 }, { atMs: at(12, 59, 10), swapUsedMb: 1700 }, { atMs: at(12, 59, 50), swapUsedMb: 2000 }, { atMs: at(13, 0, 30), swapUsedMb: 9999 }]);
+  assert.deepEqual(core.sampleLogPoints(''), []);
+});
+
+test('1042z: swapTrend: growth is the latest swap minus the LOWEST in the window; the log counts only with 2 or more samples inside the window; the threshold is scaled to the time the history covers; swap-ins per second come from the two readings', () => {
+  const lim = limitsFromEnv({});
+  const two = core.swapTrend({ first: { swapUsedMb: 2300, swapins: 1000 }, second: { swapUsedMb: 2300, swapins: 3000 }, gapS: 10, atMs: at(13, 0, 0) }, lim);
+  assert.deepEqual([two.growMb, two.spanS, Math.floor(two.thresholdMb), two.swapinsPerS], [0, 10, 42, 200]);
+  // the log: 12:59:10 and 12:59:50 are inside the 60 s before 13:00:10; 12:58:50 and 13:00:30 are not
+  const logged = core.swapTrend({ first: { swapUsedMb: 2300 }, second: { swapUsedMb: 2300 }, gapS: 10, atMs: at(13, 0, 0), logPoints: core.sampleLogPoints(LOG) }, lim);
+  assert.deepEqual([logged.growMb, logged.spanS, logged.thresholdMb, logged.swapinsPerS], [600, 60, 256, null]);
+  // one sample inside the window is no log history: the two readings alone
+  const one = core.swapTrend({ first: { swapUsedMb: 2300 }, second: { swapUsedMb: 2300 }, gapS: 10, atMs: at(13, 0, 0), logPoints: [{ atMs: at(12, 59, 50), swapUsedMb: 100 }] }, lim);
+  assert.deepEqual([one.growMb, one.spanS], [0, 10]);
+  // it fell: that is not growth. It dipped and came back: that is
+  assert.equal(core.swapTrend({ first: { swapUsedMb: 2900 }, second: { swapUsedMb: 2300 }, gapS: 10, atMs: 0 }, lim).growMb, 0);
+  const dip = core.swapTrend({ first: { swapUsedMb: 2300 }, second: { swapUsedMb: 2300 }, gapS: 10, atMs: at(13, 0, 0), logPoints: [{ atMs: at(12, 59, 20), swapUsedMb: 2300 }, { atMs: at(12, 59, 40), swapUsedMb: 1900 }] }, lim);
+  assert.equal(dip.growMb, 400);
+  // no second reading and no log: no history. A counter that went backwards (a reboot) is unknown
+  assert.equal(core.swapTrend({ first: { swapUsedMb: 2300, swapins: 5 }, second: { swapUsedMb: null }, gapS: 10, atMs: 0 }, lim).growMb, null);
+  assert.equal(core.swapTrend({ first: { swapUsedMb: 2300, swapins: 500 }, second: { swapUsedMb: 2300, swapins: 5 }, gapS: 10, atMs: 0 }, lim).swapinsPerS, null);
+  // a gap longer than the window does not raise the threshold
+  assert.equal(core.swapTrend({ first: { swapUsedMb: 2300 }, second: { swapUsedMb: 2300 }, gapS: 120, atMs: 0 }, lim).thresholdMb, 256);
+});
+
+test('1042z: refusalReasons with a history: a swap level refuses only with a sign (growth, swap-ins, compressor over half its limit, low free percentage); each sign is named; on a limit is not over it', () => {
+  const lim = limitsFromEnv({});
+  const flat = { growMb: 0, spanS: 60, thresholdMb: 256, swapinsPerS: 0 };
+  const mem = { compressedMb: 2426, swapUsedMb: 2300, freePct: 81 };
+  assert.deepEqual(refusalReasons(mem, lim, flat), []);
+  assert.deepEqual(refusalReasons(mem, lim, { ...flat, growMb: 256, swapinsPerS: 200 }), [], 'exactly on the growth and swap-in limits');
+  assert.deepEqual(refusalReasons({ ...mem, compressedMb: 4096, freePct: 35 }, lim, flat), [], 'exactly half the compressor limit, exactly the free minimum');
+  assert.deepEqual(refusalReasons(mem, lim, { ...flat, growMb: 257 }), ['swap used 2300 MB is over 2048 MB (FORGE_HEAVY_SWAP_MB), and it grew +257 MB in 60 s (more than +256 MB: FORGE_HEAVY_SWAP_GROW_MB per FORGE_HEAVY_SWAP_WINDOW_S)']);
+  assert.deepEqual(refusalReasons(mem, lim, { ...flat, swapinsPerS: 200.2 }), ['swap used 2300 MB is over 2048 MB (FORGE_HEAVY_SWAP_MB), and swap-ins run at 201 pages/s (more than 200: FORGE_HEAVY_SWAPIN_PPS)']);
+  assert.deepEqual(refusalReasons({ ...mem, compressedMb: 4097 }, lim, flat), ['swap used 2300 MB is over 2048 MB (FORGE_HEAVY_SWAP_MB), and compressed memory 4097 MB is over 4096 MB (half of the FORGE_HEAVY_COMPRESSED_MB limit)']);
+  assert.deepEqual(refusalReasons({ ...mem, freePct: 34 }, lim, flat), ['swap used 2300 MB is over 2048 MB (FORGE_HEAVY_SWAP_MB), and the free percentage 34 % is under 35 %', 'memory_pressure free percentage 34 % is under 35 % (FORGE_HEAVY_FREE_PCT)']);
+  // half of the limit IN FORCE
+  assert.deepEqual(refusalReasons({ ...mem, compressedMb: 4097 }, limitsFromEnv({ FORGE_HEAVY_COMPRESSED_MB: '9000' }), flat), []);
+  // two signs, both named
+  assert.match(refusalReasons({ ...mem, compressedMb: 5000 }, lim, { ...flat, growMb: 600 }).join(), /it grew \+600 MB in 60 s .*, and compressed memory 5000 MB is over 4096 MB/);
+  // a history that says nothing: the level, as before, and why
+  assert.deepEqual(refusalReasons(mem, lim, { growMb: null, swapinsPerS: null, why: 'nothing to compare with' }), ['swap used 2300 MB is over 2048 MB (FORGE_HEAVY_SWAP_MB), and nothing says whether it is growing (nothing to compare with): refused on the level']);
+});
+
+test('1042z (8): every KILL limit is what it was: tree 6144, compressor 10240, swap 4096, also with the new variables set and with the start level raised to 3072', () => {
+  for (const env of [{}, { FORGE_HEAVY_SWAP_GROW_MB: '9999', FORGE_HEAVY_SWAP_WINDOW_S: '1', FORGE_HEAVY_SWAPIN_PPS: '999999', FORGE_HEAVY_SAMPLE_GAP_S: '1' }, { FORGE_HEAVY_SWAP_MB: '3072' }]) {
+    const lim = limitsFromEnv(env);
+    assert.deepEqual([lim.rssMb, lim.compressedKillMb, lim.swapKillMb], [6144, 10240, 4096], JSON.stringify(env));
+    assert.deepEqual([lim.compressedRefuseMb, lim.freePctMin], [8192, 35]);
+    assert.equal(stopReason({ treeMb: 6144, mem: { compressedMb: 10240, swapUsedMb: 4096 } }, lim), null);
+    assert.match(stopReason({ treeMb: 6145, mem: {} }, lim), /over the 6144 MB cap/);
+    assert.match(stopReason({ treeMb: 1, mem: { compressedMb: 10241 } }, lim), /over 10240 MB/);
+    assert.match(stopReason({ treeMb: 1, mem: { swapUsedMb: 4097 } }, lim), /over 4096 MB/);
+  }
 });

@@ -5,10 +5,11 @@
 //   node scripts/heavy-guard.mjs --limits       the limits in force (defaults and what the environment changes), one per line
 // As a module it gives the in-process tools (the real-Chrome helper, `npm test`'s runner, the mutation runner) the same three questions: `guardEnabled`, `checkStart`, and `createGuard` (heavy-mem-core.mjs) fed with a process table they already have.
 import { spawn } from 'node:child_process';
+import fs from 'node:fs';
 import os from 'node:os';
 import { pathToFileURL } from 'node:url';
 import { killTree } from './dev/proc-tree.mjs';
-import { EXIT_REFUSED, EXIT_STOPPED, alsoRunning, alsoRunningLine, createGuard, limitsFromEnv, refusalReasons, refusalText, treeRows, waitingLine } from './heavy-mem-core.mjs';
+import { EXIT_REFUSED, EXIT_STOPPED, alsoRunning, alsoRunningLine, createGuard, limitsFromEnv, refusalReasons, refusalText, sampleLogPoints, swapNeedsHistory, swapStartLine, swapTrend, treeRows, waitingLine } from './heavy-mem-core.mjs';
 import { readMachine, readProcesses, readProcessesForNaming } from './heavy-mem-read.mjs';
 
 /**
@@ -28,13 +29,57 @@ export function guardEnabled(env = process.env) {
  */
 export const guardWanted = (env = process.env) => guardEnabled(env) && !env.FORGE_HEAVY_GUARDED;
 
-/** The start check: { refuse: false } or { refuse: true, text, reasons } (the text names the big programs that are running too: a report, never a reason to refuse on its own). */
-export function checkStart({ env = process.env, what = 'heavy run', rssMb, readMem = () => readMachine(env), readRows = () => readProcessesForNaming(env), exclude = new Set([process.pid]) } = {}) {
+/**
+ * 2026-11-26-1042z: the sampler file named by FORGE_HEAVY_SAMPLE_LOG (scripts/dev/sample-memory.sh writes only where its command line says, so there is no default): its last 64 KB as text; '' when none is named or it cannot be read.
+ */
+export function readSampleLog(env = process.env) {
+  const file = env.FORGE_HEAVY_SAMPLE_LOG;
+  if (!file) return '';
+  let fd;
+  try {
+    fd = fs.openSync(file, 'r');
+    const size = fs.fstatSync(fd).size, buf = Buffer.alloc(Math.min(size, 65_536));
+    const read = fs.readSync(fd, buf, 0, buf.length, size - buf.length);
+    return buf.toString('utf8', 0, read);
+  } catch { return ''; } finally { if (fd !== undefined) fs.closeSync(fd); }
+}
+const sleepBlocking = (ms) => { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); };
+
+/** The first reading of a start; `gapMs` above 0 means: swap is over its level and a second reading is needed that much later (2026-11-26-1042z). */
+function firstLook({ env, rssMb, readMem, now }) {
   const limits = limitsFromEnv(env, { rssMb });
-  const reasons = refusalReasons(readMem(), limits);
-  if (reasons.length === 0) return { refuse: false, limits };
+  const mem = readMem();
+  return { limits, mem, atMs: now(), gapMs: swapNeedsHistory(mem, limits) ? Math.round(limits.sampleGapS * 1000) : 0 };
+}
+/** The verdict on the reading(s). The LATEST figure of each kind is judged; one the second reading did not give keeps the first one's (so a second reading that fails never lets a level through). */
+function judge(look, second, { env, what, readRows, readLog, exclude, print }) {
+  const { limits } = look;
+  let { mem } = look, trend;
+  if (second !== null) {
+    trend = swapTrend({ first: look.mem, second, gapS: look.gapMs / 1000, atMs: look.atMs, logPoints: sampleLogPoints(readLog(env)) }, limits);
+    if (trend.growMb === null) trend.why = `${env.FORGE_HEAVY_SAMPLE_LOG ? `${env.FORGE_HEAVY_SAMPLE_LOG} has fewer than 2 samples in the last ${limits.swapWindowS} s` : 'FORGE_HEAVY_SAMPLE_LOG is not set'} and the second reading gave no swap figure`;
+    mem = { ...mem, ...Object.fromEntries(Object.entries(second).filter(([, v]) => v !== null && v !== undefined)) };
+  }
+  const reasons = refusalReasons(mem, limits, trend);
+  if (reasons.length === 0) {
+    if (trend && mem.swapUsedMb > limits.swapRefuseMb) print(swapStartLine(mem, limits, trend));
+    return { refuse: false, limits, mem };
+  }
   const also = alsoRunningLine(alsoRunning(readRows(), { minMb: limits.alsoRunningMb, exclude }));
-  return { refuse: true, limits, reasons, text: refusalText({ reasons, also, what }) };
+  return { refuse: true, limits, mem, reasons, text: refusalText({ reasons, also, what }) };
+}
+const startOptions = ({ env = process.env, what = 'heavy run', rssMb, readMem = () => readMachine(env), readRows = () => readProcessesForNaming(env), readLog = readSampleLog, exclude = new Set([process.pid]), now = Date.now, print = (l) => console.error(l) }) => ({ env, what, rssMb, readMem, readRows, readLog, exclude, now, print });
+
+/**
+ * The start check: { refuse: false } or { refuse: true, text, reasons } (the text names the big programs that are running too: a report, never a reason to refuse on its own). When swap is over its level and the first reading shows no sign of
+ * pressure it BLOCKS for FORGE_HEAVY_SAMPLE_GAP_S (10 s) and reads again (2026-11-26-1042z); a start that the level did not refuse prints one line saying so.
+ */
+export function checkStart({ sleepSync = sleepBlocking, ...given } = {}) {
+  const o = startOptions(given);
+  const look = firstLook(o);
+  let second = null;
+  if (look.gapMs > 0) { sleepSync(look.gapMs); second = o.readMem(); }
+  return judge(look, second, o);
 }
 
 /**
@@ -48,20 +93,28 @@ export function waitMinutesFrom(env = process.env, flag) {
 export function waitIntervalMs(env = process.env) { const n = Number(env.FORGE_HEAVY_WAIT_POLL_MS); return env.FORGE_HEAVY_WAIT_POLL_MS !== undefined && env.FORGE_HEAVY_WAIT_POLL_MS !== '' && Number.isFinite(n) && n > 0 ? n : 30_000; }
 
 /**
- * The start check that may WAIT (2026-11-24-1037): checkStart; when it refuses and `waitMinutes` is above 0, print one `waiting for memory: ...` line (waitingLine), sleep `intervalMs`, read again, for up to `waitMinutes` minutes in all; the first
- * reading under the limits starts the job ({ refuse: false }); when the minutes are over, the answer is the last refusal, the same text as always (the caller exits 75). The limits are the ones checkStart uses: waiting never lowers or raises one.
+ * The start check that may WAIT (2026-11-24-1037): checkStart's rule; when it refuses and `waitMinutes` is above 0, print one `waiting for memory: ...` line (waitingLine), sleep `intervalMs`, read again, for up to `waitMinutes` minutes in all; the first
+ * look that passes starts the job ({ refuse: false }); when the minutes are over, the answer is the last refusal, the same text as always (the caller exits 75). The limits are the ones checkStart uses: waiting never lowers or raises one.
+ * 2026-11-26-1042z: every look applies the whole start rule, the second reading too; the seconds between a look's two readings count as waiting.
  * `readMem`, `sleep` and `print` are injectable (the tests wait for nothing).
  */
-export async function startOrWait({ env = process.env, what = 'heavy run', rssMb, waitMinutes = 0, intervalMs = waitIntervalMs(env), readMem = () => readMachine(env), readRows = () => readProcessesForNaming(env), exclude = new Set([process.pid]), sleep = (ms) => new Promise((r) => setTimeout(r, ms)), print = (l) => console.error(l) } = {}) {
-  let mem = null;
-  const look = () => checkStart({ env, what, rssMb, readMem: () => (mem = readMem()), readRows, exclude });
-  let start = look();
+export async function startOrWait({ waitMinutes = 0, intervalMs, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), ...given } = {}) {
+  const o = startOptions(given);
+  const every = intervalMs ?? waitIntervalMs(o.env);
+  let waitedMs = 0;
+  const look = async () => {
+    const first = firstLook(o);
+    let second = null;
+    if (first.gapMs > 0) { await sleep(first.gapMs); waitedMs += first.gapMs; second = o.readMem(); }
+    return judge(first, second, o);
+  };
+  let start = await look();
   const totalMs = waitMinutes * 60_000;
-  for (let waitedMs = 0; start.refuse && waitedMs < totalMs;) {
-    print(`${waitingLine({ mem, limits: start.limits, elapsedMin: waitedMs / 60_000, totalMin: waitMinutes })}`);
-    const step = Math.min(intervalMs, totalMs - waitedMs);
+  while (start.refuse && waitedMs < totalMs) {
+    o.print(waitingLine({ mem: start.mem, limits: start.limits, elapsedMin: waitedMs / 60_000, totalMin: waitMinutes }));
+    const step = Math.min(every, totalMs - waitedMs);
     await sleep(step); waitedMs += step;
-    start = look();
+    start = await look();
   }
   return start;
 }
