@@ -18,8 +18,8 @@
 #
 # SWAP (2026-11-26-1042z)   WHY: after about a day of refusals (2026-11-25 and 26) the level alone still refused a quiet machine on 11-26: 2279 MB used, flat, the compressor at 2.4 GB (macOS gives swap back late). NOW swap over 2048 MB refuses a start only when at least one holds:
 #      (a) it grew by more than 256 MB over 60 s (the latest figure minus the lowest one; a shorter history scales the 256 MB down, 10 s: 42 MB); (b) more than 200 pages/s are swapped back in (`Swapins:` of vm_stat; without the counter this
-#      sign is skipped and the start line says so); (c) the compressor holds more than half of its start limit (4096 MB); (d) the free percentage is under 35. When (c) or (d) holds it refuses at once; otherwise it reads the machine twice, 10 s
-#      apart. FORGE_HEAVY_SAMPLE_LOG=<file> (optional, no default) adds a longer history: the file of `scripts/dev/sample-memory.sh <file>`, used when it has 2 or more samples inside the window. With neither a log history nor a second swap figure
+#      sign is skipped and the start line says so); (c) the free percentage is under 35. When (c) holds, or the compressor is over its start limit (8192 MB, which refuses on its own), it refuses at once; otherwise it reads the machine twice, 10 s
+#      apart. (2026-11-26-1046 dropped one sign, the compressor over HALF of its start limit: on 2026-11-25 it was over 4096 MB in every logged minute.) FORGE_HEAVY_SAMPLE_LOG=<file> (optional, no default) adds a longer history: the file of `scripts/dev/sample-memory.sh <file>`, used when it has 2 or more samples inside the window. With neither a log history nor a second swap figure
 #      the level refuses, as before, and says why. A start that passes over the level prints: `heavy-guard: swap 2279 MB is over 2048 MB but flat (+0 MB in 60 s), compressed 2426 MB: starting`. The STOP limits did not change: a start with
 #      flat swap above the 4096 MB stop limit is let in and then stopped at the first look (exit 76).
 #
@@ -35,7 +35,7 @@
 #   refuse: swap growth      256 MB    FORGE_HEAVY_SWAP_GROW_MB        (a sign: more growth than this over the window)
 #   swap growth window       60 s      FORGE_HEAVY_SWAP_WINDOW_S
 #   refuse: swap-ins         200 pages/s FORGE_HEAVY_SWAPIN_PPS        (a sign: pages swapped back in, between the two readings)
-#   second sample after      10 s      FORGE_HEAVY_SAMPLE_GAP_S        (only when swap is over its level and no sign shows in the first reading)
+#   second sample after      10 s      FORGE_HEAVY_SAMPLE_GAP_S        (only when swap is over its level and the first reading shows neither sign (c) nor a compressor over its start limit)
 #   refuse: free percentage  35 %      FORGE_HEAVY_FREE_PCT            (memory_pressure; one extra signal)
 #   stop: compressed         10240 MB  FORGE_HEAVY_KILL_COMPRESSED_MB  (the driver's freeze was at 10.7 to 11.2 GB; a stop limit above that would never have fired)
 #   stop: swap used          4096 MB   FORGE_HEAVY_KILL_SWAP_MB

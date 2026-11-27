@@ -162,17 +162,17 @@ export const tsvLine = (s) => [s.tSec.toFixed(1), s.totalMb, s.count, s.top[0]?.
 // ---- the guard: refuse, stop ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 // 2026-11-26-1042z - the swap rule of a START. Until then used swap over its level (2048 MB) refused alone, and on 2026-11-26 it refused a quiet machine: 2279 MB, flat, the compressor at 2.4 GB (macOS gives swap back late). Now the level
-// refuses only WITH a sign of pressure: (a) it grew, (b) pages are being swapped back in, (c) the compressor holds more than half of its start limit, (d) the free percentage is low; or when nothing says whether it is growing (as before).
+// refuses only WITH a sign of pressure: (a) it grew, (b) pages are being swapped back in, (c) the free percentage is low; or when nothing says whether it is growing (as before).
+// 2026-11-26-1046 - a fourth sign, the compressor over HALF of its start limit, was dropped: on 2026-11-25 it held more than 4096 MB in every minute the cron memory log has, so the level refused on it all day. The compressor still refuses a
+// start over its own start limit (FORGE_HEAVY_COMPRESSED_MB, refusalReasons) and stops a run over its stop limit.
 const swapOverLevel = (mem, limits) => mem.swapUsedMb != null && mem.swapUsedMb > limits.swapRefuseMb;
-/** Signs (c) and (d): what ONE reading shows. */
+const compressorOverLimit = (mem, limits) => mem.compressedMb != null && mem.compressedMb > limits.compressedRefuseMb;
+/** Sign (c): what ONE reading shows. */
 function swapPressure(mem, limits) {
-  const half = limits.compressedRefuseMb / 2, out = [];
-  if (mem.compressedMb != null && mem.compressedMb > half) out.push(`compressed memory ${mem.compressedMb} MB is over ${half} MB (half of the FORGE_HEAVY_COMPRESSED_MB limit)`);
-  if (mem.freePct != null && mem.freePct < limits.freePctMin) out.push(`the free percentage ${mem.freePct} % is under ${limits.freePctMin} %`);
-  return out;
+  return mem.freePct != null && mem.freePct < limits.freePctMin ? [`the free percentage ${mem.freePct} % is under ${limits.freePctMin} %`] : [];
 }
-/** Is a second reading needed? Only when swap is over its level and the first reading alone shows no sign (a reading that shows one is refused at once). */
-export const swapNeedsHistory = (mem, limits) => swapOverLevel(mem, limits) && swapPressure(mem, limits).length === 0;
+/** Is a second reading needed? Only when swap is over its level and the first reading alone settles nothing (one that shows a sign, or a compressor over its start limit, is refused at once). */
+export const swapNeedsHistory = (mem, limits) => swapOverLevel(mem, limits) && !compressorOverLimit(mem, limits) && swapPressure(mem, limits).length === 0;
 
 /** The file of scripts/dev/sample-memory.sh -> [{ atMs, swapUsedMb }] (its first column is the LOCAL time, its third the used swap in MB; the header, a row without the figure and a half-written line are dropped). */
 export function sampleLogPoints(text) {
@@ -212,6 +212,7 @@ function swapCauses(mem, limits, trend) {
   signs.push(...swapPressure(mem, limits));
   if (signs.length > 0) return signs.map((s) => `, and ${s}`).join('');
   if (trend?.growMb != null) return null;
+  if (!trend && compressorOverLimit(mem, limits)) return null;   // 2026-11-26-1046: refused at once by the compressor's start limit, the swap's growth never looked at: its level is not a second reason
   return trend?.why ? `, and nothing says whether it is growing (${trend.why}): refused on the level` : '';
 }
 /** The one line of a start that a swap level over its limit did NOT refuse. */

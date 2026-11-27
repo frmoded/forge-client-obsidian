@@ -10,7 +10,7 @@ export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 export async function openPage({ dir, width = 900, height = 1200, pageHtml, routes = {} }) {
   if (!heavyLock && !process.env.NODE_TEST_CONTEXT) heavyLock = acquireForProcess({ what: 'real-Chrome measure' });
   if (heavyLock) await heavyLock;
-  // 2026-11-20-1001z: the memory guard (scripts/heavy-guard.mjs; the numbers are in the header of scripts/heavy-guard.sh). Once per process, after the lock, BEFORE Chrome starts: refuse (exit 75) while the compressor holds over 8 GB or over 2 GB of swap is used,
+  // 2026-11-20-1001z: the memory guard (scripts/heavy-guard.mjs; the numbers are in the header of scripts/heavy-guard.sh). Once per process, after the lock, BEFORE Chrome starts: refuse (exit 75) while the compressor holds over 8 GB (swap over 2,048 MB refuses a start only with a sign of pressure: see scripts/heavy-guard.sh),
   // and while the measure runs stop it (exit 76; the exit handler below kills Chrome with it) when this process and its Chrome pass 6 GB, or the compressor 10 GB. Not inside a test run (NODE_TEST_CONTEXT), not under heavy-guard.sh (it watches the tree already).
   if (!memGuard && guardWanted()) {
     memGuard = true;

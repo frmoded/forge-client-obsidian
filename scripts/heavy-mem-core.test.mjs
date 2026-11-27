@@ -274,21 +274,31 @@ test('1042z: swapTrend: growth is the latest swap minus the LOWEST in the window
   assert.equal(core.swapTrend({ first: { swapUsedMb: 2300 }, second: { swapUsedMb: 2300 }, gapS: 120, atMs: 0 }, lim).thresholdMb, 256);
 });
 
-test('1042z: refusalReasons with a history: a swap level refuses only with a sign (growth, swap-ins, compressor over half its limit, low free percentage); each sign is named; on a limit is not over it', () => {
+// 2026-11-26-1046 (deliberate): the signs are growth, swap-ins and a low free percentage; the compressor over half of its start limit is no sign any more (its start limit refuses on its own)
+test('1042z: refusalReasons with a history: a swap level refuses only with a sign (growth, swap-ins, low free percentage); each sign is named; on a limit is not over it', () => {
   const lim = limitsFromEnv({});
   const flat = { growMb: 0, spanS: 60, thresholdMb: 256, swapinsPerS: 0 };
   const mem = { compressedMb: 2426, swapUsedMb: 2300, freePct: 81 };
   assert.deepEqual(refusalReasons(mem, lim, flat), []);
   assert.deepEqual(refusalReasons(mem, lim, { ...flat, growMb: 256, swapinsPerS: 200 }), [], 'exactly on the growth and swap-in limits');
-  assert.deepEqual(refusalReasons({ ...mem, compressedMb: 4096, freePct: 35 }, lim, flat), [], 'exactly half the compressor limit, exactly the free minimum');
+  assert.deepEqual(refusalReasons({ ...mem, compressedMb: 8192, freePct: 35 }, lim, flat), [], 'exactly the compressor start limit, exactly the free minimum');   // 2026-11-26-1046 (deliberate): was 4096, half of the limit
   assert.deepEqual(refusalReasons(mem, lim, { ...flat, growMb: 257 }), ['swap used 2300 MB is over 2048 MB (FORGE_HEAVY_SWAP_MB), and it grew +257 MB in 60 s (more than +256 MB: FORGE_HEAVY_SWAP_GROW_MB per FORGE_HEAVY_SWAP_WINDOW_S)']);
   assert.deepEqual(refusalReasons(mem, lim, { ...flat, swapinsPerS: 200.2 }), ['swap used 2300 MB is over 2048 MB (FORGE_HEAVY_SWAP_MB), and swap-ins run at 201 pages/s (more than 200: FORGE_HEAVY_SWAPIN_PPS)']);
-  assert.deepEqual(refusalReasons({ ...mem, compressedMb: 4097 }, lim, flat), ['swap used 2300 MB is over 2048 MB (FORGE_HEAVY_SWAP_MB), and compressed memory 4097 MB is over 4096 MB (half of the FORGE_HEAVY_COMPRESSED_MB limit)']);
+  // 2026-11-26-1046 (deliberate): flat swap with the compressor at 5000 MB starts (until then it refused: over 4096 MB, half of the limit); at 8300 MB the compressor START limit refuses, and only it
+  const full = 'compressed memory 8300 MB is over 8192 MB (FORGE_HEAVY_COMPRESSED_MB)';
+  assert.deepEqual(refusalReasons({ ...mem, compressedMb: 5000 }, lim, flat), []);
+  assert.deepEqual(refusalReasons({ ...mem, compressedMb: 8300 }, lim, flat), [full]);
+  assert.deepEqual(refusalReasons({ ...mem, compressedMb: 8300 }, lim), [full], 'refused at once, the swap never looked at twice: its level is not listed');
+  assert.deepEqual(refusalReasons({ ...mem, compressedMb: 5000, freePct: 20 }, lim, flat), ['swap used 2300 MB is over 2048 MB (FORGE_HEAVY_SWAP_MB), and the free percentage 20 % is under 35 %', 'memory_pressure free percentage 20 % is under 35 % (FORGE_HEAVY_FREE_PCT)']);
+  assert.deepEqual(refusalReasons({ ...mem, compressedMb: 5000 }, lim, { ...flat, growMb: 600 }), ['swap used 2300 MB is over 2048 MB (FORGE_HEAVY_SWAP_MB), and it grew +600 MB in 60 s (more than +256 MB: FORGE_HEAVY_SWAP_GROW_MB per FORGE_HEAVY_SWAP_WINDOW_S)']);
   assert.deepEqual(refusalReasons({ ...mem, freePct: 34 }, lim, flat), ['swap used 2300 MB is over 2048 MB (FORGE_HEAVY_SWAP_MB), and the free percentage 34 % is under 35 %', 'memory_pressure free percentage 34 % is under 35 % (FORGE_HEAVY_FREE_PCT)']);
-  // half of the limit IN FORCE
-  assert.deepEqual(refusalReasons({ ...mem, compressedMb: 4097 }, limitsFromEnv({ FORGE_HEAVY_COMPRESSED_MB: '9000' }), flat), []);
-  // two signs, both named
-  assert.match(refusalReasons({ ...mem, compressedMb: 5000 }, lim, { ...flat, growMb: 600 }).join(), /it grew \+600 MB in 60 s .*, and compressed memory 5000 MB is over 4096 MB/);
+  // the compressor limit IN FORCE
+  assert.deepEqual(refusalReasons({ ...mem, compressedMb: 8300 }, limitsFromEnv({ FORGE_HEAVY_COMPRESSED_MB: '9000' }), flat), []);
+  // a second reading is wanted only when the first one settles nothing
+  assert.deepEqual([5000, 8192, 8300].map((compressedMb) => core.swapNeedsHistory({ ...mem, compressedMb }, lim)), [true, true, false]);
+  assert.equal(core.swapNeedsHistory({ ...mem, freePct: 34 }, lim), false);
+  // two signs, both named (2026-11-26-1046 (deliberate): growth with swap-ins; was growth with the compressor over half)
+  assert.match(refusalReasons(mem, lim, { ...flat, growMb: 600, swapinsPerS: 300 }).join(), /it grew \+600 MB in 60 s .*, and swap-ins run at 300 pages\/s/);
   // a history that says nothing: the level, as before, and why
   assert.deepEqual(refusalReasons(mem, lim, { growMb: null, swapinsPerS: null, why: 'nothing to compare with' }), ['swap used 2300 MB is over 2048 MB (FORGE_HEAVY_SWAP_MB), and nothing says whether it is growing (nothing to compare with): refused on the level']);
 });

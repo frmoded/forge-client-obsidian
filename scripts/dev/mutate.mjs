@@ -360,7 +360,7 @@ export async function main(argv) {
   // 2026-10-31-1125: one heavy thing at a time ($TMPDIR/forge-heavy.lock, heavy-lock.mjs): a second heavy run waits and says who holds it. Not for --list (it runs nothing), and not inside a test run (NODE_TEST_CONTEXT: that run
   // is the heavy thing, and its own tests start this CLI on scratch projects); a runner started BY a lock holder (FORGE_HEAVY_LOCK_HELD) does not wait for it.
   if (!a.list && !process.env.NODE_TEST_CONTEXT) await acquireForProcess({ what: 'mutation pass' });
-  // 2026-11-20-1001z: the memory guard's start check, after the lock and before anything is built or started: exit 75 "memory pressure high, wait" (the compressor over 8 GB, swap over 2 GB, free percentage under 35). The pass's own cap for all its test trees
+  // 2026-11-20-1001z: the memory guard's start check, after the lock and before anything is built or started: exit 75 "memory pressure high, wait" (the compressor over 8 GB, free percentage under 35; swap over 2,048 MB refuses a start only with a sign of pressure: see scripts/heavy-guard.sh). The pass's own cap for all its test trees
   // together is its memory budget (at least 6 GB; FORGE_HEAVY_RSS_MB wins). Not for --list, not inside a test run, not under heavy-guard.sh.
   const guarding = !a.list && guardWanted(process.env);
   const passCapMb = Math.max(6144, budgetMb);

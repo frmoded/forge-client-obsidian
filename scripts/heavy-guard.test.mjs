@@ -41,9 +41,15 @@ test('REFUSES to start (exit 75, "memory pressure high, wait", the command never
   try {
     const marker = path.join(dir, 'ran');
     const cmd = ['node', '-e', `require('fs').writeFileSync(${JSON.stringify(marker)}, 'x')`];
-    // 2026-11-26-1042z (deliberate): swap over 2 GB no longer refuses ALONE: here it comes with a compressor over half of its limit (5000 MB); a flat swap level alone starts (the 1042z tests below)
-    for (const [mem, reason] of [[{ compressedMb: 9000, swapUsedMb: 0, freePct: 90 }, /compressed memory 9000 MB is over 8192 MB/], [{ compressedMb: 5000, swapUsedMb: 2500, freePct: 90 }, /swap used 2500 MB is over 2048 MB/], [{ compressedMb: 100, swapUsedMb: 0, freePct: 20 }, /free percentage 20 % is under 35 %/]]) {
-      const r = sh(dir, cmd, { FORGE_HEAVY_FAKE_MEM: JSON.stringify(mem) });
+    // 2026-11-26-1042z (deliberate): swap over 2 GB no longer refuses ALONE (the 1042z tests below). 2026-11-26-1046 (deliberate): a compressor over half of its start limit (5000 MB) is no sign any more: flat swap with it STARTS, printed as flat
+    const half = sh(dir, cmd, { FORGE_HEAVY_FAKE_MEM: JSON.stringify({ compressedMb: 5000, swapUsedMb: 2300, freePct: 90 }), FORGE_HEAVY_SAMPLE_GAP_S: '0.4' });
+    assert.equal(half.status, 0, half.err);
+    assert.match(half.err, /^heavy-guard: swap 2300 MB is over 2048 MB but flat \(\+0 MB in 0\.4 s\), compressed 5000 MB: starting/m);
+    assert.ok(fs.existsSync(marker), 'the command ran'); fs.rmSync(marker);
+    // 2026-11-26-1046 (deliberate): refused: the compressor over its start limit (flat swap or not), a low free percentage with flat swap, swap that grows
+    const growing = path.join(dir, 'growing.tsv'); fs.writeFileSync(growing, sampleFile([[40, 1500], [20, 1900]], Date.now()));
+    for (const [mem, reason, extra = {}] of [[{ compressedMb: 9000, swapUsedMb: 0, freePct: 90 }, /compressed memory 9000 MB is over 8192 MB/], [{ compressedMb: 8300, swapUsedMb: 2300, freePct: 90 }, /compressed memory 8300 MB is over 8192 MB/], [{ compressedMb: 5000, swapUsedMb: 2300, freePct: 20 }, /swap used 2300 MB is over 2048 MB \(FORGE_HEAVY_SWAP_MB\), and the free percentage 20 % is under 35 %/], [{ compressedMb: 5000, swapUsedMb: 2300, freePct: 90 }, /swap used 2300 MB is over 2048 MB \(FORGE_HEAVY_SWAP_MB\), and it grew \+800 MB in \S+ s/, { FORGE_HEAVY_SAMPLE_LOG: growing, FORGE_HEAVY_SAMPLE_GAP_S: '0.4' }], [{ compressedMb: 100, swapUsedMb: 0, freePct: 20 }, /free percentage 20 % is under 35 %/]]) {
+      const r = sh(dir, cmd, { FORGE_HEAVY_FAKE_MEM: JSON.stringify(mem), ...extra });
       assert.equal(r.status, 75, r.err);
       assert.match(r.err, /memory pressure high, wait/);
       assert.match(r.err, reason);
@@ -284,13 +290,13 @@ test('1037 A: usage: --wait-minutes needs a number (exit 2); a negative or non-n
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
-// ---- 2026-11-26-1042z (deliberate): a swap LEVEL alone no longer refuses; it refuses with a sign (growth, swap-ins, compressor over half its limit, low free percentage) or with no history at all -----------------------------------
+// ---- 2026-11-26-1042z (deliberate): a swap LEVEL alone no longer refuses; it refuses with a sign (growth, swap-ins, low free percentage: 2026-11-26-1046 dropped the compressor-over-half sign) or with no history at all -----------
 // The case of the prompt (called 2026-11-25 there; the figures are those of 11-26): swap 2279 MB, flat, against a 2048 MB start limit, the compressor 2.4 GB. Fixture readings only: a fake reader, a fake clock, a sleep that only counts.
 const { checkStart } = await import('./heavy-guard.mjs');
 const NOW = new Date(2026, 10, 26, 13, 0, 0).getTime();
-const stamp = (ms) => { const d = new Date(ms), two = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}T${two(d.getHours())}:${two(d.getMinutes())}:${two(d.getSeconds())}`; };
-/** A sampler file (scripts/dev/sample-memory.sh): [secondsBeforeNow, swapUsedMb] rows. */
-const sampleFile = (rows, now = NOW) => ['time\tcompressor_mb\tswap_used_mb\tfree_mb', ...rows.map(([ago, swap]) => `${stamp(now - ago * 1000)}\t2400\t${swap}\t900`)].join('\n') + '\n';
+function stamp(ms) { const d = new Date(ms), two = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}T${two(d.getHours())}:${two(d.getMinutes())}:${two(d.getSeconds())}`; }
+/** A sampler file (scripts/dev/sample-memory.sh): [secondsBeforeNow, swapUsedMb] rows. A function declaration: the first test of this file uses it too (2026-11-26-1046). */
+function sampleFile(rows, now = NOW) { return ['time\tcompressor_mb\tswap_used_mb\tfree_mb', ...rows.map(([ago, swap]) => `${stamp(now - ago * 1000)}\t2400\t${swap}\t900`)].join('\n') + '\n'; }
 const QUIET = { compressedMb: 2426, swapUsedMb: 2279, freePct: 81, swapins: 613767 };
 /** checkStart on fake readings (one per call, the last for ever); returns the answer and what it did. */
 function look(readings, { log = '', env = {} } = {}) {
@@ -335,10 +341,22 @@ test('1042z (3): swap 2300 MB climbing +600 MB in 60 s is REFUSED (from the log,
   assert.equal(look([{ ...QUIET, swapUsedMb: 2200 }, { ...QUIET, swapUsedMb: 2300 }], { env: { FORGE_HEAVY_SWAP_WINDOW_S: '20' } }).refuse, false, '256 MB per 20 s: 128 MB in 10 s');
 });
 
-test('1042z (4): swap 2300 MB flat but the compressor at 5000 MB (over half of 8192) is REFUSED, with no second reading', () => {
-  const r = look([{ ...QUIET, swapUsedMb: 2300, compressedMb: 5000 }]);
-  assert.equal(r.refuse, true); assert.match(r.text, /swap used 2300 MB is over 2048 MB \(FORGE_HEAVY_SWAP_MB\), and compressed memory 5000 MB is over 4096 MB \(half of the FORGE_HEAVY_COMPRESSED_MB limit\)/);
-  assert.deepEqual([r.slept, r.lines], [[], []]);
+// 2026-11-26-1046 (deliberate): until then 5000 MB (over half of the 8192 MB start limit) refused here with no second reading
+test('1042z (4): swap 2300 MB flat with the compressor at 5000 MB STARTS and is printed as flat; at 8300 MB the compressor start limit REFUSES at once; growth or a low free percentage still refuse at 5000 MB', () => {
+  const over = { ...QUIET, swapUsedMb: 2300, compressedMb: 5000 };
+  const half = look([over]);
+  assert.equal(half.refuse, false, half.text);
+  assert.deepEqual([half.slept, half.reads], [[10000], 2], 'the compressor is no sign: the swap is read twice');
+  assert.deepEqual(half.lines, ['heavy-guard: swap 2300 MB is over 2048 MB but flat (+0 MB in 10 s), compressed 5000 MB: starting']);
+  const full = look([{ ...over, compressedMb: 8300 }]);
+  assert.equal(full.refuse, true, 'the start limit');
+  assert.deepEqual(full.reasons, ['compressed memory 8300 MB is over 8192 MB (FORGE_HEAVY_COMPRESSED_MB)'], 'the flat swap is not a second reason');
+  assert.deepEqual([full.slept, full.reads, full.lines], [[], 1, []]);
+  const grows = look([{ ...over, swapUsedMb: 2200 }, over]);
+  assert.equal(grows.refuse, true); assert.match(grows.text, /swap used 2300 MB is over 2048 MB \(FORGE_HEAVY_SWAP_MB\), and it grew \+100 MB in 10 s/);
+  const low = look([{ ...over, freePct: 20 }]);
+  assert.equal(low.refuse, true); assert.match(low.text, /and the free percentage 20 % is under 35 %/);
+  assert.deepEqual([low.slept, low.reads], [[], 1]);
 });
 
 test('1042z (5): swap 2300 MB flat, free percentage 20 is REFUSED', () => {
