@@ -11,7 +11,6 @@ import { test } from 'node:test';
 import { parse, describe, canonical, type GrammarParams } from './phrase-grammar-core.ts';
 import { formatPhraseJson, readPhraseNote, validatePhrase, type PhraseParams } from './phrase-core.ts';
 import { phrasePython, phraseRecipeSteps } from './phrase-notes-core.ts';
-import { parseRecipe } from './recipe-grammar-core.ts';
 import { PHRASE_VAULT } from './test-support/phrase-list-fixtures.ts';
 
 const V = PHRASE_VAULT;
@@ -181,14 +180,11 @@ test('json cache: the step is written and read back; the validators know its fie
     const r = op(o) as { ok: boolean; message?: string }; assert.equal(r.ok, false, JSON.stringify(o)); assert.match(r.message ?? '', re, JSON.stringify(o));
   }
 });
-test('the Recipe says the step and reads it back to the same params (the Recipe is read back, recipe-grammar-core.ts)', () => {
+test('the Recipe says the step', () => {          // 2026-11-26-1047 (deliberate): the Recipe is no longer read back
   for (const text of [FULL, `${TAKE} Duplicate bars 2 to 3. Morph bars 1 and 4 across 3 bars, put them at the end.`]) {
     const p = ok(text);
     const steps = phraseRecipeSteps(p as PhraseParams);
     assert.ok(steps.some((s) => /^Morph bars \d+ and \d+ across \d+ bars?, in \w[\w-]* order/.test(s)), steps.join(' | '));
-    const back = parseRecipe(steps.join('\n'), V);
-    assert.ok(back.ok, back.ok ? '' : back.error.message);
-    assert.deepEqual(back.ok && canonical(back.params as GrammarParams), canonical(p));
   }
 });
 test('the Python facet says the step with the engine\'s own morph_rhythm (the ends are not used, N + 2 bars are asked and the middle N kept)', () => {

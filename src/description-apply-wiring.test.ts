@@ -12,12 +12,9 @@ import { bundleRealPlugin, type RealPlugin } from './test-support/bundle-real-pl
 import { installHostClock, iterateAllLeavesLikeObsidian } from './test-support/host-workspace.ts';
 import { loadRealOnload } from './test-support/real-onload.ts';
 import { DESCRIPTION_DEBOUNCE_MS } from './description-apply-core.ts';
-import { ASK_ONCE } from './script-edit-core.ts';
 import { PHRASE_DEFAULTS, PHRASE_VIEW_TYPE, noteContentFor, type PhraseParams } from './phrase-core.ts';
 import { extractDescription, extractRecipeSection } from './v2-note-core.ts';
-import { BOTH_EDITED } from './recipe-apply-core.ts';
-import { asRecipeSourced, isCustomNote, pythonTextOf } from './phrase-notes-core.ts';
-import { applyPythonText } from './description-apply-core.ts';
+import { asCustom, isCustomNote } from './phrase-notes-core.ts';
 import { asListNote } from './test-support/phrase-list-fixtures.ts';
 const THIN = "  bars[1] = thin_out_bars(bars=[bars[1]], first=1, last=1, amount=0.5)[0]\n  return bars";
 const withPython = (text: string, edit: (py: string) => string): string => { const py = (text.match(/```python\n([\s\S]*?)\n```/) as RegExpMatchArray)[1]; return text.replace(py, edit(py)); };
@@ -64,7 +61,7 @@ for (const edition of ['lean', 'music'] as const) {
       metadataCache: { resolvedLinks: {}, on: () => ({}), getFileCache: () => null }, plugins: {},
     };
     const savedInfo = console.info, savedError = console.error, savedDebug = console.debug;
-    console.info = (...a: unknown[]) => { if (/^\[forge-(description|recipe)\]/.test(String(a[0]))) lines.push(String(a[0])); }; console.error = () => {}; console.debug = () => {};
+    console.info = (...a: unknown[]) => { if (/^\[forge-(description|recipe|python|detach|custom)\]/.test(String(a[0]))) lines.push(String(a[0])); }; console.error = () => {}; console.debug = () => {};
     const HP = win.HTMLElement.prototype;
     const saved = ['createEl', 'createDiv', 'createSpan', 'setText', 'empty', 'addClass', 'removeClass'].map((k) => [k, HP[k]] as const);
     HP.createEl = function (tag: string, o: any = {}) { const e = win.document.createElement(tag); if (o.cls) e.className = o.cls; if (o.text) e.textContent = o.text; if (o.attr) for (const [k, v] of Object.entries(o.attr)) e.setAttribute(k, String(v)); this.appendChild(e); return e; };
@@ -199,81 +196,38 @@ for (const edition of ['lean', 'music'] as const) {
     } finally { w2.done(); }
   });
 
-  // ---- 2026-10-31-1140 (M16a): the RECIPE is a source, on the same real wiring (the vault writes first and tells its listeners after, the tab and the notes pane both hear it) --------------------------------------------------------
-  test(`[${edition}] a hand edit of the RECIPE "8 bars" -> "6 bars" is applied BY ITSELF after the person stops typing: the note (Recipe-sourced), the Bars control and the [forge-recipe] evidence line follow, and the write's own modify finds nothing more to do`, async () => {
-    const w = await world(SCORE_FIRST_TOML);
-    try {
-      const tab = await w.openTab();
-      w.type(editRecipe(w.store.get(PATH)!, '8 bars', '6 bars'));
-      await w.wait(DESCRIPTION_DEBOUNCE_MS - 100);
-      assert.deepEqual(w.writes, [], 'still within the wait');
-      await w.wait(150);
-      if (edition === 'music') {          // 2026-11-22-1016 (deliberate): the music edition HOLDS a Recipe that reads (11i): the list is marked, and the rewrite is asked for; lean applies it by itself, as before
-        assert.deepEqual(w.writes, [], 'the list is not rewritten at once');
-        assert.match(tab.contentEl.querySelector('.forge-description-message').textContent, /^The Description no longer matches the Recipe/);          // 2026-11-23-1022 (deliberate): the Description and Recipe wording
-        (tab.contentEl.querySelector('[data-action="update-recipe"]') as HTMLElement).click(); await w.wait(100);
-      }
-      assert.deepEqual(w.writes, [PATH], 'one write');
-      assert.equal(w.store.get(PATH), asRecipeSourced(asListNote(noteContentFor('phrase_001', { ...EXTEND, bars: 6 }), 'phrase_001'))); // 2026-11-19-0980 (deliberate): a phrase's Description is a numbered list now: the note a write leaves is the list note
-      assert.equal(tab.contentEl.querySelector('.forge-phrase-bars').value, '6');
-      assert.deepEqual(w.lines, edition === 'music' ? ['[forge-recipe] held phrase_001: the Description no longer matches the Recipe', '[forge-recipe] applied phrase_001 (8 -> 6 bars)'] : ['[forge-recipe] applied phrase_001 (8 -> 6 bars)']);          // 2026-11-23-1022 (deliberate): the Description and Recipe wording
-      await w.wait(3000);
-      assert.deepEqual(w.writes, [PATH]);
-      assert.equal(tab.contentEl.querySelector('.forge-description-bar'), null);
-    } finally { w.done(); }
-  });
-
-  test(`[${edition}] a Recipe that does not parse writes NOTHING; "Recipe, line N, column M: ..." is in the bar of the tab AND of the notes pane with Revert only; Revert puts the last good note back and takes both bars away`, async () => {
+  // ---- 2026-11-26-1047 (deliberate): the Recipe is generated and never read back, on the same real wiring (the vault writes first and tells its listeners after, the tab and the notes pane both hear it) ------------------------------------------
+  test(`[${edition}] a hand edit of the RECIPE writes NOTHING; the bar of the tab AND of the notes pane say the one line with Detach and OK; OK takes both away; nothing is traced as applied`, async () => {
     const w = await world(SCORE_FIRST_TOML);
     try {
       const tab = await w.openTab(); const notes = w.openNotesPane();
-      const good = w.store.get(PATH)!;
-      w.type(good.replace(extractRecipeSection(good) ?? '', 'Take [[bar_007]].\nRepeat it for 8 bars with fills.\nSprinkle [[bar_008]].'));
-      await w.wait();
+      const typed = editRecipe(w.store.get(PATH)!, '8 bars', '6 bars');
+      w.type(typed); await w.wait();
       assert.deepEqual(w.writes, []);
       for (const view of [tab, notes]) {
         const bar = view.contentEl.querySelector('.forge-description-bar');
         assert.ok(bar, 'a bar');
-        assert.match(bar.querySelector('.forge-description-message').textContent, /^Recipe, line 3, column 1: I do not know the step 'Sprinkle'\./);
-        assert.deepEqual([...bar.querySelectorAll('.forge-description-button')].map((b: any) => b.getAttribute('data-action')), ['revert']);
+        assert.equal(bar.querySelector('.forge-description-message').textContent, 'This Recipe/Python is generated. Edit the Description, or Detach.');
+        assert.deepEqual([...bar.querySelectorAll('.forge-description-button')].map((b: any) => [b.getAttribute('data-action'), b.textContent]), [['detach', 'Detach'], ['ok', 'OK']]);
       }
-      assert.equal(tab.contentEl.querySelector('.forge-phrase-bars').value, '8', 'the last good cache still draws the tab');
-      (notes.contentEl.querySelector('[data-action="revert"]') as any).click(); await w.wait(100);
-      assert.equal(w.store.get(PATH), asListNote(good, 'phrase_001')); // 2026-11-19-0980 (deliberate): a phrase's Description is a numbered list now: the note a write leaves is the list note
+      assert.equal(tab.contentEl.querySelector('.forge-phrase-bars').value, '8', 'the json cache still draws the tab');
+      (notes.contentEl.querySelector('[data-action="ok"]') as any).click(); await w.wait(100);
       assert.equal(tab.contentEl.querySelector('.forge-description-bar'), null); assert.equal(notes.contentEl.querySelector('.forge-description-bar'), null);
-      assert.equal(w.lines.at(-1), '[forge-recipe] reverted phrase_001 to the json cache');
+      assert.equal(w.store.get(PATH), typed); assert.deepEqual(w.writes, []); assert.deepEqual(w.lines, []);
     } finally { w.done(); }
   });
 
-  test(`[${edition}] Description AND Recipe both edited: nothing is written, both panes say so with Update from Description / Update from Recipe; pressing Update from Recipe in the notes pane keeps the Recipe and the tab's Bars control reads it`, async () => {
-    const w = await world(SCORE_FIRST_TOML);
-    try {
-      const tab = await w.openTab(); const notes = w.openNotesPane();
-      w.type(edit(editRecipe(w.store.get(PATH)!, '8 bars', '6 bars'), '8 bars', '5 bars'));
-      await w.wait();
-      assert.deepEqual(w.writes, []);
-      for (const view of [tab, notes]) {
-        const bar = view.contentEl.querySelector('.forge-description-bar');
-        assert.equal(bar.querySelector('.forge-description-message').textContent, edition === 'music' ? ASK_ONCE : BOTH_EDITED);          // 2026-11-22-1016 (deliberate): the music edition asks ONCE (11i)
-        assert.deepEqual([...bar.querySelectorAll('.forge-description-button')].map((b: any) => [b.getAttribute('data-action'), b.textContent]), edition === 'music' ? [['keep-script', 'Keep my Recipe edits'], ['update', 'Replace them with the Description']] : [['update', 'Update from Description'], ['update-recipe', 'Update from Recipe']]);          // 2026-11-23-1022 (deliberate): the Description and Recipe wording
-      }
-      if (edition === 'music') { (notes.contentEl.querySelector('[data-action="keep-script"]') as any).click(); await w.wait(100); assert.deepEqual(w.writes, [], '2026-11-22-1016 (deliberate): Keep writes nothing'); }
-      (notes.contentEl.querySelector('[data-action="update-recipe"]') as any).click(); await w.wait(100);
-      assert.deepEqual(w.writes, [PATH]);
-      assert.equal(tab.contentEl.querySelector('.forge-phrase-bars').value, '6');
-      assert.equal(tab.contentEl.querySelector('.forge-description-bar'), null);
-    } finally { w.done(); }
-  });
-
-  test(`[${edition}] after the Recipe is applied the note is Recipe-sourced: its stamps say so (source_facet: recipe, and the Description stamped as derived from that Recipe)`, async () => {
+  test(`[${edition}] Description AND Recipe both edited: there is no choice to make, the Description is applied (music: by the Forge button) and the Recipe is made again from it`, async () => {
     const w = await world(SCORE_FIRST_TOML);
     try {
       const tab = await w.openTab();
-      w.type(editRecipe(w.store.get(PATH)!, '8 bars', '6 bars')); await w.wait();
-      if (edition === 'music') { (tab.contentEl.querySelector('[data-action="update-recipe"]') as HTMLElement | null)?.click(); await w.wait(100); }          // 2026-11-22-1016 (deliberate): the rewrite is asked for
-      const done = w.store.get(PATH)!;
-      assert.match(done, /^source_facet: recipe$/m);
-      assert.match(done, /^description_derived_from_recipe_hash: [0-9a-f]{64}$/m);
+      w.type(edit(editRecipe(w.store.get(PATH)!, '8 bars', '6 bars'), '8 bars', '5 bars'));
+      await w.wait();
+      if (edition === 'music') { (tab.contentEl.querySelector('[data-action="update"]') as HTMLElement).click(); await w.wait(100); }
+      assert.deepEqual(w.writes, [PATH]);
+      assert.equal(w.store.get(PATH), asListNote(noteContentFor('phrase_001', { ...EXTEND, bars: 5 }), 'phrase_001'));
+      assert.equal(tab.contentEl.querySelector('.forge-phrase-bars').value, '5');
+      assert.equal(tab.contentEl.querySelector('.forge-description-bar'), null);
     } finally { w.done(); }
   });
 
@@ -290,33 +244,31 @@ for (const edition of ['lean', 'music'] as const) {
     } finally { w.done(); }
   });
 
-  // 2026-11-03-1155-8 (C): the reload. A custom note's banner and Revert must not wait for a `modify`.
-  test(`[${edition}] RELOAD: a custom note whose panes were restored shows the banner in the tab AND the notes pane when the layout settles (no modify, no file-open); the command "Revert custom Python to generated" is offered only then and reverts after the confirm`, async () => {
-    const original = noteContentFor('phrase_001', EXTEND);
-    const typed = withPython(original, (py) => py.replace('  return bars', THIN));
-    const made = applyPythonText(typed, 'phrase_001', 'phrase', { bars: ['bar_007', 'bar_008'], phrases: ['phrase_001'], arrangements: [], compositions: [], kits: [] }, pythonTextOf(typed) as string);
-    assert.equal(made.ok, true); const custom = (made as { text: string }).text; assert.equal(isCustomNote(custom), true);
+  // 2026-11-03-1155-8 (C): the reload. A custom note's banner must not wait for a `modify`. 2026-11-26-1047 (deliberate): it has no button and no "Revert custom Python" command (there is no way back); Detach is not offered for it.
+  test(`[${edition}] RELOAD: a custom note whose panes were restored shows the banner in the tab AND the notes pane when the layout settles (no modify, no file-open), with no button; the command "Detach" is not offered for it`, async () => {
+    const custom = asCustom(withPython(noteContentFor('phrase_001', EXTEND), (py) => py.replace('  return bars', THIN)));
+    assert.equal(isCustomNote(custom), true);
     const w = await world(SCORE_FIRST_TOML, { start: custom });                                            // the note was made custom in an earlier session: this controller has never heard of it
     try {
       const tab = await w.openTab(); const notes = w.openNotesPane();                                      // "Reload app without saving": the panes come back, nothing is modified, no file-open names this note
-      const cmd = w.plugin.commands.get('revert-custom-python');
-      assert.ok(cmd, 'the second door exists in a score-first vault'); w.setActive(PATH);
-      assert.equal(cmd.checkCallback(true), false, 'before the layout settles nothing is known');
+      assert.equal(w.plugin.commands.has('revert-custom-python'), false);
+      const cmd = w.plugin.commands.get('detach-to-custom-python');
+      assert.ok(cmd, 'the Detach command exists in a score-first vault'); w.setActive(PATH);
       assert.equal(tab.contentEl.querySelector('.forge-description-bar'), null);
       w.workspaceEvent('layout-change'); await w.wait(100);
       for (const el of [tab.contentEl, notes.contentEl]) {
         assert.equal(el.querySelector('.forge-description-message').textContent, 'Custom Python: the controls are off for this note.');
-        assert.deepEqual([...el.querySelectorAll('.forge-description-button')].map((b: any) => b.getAttribute('data-action')), ['revert-generated']);
+        assert.deepEqual([...el.querySelectorAll('.forge-description-button')].map((b: any) => b.getAttribute('data-action')), []);
       }
       assert.deepEqual(w.writes, [], 'looking is not writing');
-      assert.equal(cmd.checkCallback(true), true);
+      assert.equal(cmd.checkCallback(true), false);
       assert.equal(w.store.get(PATH), custom);
     } finally { w.done(); }
   });
 
-  test(`[${edition}] P3: a vault that is not score-first has no "Revert custom Python to generated" command`, async () => {
+  test(`[${edition}] P3: a vault that is not score-first has no "Detach" command`, async () => {
     const w = await world(TUTORIAL_TOML);
-    try { assert.equal(w.plugin.commands.has('revert-custom-python'), false); } finally { w.done(); }
+    try { assert.equal(w.plugin.commands.has('detach-to-custom-python'), false); } finally { w.done(); }
   });
 
   // 2026-11-03-1155-8 (A and B, CCQA smoke 11 step 2): a control used inside the 600 ms wait of a hand-typed Recipe is refused (nothing half-typed is ever written by a control) - and the sentence must name buttons that are ON SCREEN; the red line goes when the note settles.
@@ -324,7 +276,7 @@ for (const edition of ['lean', 'music'] as const) {
   const statusOf = (tab: any): string => (tab.contentEl.querySelector('.forge-phrase-status')?.textContent ?? '').replace(/Copy$/, '').trim();
   const actionsOf = (tab: any): string[] => [...tab.contentEl.querySelectorAll('.forge-description-bar .forge-description-button')].map((b: any) => b.getAttribute('data-action'));
   const typeInto = (win: any, el: any, v: string) => { el.value = v; el.dispatchEvent(new win.Event('change')); };
-  test(`[${edition}] A: a control used inside the wait of a hand-typed Recipe is refused AND the bar with Update from Recipe / Revert is on screen at once (the sentence names buttons that exist); nothing half-typed is written by the control`, async () => {
+  test(`[${edition}] A: a control used inside the wait of a hand-typed Recipe is refused with the one line AND the bar with Detach / OK is on screen at once; nothing half-typed is written by the control`, async () => {          // 2026-11-26-1047 (deliberate)
     const w = await world(SCORE_FIRST_TOML);
     try {
       const tab = await w.openTab();
@@ -332,23 +284,23 @@ for (const edition of ['lean', 'music'] as const) {
       await w.wait(100);
       assert.equal(tab.contentEl.querySelector('.forge-description-bar'), null, 'inside the wait there is no bar yet (that is the situation)');
       typeInto(win, barsOf(tab), '9'); await w.wait(50);
-      assert.equal(statusOf(tab), 'Not saved: the Recipe was edited by hand; press Update from Recipe first or revert it.');
-      assert.deepEqual(actionsOf(tab), ['update-recipe', 'revert'], 'the buttons the sentence names are there');
+      assert.equal(statusOf(tab), 'This Recipe/Python is generated. Edit the Description, or Detach.');
+      assert.deepEqual(actionsOf(tab), ['detach', 'ok'], 'the buttons the sentence names are there');
       assert.deepEqual(w.writes, [], 'the control wrote nothing, and nothing was applied before the person stopped typing');
     } finally { w.done(); }
   });
 
-  test(`[${edition}] B: the red "Not saved" line goes when the note settles - after the bar's own apply, and after Revert`, async () => {
-    for (const how of ['apply', 'revert'] as const) {
+  test(`[${edition}] B: the refusal line goes when the note settles - after the Description is applied, and after the generated text is put back`, async () => {          // 2026-11-26-1047 (deliberate)
+    for (const how of ['apply', 'restored'] as const) {
       const w = await world(SCORE_FIRST_TOML);
       try {
-        const tab = await w.openTab();
-        w.type(editRecipe(w.store.get(PATH)!, '8 bars', '6 bars')); await w.wait(100);
+        const tab = await w.openTab(); const good = w.store.get(PATH)!;
+        w.type(editRecipe(good, '8 bars', '6 bars')); await w.wait(100);
         typeInto(win, barsOf(tab), '9'); await w.wait(50);
-        assert.match(statusOf(tab), /^Not saved: the Recipe was edited by hand/, how);
-        if (how === 'apply') { await w.wait(DESCRIPTION_DEBOUNCE_MS + 50); if (edition === 'music') { (tab.contentEl.querySelector('.forge-description-button[data-action="update-recipe"]') as HTMLElement).click(); await w.wait(100); } }          // 2026-11-22-1016 (deliberate): the music edition holds a Recipe that reads until the driver asks for the rewrite
-        else { (tab.contentEl.querySelector('.forge-description-button[data-action="revert"]') as HTMLElement).click(); await w.wait(100); }
-        assert.equal(w.writes.length, 1, `${how}: one write settled the note`);
+        assert.equal(statusOf(tab), 'This Recipe/Python is generated. Edit the Description, or Detach.', how);
+        if (how === 'apply') { w.type(edit(w.store.get(PATH)!, '8 bars', '7 bars')); await w.wait(DESCRIPTION_DEBOUNCE_MS + 50); if (edition === 'music') { (tab.contentEl.querySelector('.forge-description-button[data-action="update"]') as HTMLElement).click(); await w.wait(100); } }
+        else { w.type(good); await w.wait(DESCRIPTION_DEBOUNCE_MS + 50); }
+        assert.equal(w.writes.length, how === 'apply' ? 1 : 0, how);
         assert.equal(statusOf(tab), '', `${how}: the refusal of a state that no longer exists is gone`);
         assert.equal(tab.contentEl.querySelector('.forge-description-bar'), null, how);
       } finally { w.done(); }
@@ -359,12 +311,12 @@ for (const edition of ['lean', 'music'] as const) {
     const w = await world(SCORE_FIRST_TOML);
     try {
       const tab = await w.openTab();
-      w.type(editRecipe(w.store.get(PATH)!, '8 bars', 'eight bars of my own'));                    // does not parse: nothing is applied
+      w.type(editRecipe(w.store.get(PATH)!, '8 bars', 'eight bars of my own'));
       await w.wait(DESCRIPTION_DEBOUNCE_MS + 50);
       typeInto(win, barsOf(tab), '9'); await w.wait(50);
-      assert.match(statusOf(tab), /^Not saved: the Recipe was edited by hand/);
+      assert.equal(statusOf(tab), 'This Recipe/Python is generated. Edit the Description, or Detach.');
       w.fire('modify', w.tf(PATH)); await w.wait(100);
-      assert.match(statusOf(tab), /^Not saved: the Recipe was edited by hand/, 'the note is still hand-edited: the sentence is still true');
+      assert.equal(statusOf(tab), 'This Recipe/Python is generated. Edit the Description, or Detach.', 'the note is still hand-edited: the sentence is still true');
     } finally { w.done(); }
   });
 
@@ -429,8 +381,8 @@ for (const edition of ['lean', 'music'] as const) {
       try {
         const original = w.store.get(PATH)!;
         const tab = await w.openTab(); const notes = w.openNotesPane();
-        const edited = editRecipe(original, '8 bars', '6 bars');
-        if (how === 'bar-showing') { w.store.set(PATH, edited); w.workspaceEvent('file-open', w.tf(PATH)); await w.wait(100); assert.deepEqual([...tab.contentEl.querySelectorAll('.forge-description-button')].map((b: any) => b.getAttribute('data-action')), ['update-recipe', 'revert']); }
+        const edited = edit(original, '8 bars', '6 bars');          // 2026-11-26-1047 (deliberate): a pending DESCRIPTION edit (a Recipe edit is never applied, so it would prove nothing)
+        if (how === 'bar-showing') { w.store.set(PATH, edited); w.workspaceEvent('file-open', w.tf(PATH)); await w.wait(100); assert.deepEqual([...tab.contentEl.querySelectorAll('.forge-description-button')].map((b: any) => b.getAttribute('data-action')), ['update', 'revert']); }
         else { w.type(edited); await w.wait(100); }                                                      // the 600 ms timer is still running
         const parts = real.collectRestoreParticipants().filter((p) => p.path === PATH);
         assert.ok(parts.length >= 1, 'the open Score tab takes part in a restore');

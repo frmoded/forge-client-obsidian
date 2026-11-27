@@ -6,7 +6,7 @@
 //   * the Score is drawn from the json by the code that draws every phrase (produceComposition -> the engine glue's `composition` branch -> rhythm_bars_to_stream); the Python text is never run to draw it (P4).
 // A section of `length` N bars is REPEATED to fill N or CUT to N (never padded, never stretched), no `length` is all its bars once; `repeat` R plays the whole section R more times (the sentence "Repeat that R times."). Every bar keeps its tempo.
 import { NOTE_NAME_PART, barsOfPayload, producePhrase, readPhraseNote, TRANSFORM_DEPTH_MAX, type PhraseScoreDeps } from './phrase-core.ts';
-import { callNote, extractPhraseJsonBlock, handEditRefusalOf, isCustomNote, keepRecipeSource, pyStr, renderSourceChainNote, type SourceChainParts } from './phrase-notes-core.ts';
+import { callNote, extractPhraseJsonBlock, handEditRefusalOf, isCustomNote, pyStr, renderSourceChainNote, type SourceChainParts } from './phrase-notes-core.ts';
 import { produceCustomScore, type CustomDeps } from './custom-note-core.ts';
 import { describe, compositionSentences } from './phrase-describe-core.ts';
 import { FORGE_COMPOSITION_KEY } from './composition-nav-core.ts';
@@ -125,7 +125,7 @@ export function refreshCompositionNoteText(text: string, name: string): { ok: tr
   if (read.ok === false) return { ok: false, message: read.message };
   const lost = handEditRefusalOf(text, false);
   if (lost !== null) return { ok: false, message: lost };
-  const next = keepRecipeSource(text, renderCompositionNote(text, name, read.value, block.fenceStart, listDescriptionOf(text)));
+  const next = renderCompositionNote(text, name, read.value, block.fenceStart, listDescriptionOf(text));
   return { ok: true, text: next, changed: next !== text };
 }
 

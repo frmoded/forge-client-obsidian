@@ -7,7 +7,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { parse, type GrammarVault } from './phrase-grammar-core.ts';
-import { parseRecipe } from './recipe-grammar-core.ts';
 import { descriptionPortsFor } from './description-wiring.ts';
 import { melodyNames } from './melody-bar-core.ts';
 import { VAULT } from './test-support/sentence-list-fixtures.ts';
@@ -26,10 +25,6 @@ test('every phrase verb that works on hits refuses a melody bar in the one plain
   assert.equal(fork.ok, false); if (!fork.ok) assert.match(fork.error.message, /A phrase is all rhythm bars or all melody bars/);          // 2026-11-24-1031 (deliberate): was 'melody bar cannot be used in a phrase yet'
 });
 
-test('the sentence is the same in a recipe (a phrase\'s Recipe is read by the same grammar)', () => {
-  const r = parseRecipe('Take [[bar_021]]. Repeat it for 4 bars with fills.', MELODY_VAULT);
-  assert.equal(r.ok, false); if (!r.ok) assert.match(JSON.stringify(r), /That works on beats, not on notes/);          // 2026-11-24-1031 (deliberate)
-});
 
 test('NOTHING ELSE CHANGES: a rhythm bar is read as it was, the same sentences parse the same with and without a melody list, and a vault with no list reads a melody bar\'s name as any bar\'s', () => {
   const sentences = ['Extend [[bar_001]] to 4 bars, repeating with fills.', 'Mix [[bar_001]] and [[bar_003]], 50 percent [[bar_001]], as a vote.', 'Morph [[bar_003]] into [[bar_001]] over 4 bars, in musical order.', 'Extend [[bar_001]] to 4 bars, repeating with fills. Bar 2 is replaced by [[bar_003]].', 'Extend [[bar_999]] to 4 bars, repeating with fills.', 'Take [[bar_001]].'];

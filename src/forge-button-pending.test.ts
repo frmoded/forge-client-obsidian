@@ -1,5 +1,5 @@
 // 2026-11-23-1018 PART B: a hand edit of the Description of a music list note is NOT replayed by itself any more: the strip says `The Description was edited. Click Forge to apply it.` and its `Forge` button runs today's replay (ONE undo entry carrying the whole
-// note; the ask-once of 1016 still applies when the Recipe holds edits). The setting `Forge Description edits at once` ON (the port says true) restores the automatic replay; a sentence typed in the composer is untouched. Through the REAL controller.
+// note; 2026-11-26-1047 (deliberate): a hand-edited Recipe is generated text and is made again, nothing is asked). The setting `Forge Description edits at once` ON (the port says true) restores the automatic replay; a sentence typed in the composer is untouched. Through the REAL controller.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Window } from 'happy-dom';
@@ -8,7 +8,6 @@ import { createDescriptionController, type DescriptionPorts } from './descriptio
 import { DESCRIPTION_DEBOUNCE_MS } from './description-apply-core.ts';
 import { PHRASE_DEFAULTS, noteContentFor, readPhraseNote, type PhraseParams } from './phrase-core.ts';
 import { extractDescription, extractRecipeSection } from './v2-note-core.ts';
-import { ASK_ONCE } from './script-edit-core.ts';
 import { asListNote } from './test-support/phrase-list-fixtures.ts';
 
 const win: any = new Window({ url: 'http://localhost/' });
@@ -86,10 +85,13 @@ test('B4 the setting `Forge Description edits at once` ON restores the automatic
   }
 });
 
-test('B5 when the Recipe holds edits too, Forge asks once (1016): the two buttons are Keep and Replace, nothing is written until the driver chooses', async () => {
+test('B5 when the Recipe holds edits too, nothing is asked: the strip offers Forge for the Description, and Forge makes the Recipe again from it (one undo gives both edits back)', async () => {          // 2026-11-26-1047 (deliberate): was the ask-once of 1016
   const r = rig(); const a = r.pane();
-  r.store.set(PATH, editDesc(editRecipe(r.store.get(PATH)!, '8 bars', '6 bars'), '8 bars', '5 bars')); await r.touch();
-  assert.deepEqual(r.writes, []); assert.equal(msg(a), ASK_ONCE); assert.deepEqual(buttons(a), ['keep-script', 'update']);
+  const both = editDesc(editRecipe(r.store.get(PATH)!, '8 bars', '6 bars'), '8 bars', '5 bars'); r.store.set(PATH, both); await r.touch();
+  assert.deepEqual(r.writes, []); assert.equal(msg(a), PENDING); assert.deepEqual(buttons(a), ['update', 'revert']);
+  (a.querySelector('[data-action="update"]') as HTMLElement).click(); await r.advance(1);
+  assert.equal(r.store.get(PATH), asListNote(noteContentFor('phrase_001', { ...EXTEND, bars: 5 }), 'phrase_001'));
+  assert.equal((await r.ctl.undoLast(PATH)).ok, true); assert.equal(r.store.get(PATH), both);
 });
 
 test('B6 a Description the grammar cannot read is still said as before (the line and the column; Revert), not as a pending Forge', async () => {

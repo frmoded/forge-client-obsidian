@@ -11,7 +11,6 @@ import { parse, describe, type GrammarParams } from './phrase-grammar-core.ts';
 import * as desc from './phrase-describe-core.ts';
 import { phraseDescription, phraseLinks, phrasePython, phraseRecipeSteps } from './phrase-notes-core.ts';
 import { formatPhraseJson, validatePhrase, readPhraseNote } from './phrase-core.ts';
-import { parseRecipe } from './recipe-grammar-core.ts';
 import { extractDescription } from './v2-note-core.ts';
 import { EXTRA_PARAGRAPHS, PHRASE_VAULT, PLAYGROUND_PHRASES } from './test-support/phrase-list-fixtures.ts';
 
@@ -27,7 +26,7 @@ test('`Take [[phrase_003]].` alone is readable: a transform with NO change, a co
   assert.deepEqual(ok(describe(p as GrammarParams)), p);
 });
 
-test('a copy of x has every derived part: json, Recipe, Python (the bars of x, returned), the note words, the links; and the validators accept it', () => {
+test('a copy of x has every derived part: json, Recipe, Python (the bars of x, returned), the note words, the links; and the validators accept it', () => {          // 2026-11-26-1047 (deliberate): the Recipe is written, no longer read back
   const p = ok('Take [[phrase_003]].');
   assert.ok(validatePhrase(p).ok, 'the plugin\'s own validators accept zero changes');
   assert.equal(formatPhraseJson(p as never), ['{', '  "kind": "transform",', '  "source": "phrases/phrase_003",', '  "ops": [', '  ]', '}'].join('\n'));
@@ -35,7 +34,6 @@ test('a copy of x has every derived part: json, Recipe, Python (the bars of x, r
   assert.match(phrasePython(p as never), /def compute\(context\):\n {2}bars = phrase_003\(\)\n {2}return bars/);
   assert.deepEqual(phraseLinks(p as never), ['phrase_003']);
   assert.match(phraseDescription('phrase_020', p as never), /^phrase_020 — a copy of \[\[phrase_003\]\]\.$/);
-  const back = parseRecipe('Take [[phrase_003]].', V); assert.ok(back.ok, 'the Recipe of a copy reads back'); assert.deepEqual(back.ok && back.params, p);
   const read = readPhraseNote(`---\ntype: data\ncontent_type: json\n---\n\n\`\`\`json\n${formatPhraseJson(p as never)}\n\`\`\`\n`); assert.ok(read.ok, 'the json cache of a copy reads back');
 });
 

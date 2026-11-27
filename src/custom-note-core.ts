@@ -1,4 +1,4 @@
-// 2026-11-02-1155 (score_first M16b, design 4.14) - a CUSTOM note: its Python is the note (python-apply-core.ts decides when a note becomes one). Its Score is drawn by RUNNING that Python (the host's `runCustom`, in Pyodide, with a time limit that
+// 2026-11-02-1155 (score_first M16b, design 4.14) - a CUSTOM note: its Python is the note (since 2026-11-26-1047 a note becomes one by Detach only: description-apply.ts). Its Score is drawn by RUNNING that Python (the host's `runCustom`, in Pyodide, with a time limit that
 // kills the run), the result is checked as a list of bars and drawn by the same engine glue as every phrase; the other notes it calls by name (`phrase_003()`, `arr_001()`) resolve through the engine's own vault-note call path (exec_python's shims).
 // This file is the pure part: which notes a Python calls, the chain guard (a custom note that calls itself, directly or through the notes it calls, is refused: depth at most 6), the one-sentence errors, and the score production with its ports.
 // No `obsidian`, no engine.

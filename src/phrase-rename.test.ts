@@ -11,7 +11,6 @@ import { barsOfPayload, isPhrasePath, noteContentFor, producePhrase, validatePhr
 import { familyOfPath } from './note-family-core.ts';
 import { describe, canonical } from './phrase-describe-core.ts';
 import { parse } from './phrase-grammar-core.ts';
-import { parseRecipe, renderRecipe } from './recipe-grammar-core.ts';
 import { planAction, selectionOf } from './bar-selection-core.ts';
 import { applyStructureOps } from './bar-structure-core.ts';
 import { callNote } from './phrase-notes-core.ts';
@@ -27,12 +26,11 @@ test('THE VALIDATOR: a transform takes any phrase of the folder as its source (l
   assert.ok(validatePhrase({ kind: 'transform', source: 'compositions/song-1', ops: [{ op: 'keep', runs: [[1, 1]] }] }).ok);
   for (const bad of ['phrases/', 'phrases/a/b', 'phrases/a.b', 'phrases/a]]b', 'phrases/ lead', 'phrases/trail ', 'phrases/a|b', 'phrases/a#b', 'arrangements/bridge', 'bars/bar_005', 'phrase_001', 'phrases/README']) assert.ok(!validatePhrase({ kind: 'transform', source: bad, ops: [{ op: 'keep', runs: [[1, 1]] }] }).ok, bad);
 });
-test('THE SENTENCE ROUND-TRIPS with the name, in the Description grammar and in the Recipe: "Take [[my groove]]. Keep bars 2 to 3." says itself, reads back to the same params; phrase_N sentences are byte-for-byte what they were', () => {
+test('THE SENTENCE ROUND-TRIPS with the name in the Description grammar: "Take [[my groove]]. Keep bars 2 to 3." says itself, reads back to the same params; phrase_N sentences are byte-for-byte what they were', () => {          // 2026-11-26-1047 (deliberate): the Recipe is no longer read back
   for (const n of NAMES) for (const ops of [[{ op: 'keep', runs: [[2, 3]] }], [{ op: 'delete', runs: [[1, 1]] }, { op: 'thin_out', first: 1, last: 2, amount: 0.5 }], [{ op: 'double_up', first: 1, last: 2, grid: 16 }]]) {
     const p = take(n, ops); const text = describe(p);
     assert.ok(text.startsWith(`Take [[${n}]]. `), text);
     const back = parse(text, VAULT); assert.ok(back.ok, `${text}: ${JSON.stringify(back)}`); assert.deepEqual(back.ok && back.params, canonical(p), text);
-    const r = parseRecipe(renderRecipe(p), VAULT); assert.ok(r.ok, `${renderRecipe(p)}: ${JSON.stringify(r)}`); assert.deepEqual(r.ok && r.params, canonical(p));
   }
   assert.equal(describe(take('phrase_006', [{ op: 'thin_out', first: 3, last: 5, amount: 0.5 }])), 'Take [[phrase_006]]. Thin out bars 3 to 5, by half, keeping the downbeat.');
 });
@@ -81,14 +79,13 @@ ptest('ON THE REAL ENGINE: a phrase renamed bridge (and one called "my groove") 
 });
 
 // ---- 2026-11-16-1102 (Part B): a composition's sections take a renamed phrase too ---------------------------------------------------------------------------------------------------------
-test('A COMPOSITION TAKES A RENAMED PHRASE: "Play [[bridge]] for 8 bars." validates and reads back (Description and Recipe); phrase_N, arr_N and composition sentences are byte-for-byte what they were; a name that is not one is still refused', () => {
+test('A COMPOSITION TAKES A RENAMED PHRASE: "Play [[bridge]] for 8 bars." validates and reads back (the Description); phrase_N, arr_N and composition sentences are byte-for-byte what they were; a name that is not one is still refused', () => {          // 2026-11-26-1047 (deliberate): the Recipe is no longer read back
   const comp = (...sources: string[]): PhraseParams => ({ kind: 'composition', sections: sources.map((source, i) => ({ source, ...(i === 0 ? { length: 8 } : {}) })) }) as never;
   const V = { bars: [], phrases: NAMES, arrangements: ['arr_001'], compositions: ['intro'] };
   for (const n of NAMES) {
     const p = comp(`phrases/${n}`, 'arrangements/arr_001'); assert.ok(validateComposition(p).ok, n);
     const text = describe(p); assert.ok(text.startsWith(`Play [[${n}]] for 8 bars. Then play [[arr_001]].`), text);
     const back = parse(text, V); assert.ok(back.ok, `${text}: ${JSON.stringify(back)}`); assert.deepEqual(back.ok && back.params, canonical(p), text);
-    const r = parseRecipe(renderRecipe(p), V); assert.ok(r.ok, renderRecipe(p)); assert.deepEqual(r.ok && r.params, canonical(p));
   }
   assert.equal(describe(comp('phrases/phrase_006', 'arrangements/arr_001', 'compositions/intro')), 'Play [[phrase_006]] for 8 bars. Then play [[arr_001]]. Then play [[intro]].');
   for (const bad of ['phrases/', 'phrases/a/b', 'phrases/a.b', 'phrases/ lead', 'phrases/README', 'arrangements/bridge', 'bars/bar_005']) assert.ok(!validateComposition(comp(bad)).ok, bad);

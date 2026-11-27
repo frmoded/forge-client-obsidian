@@ -158,17 +158,11 @@ test('CM6 integration (real hello_world): the same bytes with source_facet: desc
   }
 });
 
-// ---- 2026-10-31-1140 (M16a): a note whose SOURCE is its Recipe (applied by "Update from Recipe": the real writers) is drawn by the same plugin, from the same status function ------------------------------------------------------
+// ---- 2026-10-31-1140 (M16a): a note whose SOURCE is its Recipe (an older build left it so: 2026-11-26-1047 (deliberate)) is drawn by the same plugin, from the same status function ------------------------------------------------------
 async function recipeSourcedNote(): Promise<string> {
   const { PHRASE_DEFAULTS, noteContentFor } = await import('./phrase-core.ts');
-  const { applyRecipeText } = await import('./description-apply-core.ts');
-  const { extractRecipeSection } = await import('./v2-note-core.ts');
-  const base = noteContentFor('phrase_001', { kind: 'extend', source: 'bar_007', ...PHRASE_DEFAULTS, bars: 8 });
-  const recipe = extractRecipeSection(base) ?? '';
-  const edited = base.replace(recipe, recipe.replace('8 bars', '6 bars'));
-  const done = applyRecipeText(edited, 'phrase_001', 'phrase', { bars: ['bar_007'], phrases: ['phrase_001'], arrangements: [], compositions: [], kits: [] }, extractRecipeSection(edited) ?? '');
-  assert.ok(done.ok);
-  return done.ok ? done.text : '';
+  const { oldRecipeSourced } = await import('./test-support/old-source-notes.ts');
+  return oldRecipeSourced(noteContentFor('phrase_001', { kind: 'extend', source: 'bar_007', ...PHRASE_DEFAULTS, bars: 6 }));
 }
 const suffixesOf = (html: string): string[] => [...html.matchAll(/— (source|ignored|derived from [A-Za-z]+(?:, out of date)?)/g)].map((m) => m[0]);
 

@@ -104,9 +104,9 @@ test('refresh keeps every other frontmatter line (read_only, anything a person a
   const editedPython = r.text.replace('```python\r\n', '```python\r\n# my own\r\n');
   const back = refreshPhraseNoteText(editedPython, 'phrase_003');
   // 2026-11-02-1155 (M16b, deliberate): the Python is a source too now; a hand edit of it is never overwritten either (refused, the note untouched; Update from Python or Revert decide)
-  assert.deepEqual(back, { ok: false, message: 'The Python was edited by hand; press Update from Python first or revert it.' });
+  assert.deepEqual(back, { ok: false, message: 'This Recipe/Python is generated. Edit the Description, or Detach.' });          // 2026-11-26-1047 (deliberate): the Recipe and the Python are generated and not read back; a refresh still does not overwrite a hand edit: one line answers it
   const editedRecipe = r.text.replace('# Recipe\r\n\r\nTake', '# Recipe\r\n\r\nTake my own');
-  assert.deepEqual(refreshPhraseNoteText(editedRecipe, 'phrase_003'), { ok: false, message: 'The Recipe was edited by hand; press Update from Recipe first or revert it.' });
+  assert.deepEqual(refreshPhraseNoteText(editedRecipe, 'phrase_003'), { ok: false, message: 'This Recipe/Python is generated. Edit the Description, or Detach.' });          // 2026-11-26-1047 (deliberate)
   const editedDescription = r.text.replace('musical order.\r\n\r\n# Recipe', 'MY OWN WORDS.\r\n\r\n# Recipe');
   assert.deepEqual(refreshPhraseNoteText(editedDescription, 'phrase_003'), { ok: false, message: 'The Description was edited by hand; press Update from Description first or revert it.' });
 });

@@ -4,16 +4,11 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Window } from 'happy-dom';
 
-import { pythonCommentsOf } from './python-apply-core.ts';
 import { createDescriptionController, type DescriptionPorts } from './description-apply.ts';
 import { DESCRIPTION_DEBOUNCE_MS } from './description-apply-core.ts';
 import { PHRASE_DEFAULTS, noteContentFor, readPhraseNote, type PhraseParams } from './phrase-core.ts';
-import { extractDescription, extractRecipeSection } from './v2-note-core.ts';
-import { BOTH_EDITED } from './recipe-apply-core.ts';
-import { ASK_ONCE } from './script-edit-core.ts';
-import { CUSTOM_BANNER, asRecipeSourced, isCustomNote, pythonTextOf } from './phrase-notes-core.ts';
-import { customCallNotes } from './custom-note-core.ts';
-import { REVERT_GENERATED_CONFIRM } from './description-apply-core.ts';
+import { extractDescription } from './v2-note-core.ts';
+import { CUSTOM_BANNER, asCustom, isCustomNote } from './phrase-notes-core.ts';
 import { newArrangementNote } from './arrangement-core.ts';
 import { asListNote } from './test-support/phrase-list-fixtures.ts';
 
@@ -117,16 +112,6 @@ test('a pane that emptied itself (a reload) gets its bar again at the next sync;
   assert.equal(a.querySelectorAll('.forge-description-bar').length, 1);
 });
 
-test('the Python edited instead is a SOURCE (2026-11-02-1155, M16b, deliberate: it was "Python is derived; edit the Description or the Recipe.", said and not applied): a known shape (a comment added) is applied by ONE write and the note is Python-sourced; 2026-11-03-1155-8 (D4, deliberate): the comment is not kept, and that is said on the evidence line and on the bar (no buttons)', async () => {
-  const r = rig();
-  const a = r.pane();
-  r.store.set(PATH, r.store.get(PATH)!.replace('```python\n', '```python\n# hand edit\n')); r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
-  assert.equal(r.writes.length, 1);
-  assert.match(r.store.get(PATH)!, /source_facet: python/);
-  assert.deepEqual(r.lines, ['[forge-python] applied phrase_001 (no change in the music); comments in the Python are not kept']);
-  assert.equal(msg(a), 'Applied from the Python; comments in the Python are not kept.'); assert.deepEqual(buttons(a), []);
-});
-
 test('inspect (a note opened): the bar shows an unparsable sentence or the Update button for one that parses, and WRITES nothing; the Update button applies it', async () => {
   const r = rig();
   const a = r.pane();
@@ -213,7 +198,7 @@ test('the bar\'s sentences: a Description that parses (before it is applied), a 
   assert.match(a.querySelector('.forge-description-preview-recipe')!.textContent!, /Take \[\[bar_007\]\]/);
   const d = rig(); const b = d.pane();
   d.store.set(PATH, d.store.get(PATH)!.replace('```python\n', '```python\n# hand edit\n')); await d.ctl.inspect(PATH);
-  assert.match(msg(b), /^The Python changed \(no change in the music\); update the note from it\.$/); assert.deepEqual(buttons(b), ['update-python', 'revert']);   // 2026-11-02-1155 (M16b, deliberate): a Python edit is a source
+  assert.equal(msg(b), 'This Recipe/Python is generated. Edit the Description, or Detach.'); assert.deepEqual(buttons(b), ['detach', 'ok']);   // 2026-11-26-1047 (deliberate): a hand-edited generated facet is answered by one line
 });
 
 test('a note with nothing to say gets no bar, and a pane that moves to another note loses the bar it had', async () => {
@@ -288,16 +273,6 @@ test('a disposed controller does nothing: no timer is set, a read in flight draw
   r.ctl.modified(PATH); await r.advance(5000); assert.deepEqual(r.writes, []);
 });
 
-test('the derived-edit line is written once however often the note is touched, and again after the note was in sync in between', async () => {
-  const r = rig();
-  const edited = r.store.get(PATH)!.replace('# Recipe\n\n', '# Recipe\n\nCall [[x]].\n');
-  r.store.set(PATH, edited); r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS); r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
-  assert.equal(r.lines.length, 1);
-  r.store.set(PATH, noteContentFor('phrase_001', EXTEND)); r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
-  r.store.set(PATH, edited); r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
-  assert.equal(r.lines.length, 2, 'said again for a new occurrence');
-});
-
 test('a sentence is said again when it CHANGES (still wrong, differently), and the service\'s suggestion made for the old sentence is dropped with it', async () => {
   const r = rig({ service: PLAN_OK({ kind: 'extend', bar: 'bar_007', bars: 12 }) });
   const a = r.pane();
@@ -361,142 +336,16 @@ test('the service answers after the pane was closed or the note fixed: nothing i
 function newArr(): string { return newArrangementNote('arr_001', { kind: 'arrangement', tracks: [{ kit: 'rock', phrase: 'phrase_003' }] }); }
 
 
-// ---- 2026-10-31-1140 (M16a): the RECIPE is a source too -----------------------------------------------------------------------------------------------------------------------------------------------------------------
-const editRecipe = (text: string, from: string, to: string): string => { const x = extractRecipeSection(text) ?? ''; assert.ok(x.includes(from), `the Recipe has "${from}"`); return text.replace(x, x.replace(from, to)); };
-
-test('a Recipe edited to parse is applied once the person STOPS typing, by one write, with its [forge-recipe] evidence line; the note is the one the controls make, as a Recipe-sourced note; the write\'s own modify event finds it synced', async () => {
-  const r = rig();
-  r.store.set(PATH, editRecipe(r.store.get(PATH)!, '8 bars', '6 bars'));
-  r.ctl.modified(PATH);
-  await r.advance(DESCRIPTION_DEBOUNCE_MS);
-  assert.deepEqual(r.writes, [], '2026-11-22-1016 (deliberate): a Recipe that reads is no longer applied by itself: the list is marked (11i), the driver chooses');
-  assert.deepEqual(r.lines, ['[forge-recipe] held phrase_001: the Description no longer matches the Recipe']);          // 2026-11-23-1022 (deliberate): the Description and Recipe wording
-  await r.ctl.update(PATH);                                                                                  // `Rewrite the description from the recipe`, on request
-  assert.deepEqual(r.writes, [PATH]);
-  assert.equal(r.store.get(PATH), asRecipeSourced(asListNote(noteContentFor('phrase_001', { ...EXTEND, bars: 6 }), 'phrase_001'))); // 2026-11-19-0980 (deliberate): a phrase's Description is a numbered list now: the note a write leaves is the list note
-  assert.deepEqual(r.lines, ['[forge-recipe] held phrase_001: the Description no longer matches the Recipe', '[forge-recipe] applied phrase_001 (8 -> 6 bars)']);          // 2026-11-23-1022 (deliberate): the Description and Recipe wording
-  r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS * 3);
-  assert.deepEqual(r.writes, [PATH], 'nothing more happens'); assert.equal(r.lines.length, 2);
-});
-
-test('a Recipe that does not parse: NOTHING is written, the bar says the line and the column in every pane with Revert only (no service for a Recipe, even when one is configured), once however often the note is touched; fixing it applies it; Revert restores the last good note', async () => {
-  const r = rig({ service: async () => ({ status: 200, json: {} }), configured: true });
-  const good = r.store.get(PATH)!;
-  const a = r.pane(), b = r.pane();
-  r.store.set(PATH, good.replace(extractRecipeSection(good) ?? '', 'Take [[bar_007]].\nRepeat it for 8 bars with fills.\nSprinkle [[bar_008]].'));
-  r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
-  assert.deepEqual(r.writes, []);
-  assert.match(msg(a), /^Recipe, line 3, column 1: I do not know the step 'Sprinkle'\. A step starts with Take, Repeat,/); assert.equal(msg(b), msg(a));
-  assert.deepEqual(buttons(a), ['revert'], 'Revert only: no "Ask the sentence service" for a Recipe');
-  assert.equal(r.lines.length, 1); assert.match(r.lines[0], /^\[forge-recipe\] rejected phrase_001: line 3 column 1 /);
-  r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
-  assert.equal(r.lines.length, 1, 'said once');
-  (a.querySelector('[data-action="revert"]') as HTMLElement).click(); await r.advance(1);
-  assert.equal(r.store.get(PATH), asListNote(good, 'phrase_001')); // 2026-11-19-0980 (deliberate): a phrase's Description is a numbered list now: the note a write leaves is the list note
-  assert.equal(a.querySelector('.forge-description-bar'), null);
-  assert.equal(r.lines.at(-1), '[forge-recipe] reverted phrase_001 to the json cache');
-  // and a Recipe fixed instead of reverted is applied
-  r.store.set(PATH, editRecipe(good, '8 bars', '5 bars')); r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
-  assert.equal(r.lines.at(-1), '[forge-recipe] held phrase_001: the Description no longer matches the Recipe', '2026-11-22-1016 (deliberate): a fixed Recipe is held, not applied by itself');          // 2026-11-23-1022 (deliberate): the Description and Recipe wording
-  await r.ctl.update(PATH);
-  assert.equal(r.lines.at(-1), '[forge-recipe] applied phrase_001 (8 -> 5 bars)');
-});
-
-test('BOTH facets edited: nothing is written, the sentence names both with the two buttons; "Update from Recipe" keeps the Recipe, "Update from Description" keeps the Description', async () => {
-  for (const [button, bars, line] of [['update-recipe', 6, '[forge-recipe] applied phrase_001 (8 -> 6 bars)'], ['update', 5, '[forge-description] applied phrase_001 (8 -> 5 bars)']] as const) {
-    const r = rig();
-    const a = r.pane();
-    r.store.set(PATH, edit(editRecipe(r.store.get(PATH)!, '8 bars', '6 bars'), '8 bars', '5 bars'));
-    r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
-    assert.deepEqual(r.writes, [], 'a person\'s edit is never silently chosen over another');
-    assert.equal(msg(a), ASK_ONCE); assert.deepEqual(buttons(a), ['keep-script', 'update']);          // 2026-11-22-1016 (deliberate): a list edit that meets a Recipe holding edits asks ONCE (11i); BOTH_EDITED is still what lean says
-    assert.equal(r.ctl.canUpdate(PATH), false, 'the command has one answer to give only when there is one');
-    assert.deepEqual(r.lines, [`[forge-recipe] refused phrase_001: ${BOTH_EDITED}`]);
-    if (button === 'update-recipe') { (a.querySelector('[data-action="keep-script"]') as HTMLElement).click(); await r.advance(1); assert.deepEqual(r.writes, [], '2026-11-22-1016 (deliberate): Keep writes nothing'); }
-    (a.querySelector(`[data-action="${button}"]`) as HTMLElement).click(); await r.advance(1);
-    assert.deepEqual(r.writes, [PATH]);
-    assert.equal(r.lines.at(-1), line);
-    assert.equal(readPhraseNote(r.store.get(PATH)!).ok && (readPhraseNote(r.store.get(PATH)!) as any).value.bars, bars);
-    assert.equal(a.querySelector('.forge-description-bar'), null, 'synced: the bar goes');
-  }
-});
-
-test('edge: a hand edit of the RECIPE right after the Description was just auto-applied (M15c debounce): the Description\'s write is done, the Recipe it wrote is what the person edits, and its own turn applies it', async () => {
-  const r = rig();
-  r.store.set(PATH, edit(r.store.get(PATH)!, '8 bars', '6 bars')); r.ctl.modified(PATH);
-  await r.advance(DESCRIPTION_DEBOUNCE_MS);
-  assert.deepEqual(r.lines, ['[forge-description] applied phrase_001 (8 -> 6 bars)']);
-  r.store.set(PATH, editRecipe(r.store.get(PATH)!, '6 bars', '4 bars')); r.ctl.modified(PATH);                        // 1 ms after
-  await r.advance(DESCRIPTION_DEBOUNCE_MS);
-  assert.deepEqual(r.lines, ['[forge-description] applied phrase_001 (8 -> 6 bars)', '[forge-recipe] held phrase_001: the Description no longer matches the Recipe']);          // 2026-11-22-1016 (deliberate): held          // 2026-11-23-1022 (deliberate): the Description and Recipe wording
-  await r.ctl.update(PATH);
-  assert.deepEqual(r.lines, ['[forge-description] applied phrase_001 (8 -> 6 bars)', '[forge-recipe] held phrase_001: the Description no longer matches the Recipe', '[forge-recipe] applied phrase_001 (6 -> 4 bars)']);          // 2026-11-23-1022 (deliberate): the Description and Recipe wording
-  assert.equal(r.store.get(PATH), asRecipeSourced(asListNote(noteContentFor('phrase_001', { ...EXTEND, bars: 4 }), 'phrase_001'))); // 2026-11-19-0980 (deliberate): a phrase's Description is a numbered list now: the note a write leaves is the list note
-});
-
-test('edge: a Recipe edit INSIDE the wait of a Description edit: when the timer fires BOTH differ from their stamps, so nothing is written and the person is asked (the first edit is not applied behind the second one\'s back)', async () => {
-  const r = rig();
-  const base = r.store.get(PATH)!;
-  r.store.set(PATH, edit(base, '8 bars', '6 bars')); r.ctl.modified(PATH);
-  await r.advance(300);
-  r.store.set(PATH, editRecipe(r.store.get(PATH)!, '8 bars', '4 bars')); r.ctl.modified(PATH);
-  await r.advance(DESCRIPTION_DEBOUNCE_MS);
-  assert.deepEqual(r.writes, []);
-  assert.deepEqual(r.lines, [`[forge-recipe] refused phrase_001: ${BOTH_EDITED}`]);
-});
-
-test('a Recipe typed while the write is in flight is not overwritten: the plan is decided on the CURRENT text, the stale one is dropped and the newer Recipe is read by its own turn', async () => {
-  const r = rig();
-  const base = r.store.get(PATH)!;
-  r.store.set(PATH, editRecipe(base, '8 bars', '6 bars')); r.ctl.modified(PATH);
-  await r.advance(DESCRIPTION_DEBOUNCE_MS - 1);
-  r.store.set(PATH, editRecipe(base, '8 bars', '3 bars'));
-  r.ctl.modified(PATH);
-  await r.advance(1); assert.deepEqual(r.writes, []);
-  await r.advance(DESCRIPTION_DEBOUNCE_MS);
-  assert.deepEqual(r.lines, ['[forge-recipe] held phrase_001: the Description no longer matches the Recipe']);                                                                       // 2026-11-22-1016 (deliberate): held; the newer text is the one that is read          // 2026-11-23-1022 (deliberate): the Description and Recipe wording
-  await r.ctl.update(PATH);
-  assert.deepEqual(r.lines, ['[forge-recipe] held phrase_001: the Description no longer matches the Recipe', '[forge-recipe] applied phrase_001 (8 -> 3 bars)']);          // 2026-11-23-1022 (deliberate): the Description and Recipe wording
-});
-
-test('the "Update from Description" command (canUpdate) is there for a Recipe that parses, too: the note has one thing to apply', async () => {
-  const r = rig();
-  r.store.set(PATH, editRecipe(r.store.get(PATH)!, '8 bars', '6 bars'));
-  await r.ctl.inspect(PATH);
-  assert.equal(r.ctl.canUpdate(PATH), true);
-  await r.ctl.update(PATH);
-  assert.equal(r.lines.at(-1), '[forge-recipe] applied phrase_001 (8 -> 6 bars)');
-  assert.equal(r.ctl.canUpdate(PATH), false);
-});
-
 // ---- 2026-10-31-1149: the survivors of the mutation pass of 1120 (re-run on an idle machine) and of the same files at M16a: what the controller says and does when a write FAILS, when a plan is STALE, how often a problem is SAID, what Cancel and Revert leave, and what a disposed or a foreign note costs --------
 const quiet = async <T>(fn: () => Promise<T>): Promise<T> => { const saved = console.error; console.error = () => {}; try { return await fn(); } finally { console.error = saved; } };
 const READ_ONLY = (text: string): string => text.replace('content_type: json', 'content_type: json\nread_only: true');
 
-test('a Recipe that parses is OFFERED (nothing written) when the note is only looked at: the sentence names the change and the two buttons are Update from Recipe and Revert', async () => {
-  const r = rig(); const a = r.pane();
-  r.store.set(PATH, editRecipe(r.store.get(PATH)!, '8 bars', '6 bars'));
-  await r.ctl.inspect(PATH);
-  assert.deepEqual(r.writes, []);
-  assert.equal(msg(a), 'The Description no longer matches the Recipe (the Recipe changed: 8 -> 6 bars).'); assert.deepEqual(buttons(a), ['update-recipe', 'revert']);          // 2026-11-22-1016 (deliberate): the words of 11i          // 2026-11-23-1022 (deliberate): the Description and Recipe wording
-});
-
-test('a problem is SAID once and said again when it comes back: a Python edit, both facets edited and a rejected Recipe are each reported once however often the note is touched, and the sentence is reported again after the problem was fixed', async () => {
+test('a rejected Description is SAID once however often the note is touched, and again after it was fixed in between', async () => {          // 2026-11-26-1047 (deliberate): was a Python edit, both facets edited and a rejected Recipe too
   const r = rig(); r.pane();
   const good = r.store.get(PATH)!;
-  r.store.set(PATH, good.replace('```python\n', '```python\n# hand edit\n'));
-  for (let i = 0; i < 3; i++) { r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS); }
-  assert.equal(r.lines.length, 1, 'a Python edit said once');
-  const both = edit(editRecipe(good, '8 bars', '6 bars'), '8 bars', '5 bars');
-  r.store.set(PATH, both);
-  for (let i = 0; i < 3; i++) { r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS); }
-  assert.equal(r.lines.filter((l) => /refused phrase_001/.test(l)).length, 1, 'both edited said once');
-  // fixed by hand (the note is as the controls wrote it again): the bar goes, and the same problem is said again when it returns
-  r.store.set(PATH, good); r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
-  r.store.set(PATH, both); r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
-  assert.equal(r.lines.filter((l) => /refused phrase_001/.test(l)).length, 2, 'said again after it was fixed in between');
   const bad = edit(good, '8 bars', '8 barz');
-  r.store.set(PATH, bad); r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
+  r.store.set(PATH, bad); for (let i = 0; i < 3; i++) { r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS); }
+  assert.equal(r.lines.filter((l) => /rejected phrase_001/.test(l)).length, 1, 'said once');
   r.store.set(PATH, good); r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
   r.store.set(PATH, bad); r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
   assert.equal(r.lines.filter((l) => /rejected phrase_001/.test(l)).length, 2, 'a rejected sentence is said again after the note was good in between');
@@ -526,7 +375,7 @@ test('a note that is not ours costs nothing: no read and no write for a README, 
   assert.deepEqual(r.calls, []); assert.deepEqual(r.writes, []); assert.deepEqual(r.lines, []);
 });
 
-test('a write that FAILS says so and keeps what it can still do: Update from Description fails -> its sentence with Update and Revert; Update from Recipe likewise; the failure is logged to the console', async () => {
+test('a write that FAILS says so and keeps what it can still do: Update from Description fails -> its sentence with Update and Revert; the failure is logged to the console', async () => {          // 2026-11-26-1047 (deliberate): the Recipe and both-edited cases are gone
   const logged: unknown[][] = [];
   const saved = console.error; console.error = (...a: unknown[]) => { logged.push(a); };
   try {
@@ -534,42 +383,22 @@ test('a write that FAILS says so and keeps what it can still do: Update from Des
     d.store.set(PATH, edit(d.store.get(PATH)!, '8 bars', '6 bars')); d.ctl.modified(PATH); await d.advance(DESCRIPTION_DEBOUNCE_MS);
     assert.equal(msg(da), 'Update from Description: disk full'); assert.deepEqual(buttons(da), ['update', 'revert']);
     assert.deepEqual(d.writes, []);
-    const x = rig({ processError: 'disk full' }); const xa = x.pane();
-    x.store.set(PATH, editRecipe(x.store.get(PATH)!, '8 bars', '6 bars')); x.ctl.modified(PATH); await x.advance(DESCRIPTION_DEBOUNCE_MS); await x.ctl.update(PATH);          // 2026-11-22-1016 (deliberate): the Recipe is applied on request
-    assert.equal(msg(xa), 'Update from Recipe: disk full'); assert.deepEqual(buttons(xa), ['update-recipe', 'revert']);
-    assert.equal(logged.length, 2); assert.match(String(logged[0][0]), /description-apply: could not write the note/); assert.match(String(logged[1][0]), /recipe-apply: could not write the note/);
-    // both edited, the person chose the Description, the write fails: the same two buttons stay, with the reason
-    const b = rig({ processError: 'disk full' }); const ba = b.pane();
-    b.store.set(PATH, edit(editRecipe(b.store.get(PATH)!, '8 bars', '6 bars'), '8 bars', '5 bars')); b.ctl.modified(PATH); await b.advance(DESCRIPTION_DEBOUNCE_MS);
-    (ba.querySelector('[data-action="update"]') as HTMLElement).click(); await b.advance(1);
-    assert.equal(msg(ba), 'Update from Description: disk full'); assert.deepEqual(buttons(ba), ['keep-script', 'update']);          // 2026-11-22-1016 (deliberate): the ask-once buttons
-    assert.equal(logged.length, 3); assert.match(String(logged[2][0]), /description-apply: could not write the note/);
+    assert.equal(logged.length, 1); assert.match(String(logged[0][0]), /description-apply: could not write the note/);
   } finally { console.error = saved; }
 });
 
-test('a note its WRITER refuses (read_only) is said in the writer\'s own words and the buttons stay: a Description, a Recipe and both-edited, each decided by the writer inside the write', async () => {
-  for (const [label, make, buttonsWant] of [
-    ['Description', (t: string) => edit(t, '8 bars', '6 bars'), ['update', 'revert']],
-    ['Recipe', (t: string) => editRecipe(t, '8 bars', '6 bars'), ['update-recipe', 'revert']],
-  ] as const) {
-    const r = rig(); const a = r.pane();
-    r.store.set(PATH, READ_ONLY(make(r.store.get(PATH)!))); r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
-    if (label === 'Recipe') await r.ctl.update(PATH);          // 2026-11-22-1016 (deliberate): a Recipe that reads is held until the driver asks for the rewrite; the writer then says no
-    assert.deepEqual(r.writes, [], label);
-    assert.match(msg(a), /read_only|read-only|editable/i, `${label}: ${msg(a)}`); assert.deepEqual(buttons(a), buttonsWant, label);
-    assert.deepEqual(r.lines.filter((l) => !/\] held /.test(l)), [], `${label}: a refusal of the writer is not an applied line`);          // 2026-11-22-1016 (deliberate): the held line is the Recipe's, not an apply
-  }
-  const b = rig(); const ba = b.pane();
-  b.store.set(PATH, READ_ONLY(edit(editRecipe(b.store.get(PATH)!, '8 bars', '6 bars'), '8 bars', '5 bars'))); b.ctl.modified(PATH); await b.advance(DESCRIPTION_DEBOUNCE_MS);
-  (ba.querySelector('[data-action="update"]') as HTMLElement).click(); await b.advance(1);
-  assert.deepEqual(b.writes, []); assert.match(msg(ba), /read_only|read-only|editable/i); assert.deepEqual(buttons(ba), ['keep-script', 'update']);          // 2026-11-22-1016 (deliberate): the ask-once buttons
+test('a note its WRITER refuses (read_only) is said in the writer\'s own words and the buttons stay: decided by the writer inside the write', async () => {          // 2026-11-26-1047 (deliberate): the Recipe and both-edited cases are gone
+  const r = rig(); const a = r.pane();
+  r.store.set(PATH, READ_ONLY(edit(r.store.get(PATH)!, '8 bars', '6 bars'))); r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
+  assert.deepEqual(r.writes, []);
+  assert.match(msg(a), /read_only|read-only|editable/i, msg(a)); assert.deepEqual(buttons(a), ['update', 'revert']);
+  assert.deepEqual(r.lines, [], 'a refusal of the writer is not an applied line');
 });
 
 test('a STALE plan is dropped and the note is read afresh, with no failure sentence: the text changes between the plan and the write, so nothing stale is written and the bar offers what the note says NOW', async () => {
   const base = noteContentFor('phrase_001', EXTEND);
-  for (const [label, first, second, want] of [
+  for (const [label, first, second, want] of [          // 2026-11-26-1047 (deliberate): the Recipe case is gone
     ['Description', (t: string) => edit(t, '8 bars', '6 bars'), (t: string) => edit(t, '8 bars', '5 bars'), 'The Description changed (8 -> 5 bars); update the note from it.'],
-    ['Recipe', (t: string) => editRecipe(t, '8 bars', '6 bars'), (t: string) => editRecipe(t, '8 bars', '5 bars'), 'The Description no longer matches the Recipe (the Recipe changed: 8 -> 6 bars).'],          // 2026-11-22-1016 (deliberate): a Recipe that reads is only held, so there is no plan to be stale; the strip names what the note says now          // 2026-11-23-1022 (deliberate): the Description and Recipe wording
   ] as const) {
     let fired = false;
     const r = rig({ beforeProcess: (p) => { if (!fired) { fired = true; r.store.set(p, second(base)); } } });          // typed after the plan, before the write (no event: nobody has heard it yet)
@@ -588,36 +417,21 @@ test('a STALE plan is dropped and the note is read afresh, with no failure sente
   assert.match(msg(a), /^Description, line 1, column \d+: expected "bars"/); assert.deepEqual(buttons(a), ['revert']);
 });
 
-test('Update from Recipe on a note that no longer has a Recipe to apply shows what the note says now and writes nothing', async () => {
-  const r = rig(); const a = r.pane();
-  const good = r.store.get(PATH)!;
-  r.store.set(PATH, editRecipe(good, '8 bars', '6 bars')); await r.ctl.inspect(PATH);
-  assert.deepEqual(buttons(a), ['update-recipe', 'revert']);
-  r.store.set(PATH, good);                                                                    // fixed by hand, no event heard yet
-  (a.querySelector('[data-action="update-recipe"]') as HTMLElement).click(); await r.advance(1);
-  assert.deepEqual(r.writes, []); assert.deepEqual(r.calls, [], 'nothing was written, not even an empty write');
-  assert.equal(a.querySelector('.forge-description-bar'), null, 'and the bar that offered it is gone');
-});
-
-test('Revert says which kind of problem it reverted ([forge-recipe] for a Recipe edit, a rejected Recipe and both edited; [forge-description] for a Description) and forgets it was told: the same sentence is said again afterwards', async () => {
+test('Revert is traced and forgets it was told: the same sentence is said again afterwards', async () => {          // 2026-11-26-1047 (deliberate): the Recipe and both-edited cases are gone
   const good = noteContentFor('phrase_001', EXTEND);
-  // [label, the note as typed, the evidence line of the revert, whether the PROBLEM itself is said in an evidence line (a rejected text and both edited are; an edit that parses is only offered)]
-  const cases: Array<[string, string, string, boolean]> = [
-    ['a Recipe that parses', editRecipe(good, '8 bars', '6 bars'), '[forge-recipe] reverted phrase_001 to the json cache', true],          // 2026-11-22-1016 (deliberate): a Recipe that parses is HELD, and said once (the held line)
-    ['a Recipe that does not', good.replace(extractRecipeSection(good) ?? '', 'Sprinkle.'), '[forge-recipe] reverted phrase_001 to the json cache', true],
-    ['both edited', edit(editRecipe(good, '8 bars', '6 bars'), '8 bars', '5 bars'), '[forge-recipe] reverted phrase_001 to the json cache', true],
-    ['a Description that parses', edit(good, '8 bars', '6 bars'), '[forge-description] reverted phrase_001 to the json cache', false],
-    ['a Description that does not', edit(good, '8 bars', '8 barz'), '[forge-description] reverted phrase_001 to the json cache', true],
+  // [label, the note as typed, whether the PROBLEM itself is said in an evidence line (a rejected text is; an edit that parses is only offered)]
+  const cases: Array<[string, string, boolean]> = [
+    ['a Description that parses', edit(good, '8 bars', '6 bars'), false],
+    ['a Description that does not', edit(good, '8 bars', '8 barz'), true],
   ];
-  for (const [label, typed, want, traced] of cases) {
+  for (const [label, typed, traced] of cases) {
     const r = rig(); const a = r.pane();
     r.store.set(PATH, typed); await r.ctl.inspect(PATH);
     assert.ok(a.querySelector('.forge-description-bar'), `${label}: there is something to revert`);
-    await r.ctl.revert(PATH);                                                                   // the command's path: one for every state (both edited has no Revert button)
+    await r.ctl.revert(PATH);
     assert.equal(r.store.get(PATH), asListNote(good, 'phrase_001'), label); // 2026-11-19-0980 (deliberate): a phrase's Description is a numbered list now: the note a write leaves is the list note
-    assert.equal(r.lines.at(-1), want, label);
+    assert.equal(r.lines.at(-1), '[forge-description] reverted phrase_001 to the json cache', label);
     assert.equal(a.querySelector('.forge-description-bar'), null, label);
-    // it forgot it was told: the same problem is said again when it comes back
     const said = r.lines.length;
     r.store.set(PATH, typed); await r.ctl.inspect(PATH);
     assert.equal(r.lines.length, said + (traced ? 1 : 0), `${label}: ${traced ? 'said again' : 'an edit that parses is offered, not said'}`);
@@ -709,7 +523,7 @@ test('dispose: a timer that is pending never fires, a disposed controller says a
 });
 
 
-test('a problem is said AGAIN after each way it can be answered, not only after the note was seen fixed: an Update, an Update from Recipe, an Update from Description over both edits and an Apply each forget what they were told', async () => {
+test('a problem is said AGAIN after it was answered by an apply, not only after the note was seen fixed', async () => {          // 2026-11-26-1047 (deliberate): the Recipe and both-edited ways are gone
   const good = noteContentFor('phrase_001', EXTEND);
   // a rejected Description, then a Description that parses and is applied by its own turn, then the SAME rejected sentence: said again
   const d = rig(); d.pane();
@@ -719,32 +533,6 @@ test('a problem is said AGAIN after each way it can be answered, not only after 
   assert.ok(d.lines.some((l) => /applied/.test(l)));
   d.store.set(PATH, bad); d.ctl.modified(PATH); await d.advance(DESCRIPTION_DEBOUNCE_MS);
   assert.equal(d.lines.filter((l) => /rejected/.test(l)).length, 2, 'Description: said again after an apply');
-  // the same for a Recipe
-  const x = rig(); x.pane();
-  const badRecipe = good.replace(extractRecipeSection(good) ?? '', 'Take [[bar_007]].\nSprinkle [[bar_008]].');
-  x.store.set(PATH, badRecipe); x.ctl.modified(PATH); await x.advance(DESCRIPTION_DEBOUNCE_MS);
-  x.store.set(PATH, editRecipe(good, '8 bars', '6 bars')); x.ctl.modified(PATH); await x.advance(DESCRIPTION_DEBOUNCE_MS); await x.ctl.update(PATH);          // 2026-11-22-1016 (deliberate): applied on request
-  assert.ok(x.lines.some((l) => /\[forge-recipe\] applied/.test(l)));
-  x.store.set(PATH, badRecipe); x.ctl.modified(PATH); await x.advance(DESCRIPTION_DEBOUNCE_MS);
-  assert.equal(x.lines.filter((l) => /rejected/.test(l)).length, 2, 'Recipe: said again after an apply');
-  // both edited, the person chooses the Description, then the same two edits again: refused (and said) again
-  const b = rig(); const ba = b.pane();
-  const both = edit(editRecipe(good, '8 bars', '6 bars'), '8 bars', '5 bars');
-  b.store.set(PATH, both); b.ctl.modified(PATH); await b.advance(DESCRIPTION_DEBOUNCE_MS);
-  (ba.querySelector('[data-action="update"]') as HTMLElement).click(); await b.advance(1);
-  b.store.set(PATH, both); b.ctl.modified(PATH); await b.advance(DESCRIPTION_DEBOUNCE_MS);
-  assert.equal(b.lines.filter((l) => /refused phrase_001/.test(l)).length, 2, 'both edited: said again after the Description was chosen');
-});
-
-test('Update from Recipe is the Recipe and nothing else: when the Recipe was fixed meanwhile and the DESCRIPTION is what was edited, the button does not apply the Description behind the person\'s back - the bar offers it', async () => {
-  const r = rig(); const a = r.pane();
-  const good = r.store.get(PATH)!;
-  r.store.set(PATH, editRecipe(good, '8 bars', '6 bars')); await r.ctl.inspect(PATH);
-  assert.deepEqual(buttons(a), ['update-recipe', 'revert']);
-  r.store.set(PATH, edit(good, '8 bars', '5 bars'));                                          // the Recipe is back to what it was and the Description was edited instead; no event heard yet
-  (a.querySelector('[data-action="update-recipe"]') as HTMLElement).click(); await r.advance(1);
-  assert.deepEqual(r.writes, [], 'nothing was applied: the person pressed Update from RECIPE');
-  assert.equal(msg(a), 'The Description changed (8 -> 5 bars); update the note from it.'); assert.deepEqual(buttons(a), ['update', 'revert']);
 });
 
 test('a button that is still in the hand of a script after its bar went away (a Cancel, an Apply) answers nothing and breaks nothing; an answer from the sentence service for a sentence that is gone is dropped whatever became of the note meanwhile (fixed, edited to parse, or edited again)', async () => {
@@ -779,118 +567,34 @@ test('a button that is still in the hand of a script after its bar went away (a 
   assert.deepEqual(unhandled, [], 'nothing threw');
 });
 
-// ---- 2026-11-02-1155 (M16b): the Python is a source ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// ---- 2026-11-02-1155 (M16b): a custom note (2026-11-26-1047 (deliberate): it is made by Detach now; an edited Python never takes a note over) ----------------------------------------------------------------------------------------------------------
 
 const withPython = (text: string, edit: (py: string) => string): string => { const py = (text.match(/```python\n([\s\S]*?)\n```/) as RegExpMatchArray)[1]; return text.replace(py, edit(py)); };
 const THIN = "  bars[1] = thin_out_bars(bars=[bars[1]], first=1, last=1, amount=0.5)[0]\n  return bars";
-
-test('the Python edited to a known shape (bars=8 -> bars=6): applied once the person stops typing, by ONE write; the Description and the Score follow, the note is Python-sourced, one evidence line, no bar', async () => {
-  const r = rig();
-  const a = r.pane();
-  r.store.set(PATH, withPython(r.store.get(PATH)!, (py) => py.replace('bars=8', 'bars=6')));
-  r.ctl.modified(PATH);
-  await r.advance(DESCRIPTION_DEBOUNCE_MS - 1);
-  assert.deepEqual(r.writes, [], 'not before the wait is over');
-  await r.advance(1);
-  assert.deepEqual(r.writes, [PATH]);
-  assert.match(extractDescription(r.store.get(PATH)!), /6 bars/);
-  assert.equal((readPhraseNote(r.store.get(PATH)!) as any).value.bars, 6);
-  assert.match(r.store.get(PATH)!, /source_facet: python/);
-  assert.deepEqual(r.lines, ['[forge-python] applied phrase_001 (8 -> 6 bars)']);
-  assert.equal(a.querySelector('.forge-description-bar'), null);
-  await r.advance(5000); r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
-  assert.deepEqual(r.writes, [PATH], 'its own modify event finds the note synced');
-});
-
-test('the Python edited to something the grammar does not know: the note becomes CUSTOM - Python kept as typed, the json cache kept, one evidence line, and the banner stays (the controls are off) with Revert to generated', async () => {
-  const r = rig();
-  const a = r.pane();
-  const original = r.store.get(PATH)!;
-  const typed = withPython(original, (py) => py.replace('  return bars', THIN));
-  r.store.set(PATH, typed); r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
-  assert.deepEqual(r.writes, [PATH]);
-  assert.equal(isCustomNote(r.store.get(PATH)!), true);
-  assert.ok(r.store.get(PATH)!.includes('thin_out_bars(bars=[bars[1]]'), 'the Python is what was typed');
-  const linked = [...(/^links:\s*\n((?:\s+-.*\n)*)/m.exec(r.store.get(PATH)!)?.[1] ?? '').matchAll(/\[\[([^\]]+)\]\]/g)].map((m) => m[1]);
-  assert.deepEqual(linked, customCallNotes('phrase_001', pythonTextOf(r.store.get(PATH)!) as string), '2026-11-03-1160 (d): the `links:` property follows the notes the Python calls, in the SAME one write (writes is still [PATH])');
-  assert.deepEqual(r.lines, ['[forge-python] phrase_001 is now a custom note (its Python is not a shape the grammar knows)']);
-  assert.equal(msg(a), CUSTOM_BANNER); assert.deepEqual(buttons(a), ['revert-generated']);
-  assert.ok(a.querySelector('.forge-description-bar.is-custom'), 'the banner has its own look');
-  assert.equal((readPhraseNote(r.store.get(PATH)!) as any).value.bars, 8, 'the json cache is what the grammar last understood');
-  // the Description of a custom note is free text: editing it writes nothing and the banner stays
-  r.store.set(PATH, edit(r.store.get(PATH)!, '8 bars', 'eight bars of my own'));
-  r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
-  assert.deepEqual(r.writes, [PATH]); assert.equal(msg(a), CUSTOM_BANNER);
-});
-
-test('a custom note opened (inspect): the banner is shown and nothing is written; Revert to generated asks first, naming what is lost - "Keep my Python" changes nothing, "Revert" puts back the note the controls made', async () => {
-  const original = noteContentFor('phrase_001', EXTEND);
-  const typed = withPython(original, (py) => py.replace('  return bars', THIN));
-  const first = rig();
-  first.store.set(PATH, typed); first.ctl.modified(PATH); await first.advance(DESCRIPTION_DEBOUNCE_MS);
-  const custom = first.store.get(PATH)!;
-  const no = rig({ start: custom, confirm: false }); const na = no.pane();
-  await no.ctl.inspect(PATH);
-  assert.equal(msg(na), CUSTOM_BANNER); assert.deepEqual(buttons(na), ['revert-generated']); assert.deepEqual(no.writes, []);
-  (na.querySelector('[data-action="revert-generated"]') as HTMLElement).click(); await no.advance(1);
-  assert.deepEqual(no.confirms, [REVERT_GENERATED_CONFIRM]);
-  assert.deepEqual(no.writes, [], 'declined: nothing is written'); assert.equal(isCustomNote(no.store.get(PATH)!), true);
-  const yes = rig({ start: custom, confirm: true }); const ya = yes.pane();
-  await yes.ctl.inspect(PATH);
-  (ya.querySelector('[data-action="revert-generated"]') as HTMLElement).click(); await yes.advance(1);
-  assert.deepEqual(yes.writes, [PATH]);
-  assert.equal(yes.store.get(PATH), asListNote(original, 'phrase_001'), 'byte for byte the note the controls made'); // 2026-11-19-0980 (deliberate): a phrase's Description is a numbered list now: the note a write leaves is the list note
-  assert.deepEqual(yes.lines, ["[forge-python] reverted phrase_001 to the grammar's Python (from the json cache)"]);
-  assert.equal(ya.querySelector('.forge-description-bar'), null);
-});
-
-test('the Description AND the Python edited: nothing is applied, the bar names both and offers one button for each; "Update from Python" keeps the Python (the Description edit is dropped)', async () => {
-  const r = rig();
-  const a = r.pane();
-  r.store.set(PATH, withPython(edit(r.store.get(PATH)!, '8 bars', '3 bars'), (py) => py.replace('bars=8', 'bars=5')));
-  r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
-  assert.deepEqual(r.writes, []);
-  assert.equal(msg(a), 'Description and Python were both edited; keep one: Update from Description / Update from Python.');
-  assert.deepEqual(buttons(a), ['update', 'update-python']);
-  assert.deepEqual(r.lines, ['[forge-python] refused phrase_001: Description and Python were both edited; keep one: Update from Description / Update from Python.']);
-  (a.querySelector('[data-action="update-python"]') as HTMLElement).click(); await r.advance(1);
-  assert.equal((readPhraseNote(r.store.get(PATH)!) as any).value.bars, 5, 'the Python won');
-  assert.equal(a.querySelector('.forge-description-bar'), null);
-});
-
-test('the Python edited while the bar already says something about the Description (a sentence that does not parse) is "both edited" too, and Revert drops the Python edit with the rest', async () => {
-  const r = rig();
-  const a = r.pane();
-  r.store.set(PATH, withPython(edit(r.store.get(PATH)!, '8 bars', '8 barz'), (py) => py.replace('bars=8', 'bars=5')));
-  r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
-  assert.deepEqual(buttons(a), ['update', 'update-python']);
-  assert.deepEqual(r.writes, []);
-});
+const customStart = (): string => asCustom(withPython(noteContentFor('phrase_001', EXTEND), (py) => py.replace('  return bars', THIN)));
 
 test('dispose with a custom banner on screen takes the bar away and a later modify does nothing', async () => {
-  const r = rig();
+  const r = rig({ start: customStart() });
   const a = r.pane();
-  r.store.set(PATH, withPython(r.store.get(PATH)!, (py) => py.replace('  return bars', THIN)));
-  r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
+  await r.ctl.inspect(PATH);
   assert.ok(a.querySelector('.forge-description-bar'));
   r.ctl.dispose();
   assert.equal(a.querySelector('.forge-description-bar'), null);
   r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
-  assert.deepEqual(r.writes, [PATH]);
+  assert.deepEqual(r.writes, []);
 });
 
 // 2026-11-03-1155-8 (C, CCQA smoke 12 step 8): the banner was driven only by a `modify` and by `file-open` of ONE file; after "Reload app without saving" the restored panes were never looked at, so a custom note had no banner and no Revert.
 // `inspectOpen` looks at every pane that shows one of our notes and has not been looked at yet (a tab opened, a layout restored).
-const customStart = async (): Promise<string> => { const first = rig(); first.store.set(PATH, withPython(first.store.get(PATH)!, (py) => py.replace('  return bars', THIN))); first.ctl.modified(PATH); await first.advance(DESCRIPTION_DEBOUNCE_MS); return first.store.get(PATH)!; };
 
-test('a custom note in a pane nobody inspected (a reload): inspectOpen draws the banner with Revert to generated, writes nothing, and looks at a pane once (not at every layout change)', async () => {
-  const custom = await customStart();
+test('a custom note in a pane nobody inspected (a reload): inspectOpen draws the banner (no button), writes nothing, and looks at a pane once (not at every layout change)', async () => {          // 2026-11-26-1047 (deliberate): it had Revert to generated
+  const custom = customStart();
   assert.equal(isCustomNote(custom), true);
-  const r = rig({ start: custom, confirm: true }); const a = r.pane();
+  const r = rig({ start: custom }); const a = r.pane();
   r.ctl.syncBars();
   assert.equal(a.querySelector('.forge-description-bar'), null, 'without a look there is nothing to draw (the failure the smoke saw)');
   await r.ctl.inspectOpen();
-  assert.equal(msg(a), CUSTOM_BANNER); assert.deepEqual(buttons(a), ['revert-generated']); assert.deepEqual(r.writes, []);
+  assert.equal(msg(a), CUSTOM_BANNER); assert.deepEqual(buttons(a), []); assert.deepEqual(r.writes, []);
   const reads = r.reads.length;
   await r.ctl.inspectOpen(); await r.ctl.inspectOpen();
   assert.equal(r.reads.length, reads, 'the same pane showing the same note is not read again');
@@ -899,26 +603,12 @@ test('a custom note in a pane nobody inspected (a reload): inspectOpen draws the
   assert.equal(r.reads.length, reads + 1);
 });
 
-test('the second door: canRevertGenerated is true only on a custom note that has a json cache, revertGenerated asks first and puts back the note the controls made', async () => {
-  const original = noteContentFor('phrase_001', EXTEND);
-  const custom = await customStart();
-  const r = rig({ start: custom, confirm: true }); r.pane();
-  assert.equal(r.ctl.canRevertGenerated(PATH), false, 'before any look the controller does not know');
-  await r.ctl.inspectOpen();
-  assert.equal(r.ctl.canRevertGenerated(PATH), true);
-  await r.ctl.revertGenerated(PATH); await r.advance(1);
-  assert.deepEqual(r.confirms, [REVERT_GENERATED_CONFIRM]); assert.equal(r.store.get(PATH), asListNote(original, 'phrase_001')); // 2026-11-19-0980 (deliberate): a phrase's Description is a numbered list now: the note a write leaves is the list note
-  assert.equal(r.ctl.canRevertGenerated(PATH), false, 'and once reverted the command is not offered');
-  const plain = rig(); plain.pane(); await plain.ctl.inspectOpen();
-  assert.equal(plain.ctl.canRevertGenerated(PATH), false, 'a note that is not custom has nothing to revert');
-});
-
-test('edits made while the plugin was off are only LOOKED at when the pane opens (nothing is written): a Recipe, a Python and a Description edit each show their bar with their buttons; a Python that is not a known shape offers to make the note custom', async () => {
+test('edits made while the plugin was off are only LOOKED at when the pane opens (nothing is written): a Recipe or a Python edit shows the one line with Detach and OK, a Description edit its Update and Revert', async () => {          // 2026-11-26-1047 (deliberate)
   const base = noteContentFor('phrase_001', EXTEND);
   const cases: Array<[string, string, string[]]> = [
-    ['recipe', base.replace('Repeat it for 8 bars', 'Repeat it for 6 bars'), ['update-recipe', 'revert']],
-    ['python', withPython(base, (py) => py.replace('bars=8', 'bars=5')), ['update-python', 'revert']],
-    ['custom python', withPython(base, (py) => py.replace('  return bars', THIN)), ['update-python', 'revert']],
+    ['recipe', base.replace('Repeat it for 8 bars', 'Repeat it for 6 bars'), ['detach', 'ok']],
+    ['python', withPython(base, (py) => py.replace('bars=8', 'bars=5')), ['detach', 'ok']],
+    ['python of another shape', withPython(base, (py) => py.replace('  return bars', THIN)), ['detach', 'ok']],
     ['description', edit(base, '8 bars', '5 bars'), ['update', 'revert']],
   ];
   for (const [label, text, expected] of cases) {
@@ -930,33 +620,3 @@ test('edits made while the plugin was off are only LOOKED at when the pane opens
 });
 
 // 2026-11-03-1155-8 (D4, CCQA smoke 12 step 6): applying a known-shape Python writes the grammar's own text, so a person's `#` comments inside it are gone. Said once, only when comments were really dropped.
-test('D4: a known-shape Python edit that carried the person\'s comments says so - in the evidence line and in the bar (no buttons); a later edit takes the bar away; the generator\'s own trailing comment and a # inside a string are not "comments dropped"', async () => {
-  const r = rig(); const a = r.pane();
-  const mine = withPython(r.store.get(PATH)!, (py) => py.replace('bars=8', 'bars=6').replace('  base = bar_007()', '  # my note\n  base = bar_007()  # and another'));
-  r.store.set(PATH, mine); r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
-  assert.deepEqual(r.writes, [PATH]);
-  assert.ok(!/# my note/.test(r.store.get(PATH)!), 'the comments really are gone from the note');
-  assert.deepEqual(r.lines, ['[forge-python] applied phrase_001 (8 -> 6 bars); comments in the Python are not kept']);
-  assert.equal(msg(a), 'Applied from the Python; comments in the Python are not kept.'); assert.deepEqual(buttons(a), []);
-  await r.advance(5000); r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
-  assert.equal(msg(a), 'Applied from the Python; comments in the Python are not kept.', 'its own modify event does not take the sentence away');
-  r.store.set(PATH, edit(r.store.get(PATH)!, '6 bars', '5 bars')); r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
-  assert.equal(a.querySelector('.forge-description-bar') === null, true, 'the next edit settles it: the sentence goes');
-});
-
-test('D4: a Python edit WITHOUT comments (and one whose only comment is the generator\'s own, or inside a string) says nothing about comments', async () => {
-  const r = rig(); const a = r.pane();
-  r.store.set(PATH, withPython(r.store.get(PATH)!, (py) => py.replace('bars=8', 'bars=6'))); r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
-  assert.deepEqual(r.lines, ['[forge-python] applied phrase_001 (8 -> 6 bars)']);
-  assert.equal(a.querySelector('.forge-description-bar') === null, true);
-  assert.deepEqual(pythonCommentsOf("x = 'a # b'  # real\n# whole line\ny = \"#nope\""), ['# real', '# whole line']);
-});
-
-test('D5: the confirm of "Revert to generated" says the Description is the source again (a note that was Recipe-sourced comes back Description-sourced, as the controls make it), and so does the note it writes', async () => {
-  assert.match(REVERT_GENERATED_CONFIRM, /the Description is the source again/);
-  const custom = await customStart();
-  const r = rig({ start: asRecipeSourced(custom), confirm: true }); r.pane();
-  await r.ctl.inspectOpen(); await r.ctl.revertGenerated(PATH); await r.advance(1);
-  assert.match(r.store.get(PATH)!, /source_facet: description/);
-  assert.equal(r.confirms.length, 1); assert.match(r.confirms[0], /the Description is the source again/);
-});

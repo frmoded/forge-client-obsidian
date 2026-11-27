@@ -194,7 +194,7 @@ export async function musicTabsWorld(real: RealPlugin, extra: Record<string, str
   // optionally type a name over the default, press Enter. (Before 0991 the command made the note at once, so the tests called `checkCallback(false)` and read the vault.)
   const modals: any[] = [];
   const modalProto = real.Modal.prototype; const savedModal = { open: modalProto.open, close: modalProto.close };
-  modalProto.open = function () { this.contentEl = win.document.createElement('div'); this.contentEl.empty = function () { this.textContent = ''; }; win.document.body.appendChild(this.contentEl); modals.push(this); this.onOpen(); };
+  modalProto.open = function () { this.titleEl = win.document.createElement('div'); this.contentEl = win.document.createElement('div'); this.contentEl.empty = function () { this.textContent = ''; }; win.document.body.appendChild(this.contentEl); modals.push(this); this.onOpen(); };
   modalProto.close = function () { this.closed = true; this.onClose(); this.contentEl.remove(); };
   const newNote = async (commandId: string, name?: string, ms = 800) => {
     plugin.commands.get(commandId)!.checkCallback!(false); await settle(30);

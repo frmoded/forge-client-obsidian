@@ -1,4 +1,4 @@
-// 2026-11-16-1000 - Keep / Delete / Copy / Move bars: the pure part. The truth table of what each step does to a list of bars, the words (one table), the sentence read back by BOTH grammars (Description and Recipe), the validator, and the
+// 2026-11-16-1000 - Keep / Delete / Copy / Move bars: the pure part. The truth table of what each step does to a list of bars, the words (one table), the sentence read back by the Description grammar (2026-11-26-1047 (deliberate): the Recipe is no longer read back), the validator, and the
 // Python the note carries (checked against the TypeScript on every case by a real python3). The Score on the real engine is in bar-structure-engine.test.ts.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -7,7 +7,6 @@ import { test } from 'node:test';
 import { STRUCTURE_WORDS, applyStructure, applyStructureOps, runsOfBars, runsWords, structurePython, structureSentence, structureWords } from './bar-structure-core.ts';
 import { describe, canonical } from './phrase-describe-core.ts';
 import { parse } from './phrase-grammar-core.ts';
-import { parseRecipe, renderRecipe } from './recipe-grammar-core.ts';
 import { validatePhrase, type BarRun, type StructureOp, type TransformPhrase } from './phrase-core.ts';
 import { phraseNoteContent, noteContentFor, readPhraseNote } from './phrase-core.ts';
 
@@ -79,7 +78,7 @@ test('THE WORDS: one table of verbs; ranges listed the way a person lists them; 
 const VAULT = { bars: ['bar_001'], phrases: ['phrase_006'] };
 const take = (...ops: StructureOp[]): TransformPhrase => ({ kind: 'transform', source: 'phrases/phrase_006', ops });
 
-test('THE SENTENCE IS READ BACK, by the Description grammar and by the Recipe: every shape says itself and parses to the same params (the menu writes only sentences the grammar reads)', () => {
+test('THE SENTENCE IS READ BACK by the Description grammar: every shape says itself and parses to the same params (the menu writes only sentences the grammar reads)', () => {          // 2026-11-26-1047 (deliberate): no Recipe reader any more
   const cases: StructureOp[][] = [
     [keep([3, 5])], [keep([3, 5], [8, 8])], [keep([1, 1], [3, 3], [5, 5])], [del([2, 2])], [del([1, 2], [4, 4], [9, 12])], [copy([3, 5])], [copy([1, 1], [3, 3])],
     [move(-1, [3, 5])], [move(1, [2, 2], [5, 6])], [del([4, 4]), keep([1, 3]), copy([2, 2]), move(1, [1, 1])],
@@ -90,10 +89,6 @@ test('THE SENTENCE IS READ BACK, by the Description grammar and by the Recipe: e
     const back = parse(text, VAULT);
     assert.ok(back.ok, `${text} -> ${JSON.stringify(back)}`);
     assert.deepEqual(back.ok && back.params, canonical(p), text);
-    const recipe = renderRecipe(p);
-    const r = parseRecipe(recipe, VAULT);
-    assert.ok(r.ok, `${recipe} -> ${JSON.stringify(r)}`);
-    assert.deepEqual(r.ok && r.params, canonical(p), recipe);
   }
 });
 

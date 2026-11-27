@@ -517,7 +517,7 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
         trace: (line: string) => { console.info(line); },
         openPhrase: (path: string) => { const f = app.vault.getAbstractFileByPath(path); if (f instanceof TFile) void openPhrase(app, f); },
       });
-      // 2026-11-19-0990: a note with NO json cache is valid and empty; when it already says something (a Description list, a Recipe) its cache is computed before its Score is drawn, by the writers the controls use (note-open-repair-core.ts).
+      // 2026-11-19-0990: a note with NO json cache is valid and empty; when its Description already says something its cache is computed before its Score is drawn, by the writers the controls use (note-open-repair-core.ts).
       // Written only when there is something to repair (a note that has its cache is never touched by an open).
       const prepareScoreNote = async (file: TFile): Promise<void> => {
         const family = familyOfPath(file.path);
@@ -551,7 +551,7 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
           app.workspace.iterateAllLeaves((leaf) => { const v = leaf.view as unknown as { file?: TFile | null; contentEl?: HTMLElement }; if (v?.file && v.contentEl && (familyOfPath(v.file.path) !== null || isBarPath(v.file.path))) out.push({ path: v.file.path, contentEl: v.contentEl, tab: plan === 'score' && SCORE_VIEW_TYPES.includes(leaf.view.getViewType()) || plan === 'score' && isBarPath(v.file.path) && leaf.view.getViewType() === RHYTHM_EDIT_VIEW_TYPE }); });   // 2026-11-12-1203: the docked prompt box lives on a score tab of the music edition only (the lean edition's tabs are as they were: P3). 2026-11-19-0993: and on a bar's Beat Box tab (its list is the bar grammar's)
           return out;
         },
-        confirm: (message) => new ConfirmModal(app, { title: 'Revert to generated', message, confirmText: 'Revert', cancelText: 'Keep my Python' }).openAndWait(),        // 2026-11-02-1155 (M16b): names what is lost
+        confirm: (message) => new ConfirmModal(app, { title: 'Detach', message, confirmText: 'Detach', cancelText: 'Cancel' }).openAndWait(),        // 2026-11-26-1047: says it cannot be undone
         // 2026-11-19-0992 (Duplicate [[bar_007]].): a copy is a NEW note, made by `create` (which refuses to overwrite: "File already exists." tries the next number); nothing is opened (the dialog's link opens it)
         create: async (p, content) => { await app.vault.create(p, content); listModel.melody.mark(p, content); },
         exists: (p) => app.vault.getAbstractFileByPath(p) !== null,
@@ -684,14 +684,15 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
         });
         return out;
       }));
-      plugin.register(onHandEditRefusal((p) => { void descriptions.inspect(p); }));                   // 2026-11-03-1155-8 (A): a control refused for a hand edit: the bar that offers Update / Revert is drawn at once
+      plugin.register(onHandEditRefusal((p) => { descriptions.refused(p); }));                   // 2026-11-03-1155-8 (A): a control refused for a hand edit: the bar that answers it is drawn at once
+      // 2026-11-26-1047: DETACH, the one way to hand-edit a score note's Python: it becomes custom Python (asked first; there is no way back)
       plugin.addCommand({
-        id: 'revert-custom-python',
-        name: 'Revert custom Python to generated',
+        id: 'detach-to-custom-python',
+        name: 'Detach',
         checkCallback: (checking) => {
           const file = app.workspace.getActiveFile?.();
-          if (!file || !descriptions.canRevertGenerated(file.path)) return false;
-          if (!checking) void descriptions.revertGenerated(file.path);
+          if (!file || !descriptions.canDetach(file.path)) return false;
+          if (!checking) void descriptions.detach(file.path);
           return true;
         },
       });

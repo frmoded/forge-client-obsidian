@@ -1,6 +1,6 @@
 // 2026-11-23-1023 PART A on the REAL plugin (music-tabs-world.ts: the real ForgePlugin.onload, real leaves): the Forge button is ALWAYS there on a phrase, an arrangement and a composition, in the note's text view and in its Score tab,
 // not only while an edit is pending (the driver, on comp_001 with nothing pending: "I do not see a forge button in either note view or score view"). With nothing pending a click replays the Description and redraws the Score; with a pending
-// edit it is the 1018 button; with a held Recipe edit it asks once. No model call.
+// edit it is the 1018 button; 2026-11-26-1047 (deliberate): with a hand-edited Recipe it makes the Recipe again from the Description and asks nothing (it asked once before). No model call.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 
@@ -92,18 +92,17 @@ test('A4b the same click from the TEXT view forges a pending Description edit', 
   } finally { w.done(); }
 });
 
-test('A5 a click while the Recipe holds hand edits asks ONCE (Keep my Recipe edits / Replace them with the Description); Replace forges the list over the Recipe', async () => {
+test('A5 a click while the Recipe holds hand edits asks nothing: the strip says the one line, Forge makes the Recipe again from the Description, and the line goes', async () => {          // 2026-11-26-1047 (deliberate): was the ask-once of 1016
   const w = await musicTabsWorld(real);
   try {
     const tab = await composition(w);
     const start = w.store.get(COMP)!;
     await w.handEdit(COMP, (t) => editRecipe(t, 'for 4 bars', 'for 2 bars'));
-    const edited = w.store.get(COMP)!; assert.notEqual(edited, start);
-    forgeAction(tab.view).cb(); await w.settle(300);
-    const s = strip(tab); assert.equal(s.message, 'Your Recipe has edits the Description does not have. Keep them or replace them with the Description?'); assert.deepEqual(s.labels, ['Keep my Recipe edits', 'Replace them with the Description']);
-    assert.equal(w.store.get(COMP), edited, 'asking writes nothing');
-    (tab.view.contentEl.querySelector('[data-action="update"]') as HTMLElement).click(); await w.settle(1500);
+    assert.notEqual(w.store.get(COMP), start);
+    assert.equal(strip(tab).message, 'This Recipe/Python is generated. Edit the Description, or Detach.'); assert.deepEqual(strip(tab).labels, ['Detach', 'OK']);
+    forgeAction(tab.view).cb(); await w.settle(1500);
     assert.equal(recipeOf(w.store.get(COMP)!), recipeOf(start), 'the Recipe is the one the Description makes');
+    assert.equal(strip(tab).message, ''); assert.equal(dialogLast(tab.view.contentEl), 'Forged.');
   } finally { w.done(); }
 });
 

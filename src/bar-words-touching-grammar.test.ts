@@ -11,7 +11,6 @@ import { parse, describe, canonical, type GrammarParams } from './phrase-grammar
 import { formatPhraseJson, readPhraseNote, validatePhrase, type PhraseParams } from './phrase-core.ts';
 import { applyStructure } from './bar-structure-core.ts';
 import { phrasePython, phraseRecipeSteps } from './phrase-notes-core.ts';
-import { parseRecipe } from './recipe-grammar-core.ts';
 import { PHRASE_VAULT } from './test-support/phrase-list-fixtures.ts';
 
 const V = PHRASE_VAULT;
@@ -228,17 +227,11 @@ test('the json cache holds the MERGED form; the validator is as strict as before
     const r = v(runs); assert.equal(r.ok, false, JSON.stringify(runs)); assert.match((r as { message: string }).message, /the ranges must be in order and apart/, JSON.stringify(runs));
   }
 });
-test('the Recipe says the merged form, and a Recipe written by hand with touching bars is read to the same params (the Recipe reads through the same step reader)', () => {
+test('the Recipe says the merged form', () => {          // 2026-11-26-1047 (deliberate): a Recipe is no longer read back
   const p = ok(`${TAKE} Keep bar 4 and bar 3 and bars 6 to 7. Delete bar 6 and bar 5.`) as PhraseParams;
   const steps = phraseRecipeSteps(p);
   assert.ok(steps.includes('Keep bars 3 to 4 and bars 6 to 7.'), steps.join(' | '));
   assert.ok(steps.includes('Delete bars 5 to 6.'), steps.join(' | '));
-  const back = parseRecipe(steps.join('\n'), V);
-  assert.ok(back.ok, back.ok ? '' : back.error.message);
-  assert.deepEqual(back.ok && canonical(back.params as GrammarParams), canonical(p));
-  const hand = parseRecipe(['Take [[phrase_003]].', 'Delete bar 4 and bar 3.'].join('\n'), V);
-  assert.ok(hand.ok, hand.ok ? '' : hand.error.message);
-  assert.deepEqual(hand.ok && (hand.params as { ops: unknown[] }).ops, [{ op: 'delete', runs: [[3, 4]] }]);
 });
 test('the Python says the merged form: the same text as the range sentence\'s Python, for every verb', () => {
   for (const v of VERBS) {

@@ -14,7 +14,7 @@
 
 import { extractDescription } from './v2-note-core.ts';
 import { editabilityProblem, extractJsonBlock, parseFrontmatter, readRhythmNote, type RhythmData, type Validation } from './rhythm-edit-core.ts';
-import { extractPhraseJsonBlock, handEditRefusalOf, isCustomNote, keepRecipeSource, newPhraseNote, renderPhraseNote } from './phrase-notes-core.ts';
+import { extractPhraseJsonBlock, handEditRefusalOf, isCustomNote, newPhraseNote, renderPhraseNote } from './phrase-notes-core.ts';
 import { EMPTY_SOURCE, emptyPhraseNote, isEmptyNote } from './empty-note-core.ts';
 import { nameTakenMessage } from './note-name-rules-core.ts';
 import { produceCustomScore, type CustomDeps, type CustomRun } from './custom-note-core.ts';
@@ -675,7 +675,7 @@ export function phraseWriteRefusal(currentText: string, name?: string, applyingD
   if (block.ok === false) return `Not saved: ${block.message}`;
   // 2026-10-30-1050 (M15b): the Description is the source and this write replaces it, so a Description the person changed by hand is never overwritten here (M15c brings the button that reads it).
   // 2026-10-31-1120 (M15c): `applyingDescription` is the ONE caller for which the hand-edited Description is the INPUT, not something to protect: "Update from Description" (description-apply-core.ts)
-  // 2026-10-31-1140 (M16a): the Recipe is a source too, and the same protection holds for it (`applyingDescription` lifts it for "Update from Description" and "Update from Recipe": a hand edit that is the INPUT)
+  // 2026-11-26-1047: a hand-edited Recipe or Python is answered by one line, not silently replaced by a control (a write of the LIST, `applyingDescription`, makes both again)
   const lost = handEditRefusalOf(currentText, true);
   if (name !== undefined && !applyingDescription && lost !== null) return lost;
   return null;
@@ -706,7 +706,7 @@ export function refreshPhraseNoteText(text: string, name: string): { ok: true; t
   const lost = handEditRefusalOf(text, false);
   if (lost !== null) return { ok: false, message: lost };
   const desc = extractDescription(text);
-  const next = keepRecipeSource(text, renderPhraseNote(text, name, read.value, block.fenceStart, /^\s*1[.)]\s/.test(desc) ? desc : undefined));       // 2026-11-19-0980: a phrase whose Description is a LIST keeps it (a refresh makes the derived parts again, never the sentences), as an arrangement's does
+  const next = renderPhraseNote(text, name, read.value, block.fenceStart, /^\s*1[.)]\s/.test(desc) ? desc : undefined);       // 2026-11-19-0980: a phrase whose Description is a LIST keeps it (a refresh makes the derived parts again, never the sentences), as an arrangement's does
   return { ok: true, text: next, changed: next !== text };
 }
 

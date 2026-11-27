@@ -1,5 +1,5 @@
 // 2026-10-31-1120 (M15c): the decisions of "Update from Description", on real notes made by the real writers: a hand-edited Description that parses is applied (and the result is byte for byte the note the controls would have made for the same
-// value), one that does not parse writes nothing and says where, a Recipe or Python edited instead is derived and says so, and every edge the prompt names.
+// value), one that does not parse writes nothing and says where, a Recipe or Python edited instead is generated and is never read back (2026-11-26-1047 (deliberate)), and every edge the prompt names.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
@@ -84,14 +84,13 @@ test('edge: a source that is not in the vault (a transform whose source phrase w
   if (st.kind === 'rejected') assert.match(st.message, /phrase_003/, st.message);
 });
 
-test('edge: the Python edited instead is a SOURCE (2026-11-02-1155, M16b, deliberate: it was "derived: said, not applied" until then; see python-apply-core.test.ts): a known shape (here only a comment added) maps back with no change in the music; a Description that is in sync with its own edit does not count', () => {
+test('edge: the Python or the Recipe edited instead is GENERATED, never read back: the state says only that it was edited (a comment, a new step, a step that does not parse alike); a Description edited beside it is applied', () => {          // 2026-11-26-1047 (deliberate): they were sources (2026-10-31-1140, 2026-11-02-1155)
   const n = note();
   const python = n.replace('```python\n', '```python\n# hand edit\n');
-  const st = descriptionState(python, 'phrase', VAULT);
-  assert.equal(st.kind, 'python-apply');
-  assert.equal(st.kind === 'python-apply' && st.unchanged, true, 'a comment is no change in the music');
+  assert.equal(descriptionState(python, 'phrase', VAULT).kind, 'generated-edited');
   const recipe = n.replace('# Recipe\n\n', '# Recipe\n\nCall [[something_else]].\n');
-  assert.equal(descriptionState(recipe, 'phrase', VAULT).kind, 'recipe-rejected', 'a Recipe edit is no longer "derived": it is read (here: it does not parse)');
+  assert.equal(descriptionState(recipe, 'phrase', VAULT).kind, 'generated-edited');
+  assert.equal(descriptionState(edit(recipe, '8 bars', '6 bars'), 'phrase', VAULT).kind, 'apply', 'the Description is the source: its edit wins');
 });
 
 test('edge: two quick edits - the plan made for the FIRST sentence is not written once the text holds the second (stale), and the second is applied by its own turn', () => {

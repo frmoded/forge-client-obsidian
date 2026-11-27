@@ -19,7 +19,7 @@ import { isRunsOp, isStructureOp, movePlaceProblem, runsWords } from './bar-stru
 import { validateArrangement, type ArrangementParams, type ArrangementTrack } from './arrangement-core.ts';
 import { COMPOSITION_LENGTH_MAX, COMPOSITION_REPEAT_MAX, validateComposition, type CompositionParams, type CompositionSection } from './composition-core.ts';
 import { STYLE_WORDS, canonical, complementOf100, describe, link, noNegZero, orderWords, percentOf, plain, shiftDecimal, sortedOverrides, type GrammarParams } from './phrase-describe-core.ts';
-// 2026-10-31-1140 (M16a): the scanner and its helpers (Scan, Fail, note, sentencesOf, followForks, orderFromWords, placeOf) are exported so the RECIPE parser (recipe-grammar-core.ts) reads with the SAME words, numbers, names and refusals, never a copy.
+// 2026-10-31-1140 (M16a): the scanner and its helpers (Scan, Fail, note, sentencesOf, followForks, orderFromWords, placeOf) are exported for other readers of the same words (the Recipe parser that was one of them is gone since 2026-11-26-1047).
 // the saying half lives in phrase-describe-core.ts (M15b); these are re-exported so this file stays the one place a reader of the grammar looks
 export { canonical, complementOf100, describe, orderWords, plain, shiftDecimal, type GrammarParams } from './phrase-describe-core.ts';
 

@@ -7,7 +7,7 @@
 import type { GrammarParams, GrammarVault } from './phrase-grammar-core.ts';
 import { applyArrangementWrite, type ArrangementParams } from './arrangement-core.ts';
 import { applyCompositionWrite, type CompositionParams } from './composition-core.ts';
-import { extractPhraseJsonBlock, renderSourceChainNote } from './phrase-notes-core.ts';
+import { CUSTOM_BANNER, extractPhraseJsonBlock, isCustomNote, renderSourceChainNote } from './phrase-notes-core.ts';
 import { applyPhraseWrite, phraseWriteRefusal, type PhraseParams } from './phrase-core.ts';
 import { extractDescription } from './v2-note-core.ts';
 import { listAfterParams, parseList, render, type ListKind, type ParsedList } from './sentence-list-core.ts';
@@ -25,6 +25,7 @@ const eolOf = (text: string): string => (text.includes('\r\n') ? '\r\n' : '\n');
 
 /** The note `text` with its Description, Recipe, Python, json cache, links and stamps made again from `replay`. `ok: false` says why (no json block: not one of our notes). */
 export function writeListNote(note: string, name: string, kind: ListKind, replay: ListWrite): { ok: true; text: string } | { ok: false; message: string } {
+  if (isCustomNote(note)) return { ok: false, message: CUSTOM_BANNER };          // 2026-11-26-1047: DETACH has no way back: no write of a list (a push, Forge, Revert, an undo) goes over a custom note's Python
   const text = withCacheFence(note);                                     // 2026-11-19-0990: a note with no json fence is valid and empty: the first write gives it its (empty) cache first, then writes everything else as it always did
   const sentence = render(replay.list, eolOf(text));
   if (replay.params === null) {

@@ -8,8 +8,7 @@ import { test } from 'node:test';
 import { emptyArrangementNote, emptyCompositionNote, emptyPhraseNote, isEmptyNote } from './empty-note-core.ts';
 import { applyDescriptionText, cacheParams, descriptionState } from './description-apply-core.ts';
 import { replaceDescriptionSection } from './prompt-box-core.ts';
-import { editedFacetsOf } from './python-apply-core.ts';
-import { extractPhraseJsonBlock, handEditRefusalOf, pythonTextOf } from './phrase-notes-core.ts';
+import { descriptionEditedByHand, extractPhraseJsonBlock, generatedEditedByHand, handEditRefusalOf, pythonTextOf } from './phrase-notes-core.ts';
 import { extractDescription, extractRecipeSection } from './v2-note-core.ts';
 import { parseFrontmatter } from './rhythm-edit-core.ts';
 import { PHRASE_DEFAULTS, noteContentFor, producePhraseNote, readPhraseKind, readPhraseNote, type PhraseParams } from './phrase-core.ts';
@@ -67,7 +66,7 @@ test('an empty note says it has no kind: readPhraseKind is null, no reader takes
 
 test('an empty note is not "edited by hand": no facet reads as edited, nothing refuses a write, the controller has nothing to say (synced) and nothing to revert', () => {
   for (const [family, , text] of STARTERS) {
-    assert.deepEqual(editedFacetsOf(text), [], family);
+    assert.deepEqual([descriptionEditedByHand(text), generatedEditedByHand(text)], [false, false], family);          // 2026-11-26-1047 (deliberate)
     assert.equal(handEditRefusalOf(text, false), null, family);
     assert.equal(descriptionState(text, family, VAULT).kind, 'synced', family);
     assert.equal(cacheParams(text, family), null, `${family}: the cache holds no params`);
@@ -106,7 +105,7 @@ test('THE FIRST SENTENCE (the same path the composer takes: the Description repl
     assert.ok((extractRecipeSection(text) ?? '').trim().length > 0, `${family}: the Recipe is filled`);
     assert.ok((pythonTextOf(text) ?? '').trim().length > 0, `${family}: the Python is filled`);
     assert.ok(cacheParams(text, family) !== null, `${family}: the cache holds the params`);
-    assert.deepEqual(editedFacetsOf(text), [], `${family}: every stamp says the facets are in step`);
+    assert.deepEqual([descriptionEditedByHand(text), generatedEditedByHand(text)], [false, false], `${family}: every stamp says the facets are in step`);          // 2026-11-26-1047 (deliberate)
     assert.equal(descriptionState(text, family, VAULT).kind, 'synced', family);
   }
   assert.deepEqual(kinds, ['extend', 'mix', 'morph', 'arrangement', 'composition']);

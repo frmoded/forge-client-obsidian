@@ -1,4 +1,4 @@
-// 2026-10-31-1140 (M16a): the same strip says what became of a hand-edited RECIPE (the line and the column, Revert) and, for a note whose Description AND Recipe were both edited, offers the two buttons Update from Description / Update from Recipe.
+// 2026-11-26-1047: the same strip answers a hand-edited (generated) Recipe or Python with one line, and carries the banner of a custom note.
 // 2026-10-31-1120 (M15c) - the strip that says what became of a hand-edited Description, drawn at the top of every pane that shows the note (the phrase / arrangement / composition tab, the notes pane, the text view): one sentence and
 // the buttons that answer it. Plain DOM, no obsidian import (a happy-dom test mounts the very code the tab runs).
 //
@@ -11,8 +11,8 @@
 
 /** The banner's class: the Score slot (live-score-dom.ts) knows it, because the banner is the one thing allowed above the Score. */
 export const DESCRIPTION_BAR_CLASS = 'forge-description-bar';
-export type BarAction = 'keep-script' | 'update' | 'update-recipe' | 'update-python' | 'revert' | 'revert-generated' | 'ask' | 'apply-preview' | 'cancel-preview';
-export const BAR_LABELS: Record<BarAction, string> = { update: 'Update from Description', 'keep-script': 'Keep my Recipe edits', 'update-recipe': 'Update from Recipe', 'update-python': 'Update from Python', revert: 'Revert', 'revert-generated': 'Revert to generated', ask: 'Ask the sentence service', 'apply-preview': 'Apply', 'cancel-preview': 'Cancel' };
+export type BarAction = 'update' | 'revert' | 'detach' | 'ok' | 'ask' | 'apply-preview' | 'cancel-preview';
+export const BAR_LABELS: Record<BarAction, string> = { update: 'Update from Description', revert: 'Revert', detach: 'Detach', ok: 'OK', ask: 'Ask the sentence service', 'apply-preview': 'Apply', 'cancel-preview': 'Cancel' };
 
 export interface BarView {
   message: string;

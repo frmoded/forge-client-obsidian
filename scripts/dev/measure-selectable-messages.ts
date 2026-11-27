@@ -49,9 +49,9 @@ try {
   { const c = await center('#ctl'); await clearSel(); await tripleClick(c.x, c.y); out.control = { got: await selection() }; }
   // 2. the Description / Recipe bar: the real sentences, triple-click, no Copy button, no layout shift
   const SENTENCES = {
-    recipeError: "Recipe, line 3, column 1: I do not know the step 'Sprinkle'. A step starts with Take, Repeat, Build, Mix, Morph, Transform, Play, Together, Mute, Solo, Only.",
-    notSaved: 'Not saved: the Recipe was edited by hand; press Update from Recipe first or revert it.',
-    bothEdited: 'Description and Recipe were both edited; keep one: Update from Description / Update from Recipe.',
+    descriptionError: 'Description, line 1, column 28: expected "bars" after the number.',
+    notSaved: 'This Recipe/Python is generated. Edit the Description, or Detach.',          // 2026-11-26-1047 (deliberate): the sentences the bar says now
+    custom: 'Custom Python: the controls are off for this note.',
   };
   out.bar = {};
   for (const [name, text] of Object.entries(SENTENCES)) {

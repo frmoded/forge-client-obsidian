@@ -4,7 +4,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { canonical, describe, parse, type GrammarVault } from './phrase-grammar-core.ts';
-import { parseRecipe } from './recipe-grammar-core.ts';
 import { VAULT } from './test-support/sentence-list-fixtures.ts';
 
 const MELODY_BARS = ['bar_101', 'bar_102', 'bar_103'];
@@ -120,16 +119,6 @@ test('a composition plays a melody phrase through the existing Play sentence, fo
   assert.equal(parse('Play [[phrase_001]]. Then play [[arr_001]] for 2 bars.', V).ok, true, 'beats and beats is as it was');
 });
 
-// ---- the Recipe (read back by the same grammar) ---------------------------------------------------------------------------------------------------------------------------------------------------
-test('the Recipe of a melody phrase is "Take [[bar]]. Repeat it for N bars." and reads back to the same phrase; "with fills" on a melody bar is refused', () => {
-  const r = parseRecipe('Take [[bar_101]]. Repeat it for 10 bars. Bar 2 is replaced by [[bar_102]].', V);
-  assert.equal(r.ok, true, JSON.stringify(r));
-  assert.deepEqual((r as any).params, { kind: 'extend', source: 'bar_101', bars: 10, style: 'repeat', tempo_change_pct: 0, overrides: { 2: 'bars/bar_102' } });
-  const bad = parseRecipe('Take [[bar_101]]. Repeat it for 4 bars with fills.', V);
-  assert.equal(bad.ok, false); assert.match(JSON.stringify(bad), /That works on beats, not on notes/);
-  const mixed = parseRecipe('Take [[bar_101]]. Repeat it for 4 bars. Bar 2 is replaced by [[bar_001]].', V);
-  assert.equal(mixed.ok, false); assert.match(JSON.stringify(mixed), /all rhythm bars or all melody bars/);
-});
 
 // ---- P3: a rhythm phrase is read as it always was ----------------------------------------------------------------------------------------------------------------------------------------------------
 test('P3: every rhythm sentence parses the same with and without the melody lists, and says itself back the same', () => {

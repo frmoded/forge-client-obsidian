@@ -10,7 +10,6 @@ import { test } from 'node:test';
 import { parse, describe, canonical, type GrammarParams } from './phrase-grammar-core.ts';
 import { formatPhraseJson, readPhraseNote, validatePhrase, type PhraseParams } from './phrase-core.ts';
 import { phrasePython, phraseRecipeSteps } from './phrase-notes-core.ts';
-import { parseRecipe } from './recipe-grammar-core.ts';
 import { isHeadLine, subjectOf } from './sentence-list-core.ts';
 import { PHRASE_VAULT } from './test-support/phrase-list-fixtures.ts';
 
@@ -229,21 +228,11 @@ test('json cache: both steps are written and read back; the validators know thei
   const back = readPhraseNote(`---\ntype: data\ncontent_type: json\n---\n\n\`\`\`json\n${json}\n\`\`\`\n`);
   assert.ok(back.ok, back.ok ? '' : back.message); assert.deepEqual(back.ok && canonical(back.value as GrammarParams), canonical(p as GrammarParams));
 });
-test('the Recipe says both steps in the Description\'s own words and reads them back to the same params (also as the FIRST step of a Take and after a Mix or Morph head)', () => {
+test('the Recipe says both steps in the Description\'s own words (also as the FIRST step of a Take and after a Mix or Morph head)', () => {          // 2026-11-26-1047 (deliberate): the Recipe is no longer read back
   for (const text of [FULL, `${TAKE} Mix bars 2 and 3. Extend bar 2 to 3 bars.`, `${TAKE} Extend bar 2 to 3 bars, and put them at the end.`, 'Morph [[bar_003]] into [[bar_001]] over 5 bars, in musical order. Mix bars 1 and 2.', 'Mix [[bar_005]] and [[bar_006]], 70 percent [[bar_005]], as a path, in musical order. Extend bar 1 to 2 bars.']) {
     const p = ok(text);
     const steps = phraseRecipeSteps(p as PhraseParams);
     assert.ok(steps.some((s) => /^(?:Mix bars \d+ and \d+, \d+ percent bar \d+, as a (?:vote|path)|Extend bar \d+ to \d+ bars?, )/.test(s)), steps.join(' | '));
-    const back = parseRecipe(steps.join('\n'), V);
-    assert.ok(back.ok, `${text}\n${steps.join('\n')}\n${back.ok ? '' : back.error.message}`);
-    assert.deepEqual(back.ok && canonical(back.params as GrammarParams), canonical(p));
-  }
-});
-test('a Take whose FIRST step is a Morph-between, a Mix or an Extend step is read back from its Recipe (a bug of 0996b: the Recipe dispatched on the first word of the second sentence)', () => {
-  for (const step of ['Morph bars 2 and 3 across 2 bars.', 'Mix bars 2 and 3.', 'Extend bar 2 to 3 bars.']) {
-    const p = ok(`${TAKE} ${step}`);
-    const back = parseRecipe(phraseRecipeSteps(p as PhraseParams).join('\n'), V);
-    assert.ok(back.ok, `${step}: ${back.ok ? '' : back.error.message}`); assert.deepEqual(back.ok && canonical(back.params as GrammarParams), canonical(p));
   }
 });
 test('the Python facet says both steps with the engine\'s own functions (mix_rhythm / the path\'s morph_rhythm, extend_rhythm), the place as a slice, an Extend with no place as a replace of bar k', () => {

@@ -82,9 +82,9 @@ test('the round trip, the links, and "Refresh note links": json -> note -> json 
   // 2026-10-31-1140 (M16a, deliberate): a hand-edited RECIPE is a source and is left as written (refused, the note untouched)
   const edited = text.replace('```python\n', '```python\n# Somebody typed here.\n').replace('type: data', 'type: data\nread_only: false');
   const typedRecipe = text.replace('# Recipe\n\nPlay', '# Recipe\n\nSomebody typed here.\nPlay');
-  assert.deepEqual(refreshArrangementNoteText(typedRecipe, 'arr_001'), { ok: false, message: 'The Recipe was edited by hand; press Update from Recipe first or revert it.' });
+  assert.deepEqual(refreshArrangementNoteText(typedRecipe, 'arr_001'), { ok: false, message: 'This Recipe/Python is generated. Edit the Description, or Detach.' });          // 2026-11-26-1047 (deliberate): one line answers a hand-edited Recipe or Python
   // 2026-11-02-1155 (M16b, deliberate): the Python is a source too; a refresh never overwrites a hand-edited one (refused, the note untouched). What a refresh DOES overwrite is a stale derived text of a note nobody edited: the person's own line stays
-  assert.deepEqual(refreshArrangementNoteText(edited, 'arr_001'), { ok: false, message: 'The Python was edited by hand; press Update from Python first or revert it.' });
+  assert.deepEqual(refreshArrangementNoteText(edited, 'arr_001'), { ok: false, message: 'This Recipe/Python is generated. Edit the Description, or Detach.' });          // 2026-11-26-1047 (deliberate)
   const r = refreshArrangementNoteText(text.replace('type: data', 'type: data\nread_only: false'), 'arr_001');
   assert.ok(r.ok && !r.changed);
   if (!r.ok) return;

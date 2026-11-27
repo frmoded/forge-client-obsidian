@@ -153,7 +153,7 @@ test('a legacy PARAGRAPH written by hand is applied as before and comes out as a
 
 test('applyDescriptionText applies at most `limit` lines (the loop check cut the list there) and still keeps every line in the Description', () => {
   const hand = edited(writeComp(emptyCompositionNote('comp_001'), ['Play [[phrase_001]].']), render(C6_LINES));
-  const w = applyDescriptionText(hand, 'comp_001', 'composition', VAULT, extractDescription(hand), undefined, 2); assert.ok(w.ok);
+  const w = applyDescriptionText(hand, 'comp_001', 'composition', VAULT, extractDescription(hand), 2); assert.ok(w.ok);          // 2026-11-26-1047 (deliberate): the `prefer` argument is gone
   const next = (w as { text: string }).text;
   assert.equal(extractDescription(next), render(C6_LINES)); assert.equal((readCompositionNote(next) as { value: CompositionParams }).value.sections.length, 2);
   assert.equal((readCompositionNote(next) as { value: CompositionParams }).value.sections[1].repeat, undefined, 'the third line (the repeat) was not applied');

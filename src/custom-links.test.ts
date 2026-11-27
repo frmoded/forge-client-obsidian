@@ -1,9 +1,10 @@
 // 2026-11-03-1160 (d) - a CUSTOM note's `links:` property follows the notes its Python calls. Before, only the strip's chips did: the property kept what the grammar last wrote, so Obsidian's backlinks and graph named bars the Python no longer
-// reads (and missed the ones it calls). The links are rewritten in the ONE write that applies the custom takeover (`applyPythonText`, the `vault.process` of the description controller), from the same scan the chips use (`customCallNotes`).
+// reads (and missed the ones it calls). The links are rewritten in the ONE write that makes the note custom or follows an edit of its Python (`customNoteText`, the `vault.process` of the description controller), from the same scan the chips use (`customCallNotes`).
+// 2026-11-26-1047 (deliberate): there is no automatic takeover any more: a generated note becomes custom by DETACH, a custom note's edited Python is followed as before.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { applyPythonText, descriptionState } from './description-apply-core.ts';
+import { customNoteText, descriptionState } from './description-apply-core.ts';
 import { customCallNotes } from './custom-note-core.ts';
 import { customChips } from './structure-strip-core.ts';
 import { isCustomNote, pythonTextOf, withDerivedFront, withLinks } from './phrase-notes-core.ts';
@@ -18,12 +19,11 @@ const withPython = (text: string, edit: (py: string) => string): string => { con
 const linksOf = (text: string): string[] => [...(/^---\r?\n([\s\S]*?)\r?\n---/.exec(text)?.[1] ?? '').matchAll(/^links:\s*\r?\n((?:\s+-.*\r?\n?)*)/gm)].flatMap((m) => [...m[1].matchAll(/\[\[([^\]]+)\]\]/g)].map((x) => x[1]));
 /** A custom Python of the person's own: `calls` are the notes it calls, in order. */
 const own = (...calls: string[]): string => `def compute(context):\n${calls.map((c, i) => `  v${i} = ${c}()`).join('\n')}\n  return []`;
+/** The write that makes this edited note custom (Detach of a generated note) or follows the edit of a custom note's Python: the state says which, the one writer does both. */
 const takeover = (text: string, name = 'phrase_003', family: 'phrase' | 'arrangement' = 'phrase'): string => {
   const st = descriptionState(text, family, VAULT);
-  assert.equal(st.kind, 'python-custom', JSON.stringify(st));
-  const w = applyPythonText(text, name, family, VAULT, (st as { python: string }).python);
-  assert.ok(w.ok, JSON.stringify(w));
-  return (w as { text: string }).text;
+  assert.ok(st.kind === 'generated-edited' || (st.kind === 'custom-note' && st.edited), JSON.stringify(st));
+  return customNoteText(text, name);
 };
 
 test('the generated morph links bar_001 and bar_002; a custom Python that calls bar_005() and phrase_001() makes the links exactly those two, in the order of the calls (the grammar\'s are gone)', () => {

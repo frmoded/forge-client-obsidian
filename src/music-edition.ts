@@ -123,8 +123,8 @@ export interface ListModel {
     /** 2026-11-23-1027: the words for a sentence typed while a waiting line is in the note (lean: never reached) */
     already: typeof import('./waiting-line-core.ts').alreadyWaiting; blocked: typeof import('./waiting-line-core.ts').blockedMessage; tail: typeof import('./waiting-line-core.ts').blockedTail;
   };
-  /** 2026-11-22-1016 (11i): the script as the third entry point (script-edit-core.ts). `on` is false in lean: a hand-edited Recipe is applied at once, as before. */
-  script: { on: boolean; stale: typeof import('./script-edit-core.ts').staleMessage; held: typeof import('./script-edit-core.ts').heldMessage; askOnce: string; labels: typeof import('./script-edit-core.ts').SCRIPT_LABELS; rewrite: typeof import('./script-edit-core.ts').rewriteFromScript; forge: typeof import('./script-edit-core.ts').forgeText };
+  /** 2026-11-23-1023: the Forge button's replay (script-edit-core.ts). `on` is false in lean: no Forge button, a hand-edited Description is applied by itself. */
+  script: { on: boolean; forge: typeof import('./script-edit-core.ts').forgeText };
   dialogs: {
     renamed: typeof import('./dialog-follow-core.ts').dialogRenamed; deleted: typeof import('./dialog-follow-core.ts').dialogDeleted; ctime: typeof import('./dialog-follow-core.ts').noteCtimeOf;
     fresh: typeof import('./dialog-follow-core.ts').dialogFresh; stamp: typeof import('./dialog-follow-core.ts').dialogStamp; prune: typeof import('./dialog-follow-core.ts').dialogPrune;

@@ -7,7 +7,7 @@ import { test } from 'node:test';
 
 import { handEditRefused, handEditStatusSettled, isHandEditRefusal, onHandEditRefusal } from './hand-edit-refusal-core.ts';
 import { PHRASE_DEFAULTS, noteContentFor, type PhraseParams } from './phrase-core.ts';
-import { customRefusal, handEditRefusal, pythonEditRefusal, recipeEditRefusal } from './phrase-notes-core.ts';
+import { GENERATED_EDITED, customRefusal, handEditRefusal } from './phrase-notes-core.ts';
 import { extractDescription, extractRecipeSection } from './v2-note-core.ts';
 
 const EXTEND: PhraseParams = { kind: 'extend', source: 'bar_007', ...PHRASE_DEFAULTS, bars: 8 };
@@ -15,15 +15,16 @@ const clean = noteContentFor('phrase_001', EXTEND);
 const recipeEdited = ((): string => { const x = extractRecipeSection(clean) ?? ''; return clean.replace(x, x.replace('8 bars', '6 bars')); })();
 const descriptionEdited = ((): string => { const d = extractDescription(clean); return clean.replace(d, d.replace('8 bars', '6 bars')); })();
 
-test('the four refusal sentences (either lead) count; other refusals and ordinary text do not', () => {
-  for (const lead of [true, false]) for (const f of [handEditRefusal, recipeEditRefusal, pythonEditRefusal, customRefusal]) assert.equal(isHandEditRefusal(f(lead)), true);
+test('the refusal sentences (the Description\'s and the custom note\'s with either lead, and the one line of a hand-edited Recipe or Python) count; other refusals and ordinary text do not', () => {          // 2026-11-26-1047 (deliberate): the Recipe and Python sentences are one line now
+  for (const lead of [true, false]) for (const f of [handEditRefusal, customRefusal]) assert.equal(isHandEditRefusal(f(lead)), true);
+  assert.equal(isHandEditRefusal(GENERATED_EDITED), true);
   for (const other of ['', 'Not saved: weight must be between 0 and 1', 'Not saved: the note is read only', 'Rendering score...']) assert.equal(isHandEditRefusal(other), false, other);
 });
 
 test('a shown refusal goes stale when the note no longer answers with it, and only then; other messages are never touched', () => {
-  assert.equal(handEditStatusSettled(recipeEditRefusal(true), clean), true, 'the note is settled');
-  assert.equal(handEditStatusSettled(recipeEditRefusal(true), recipeEdited), false, 'still hand-edited: still true');
-  assert.equal(handEditStatusSettled(recipeEditRefusal(true), descriptionEdited), true, 'a different facet is the edited one now: this sentence is stale');
+  assert.equal(handEditStatusSettled(GENERATED_EDITED, clean), true, 'the note is settled');
+  assert.equal(handEditStatusSettled(GENERATED_EDITED, recipeEdited), false, 'still hand-edited: still true');
+  assert.equal(handEditStatusSettled(GENERATED_EDITED, descriptionEdited), true, 'a different facet is the edited one now: this sentence is stale');
   assert.equal(handEditStatusSettled(handEditRefusal(false), descriptionEdited), false);
   assert.equal(handEditStatusSettled('Not saved: weight must be between 0 and 1', clean), false, 'a refusal of another kind is not ours to clear');
   assert.equal(handEditStatusSettled('', clean), false);
@@ -32,11 +33,11 @@ test('a shown refusal goes stale when the note no longer answers with it, and on
 test('handEditRefused tells every listener for a hand-edit sentence, nobody for anything else, and a listener that stopped hearing is not called', () => {
   const heard: string[] = [];
   const off = onHandEditRefusal((p) => heard.push(p));
-  assert.equal(handEditRefused('phrases/phrase_001.md', recipeEditRefusal(true)), true);
+  assert.equal(handEditRefused('phrases/phrase_001.md', GENERATED_EDITED), true);
   assert.equal(handEditRefused('phrases/phrase_001.md', 'Not saved: the note is read only'), false);
   assert.deepEqual(heard, ['phrases/phrase_001.md']);
   off();
-  handEditRefused('phrases/phrase_001.md', recipeEditRefusal(true));
+  handEditRefused('phrases/phrase_001.md', GENERATED_EDITED);
   assert.deepEqual(heard, ['phrases/phrase_001.md']);
 });
 

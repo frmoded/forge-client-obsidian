@@ -64,11 +64,11 @@ export function phraseRecipeSteps(p: PhraseParams): string[] {
   } else if (p.mode === 'path') {
     steps.push(`Take ${link(p.a)} and ${link(p.b)}.`, `Mix them as a path of single-hit changes from the first to the second, in ${orderWords(p.order ?? 'musical', p.seed)}.`,
       `Keep the state at weight ${plain(p.weight)} (1 is all of ${link(p.a)}, 0 is all of ${link(p.b)}).`);
-    // 2026-10-31-1140 (M16a): a threshold and ghost notes do nothing to a path, but the json holds them and the Recipe is to be READ BACK (recipe-grammar-core.ts), so they are said, in the Description grammar's own sentences, only when they are not the defaults
+    // 2026-10-31-1140 (M16a): a threshold and ghost notes do nothing to a path, but the json holds them and the Recipe says what the json holds, so they are said, in the Description grammar's own sentences, only when they are not the defaults
     if (p.threshold !== 0.5) steps.push(`Threshold ${percentOf(p.threshold)} percent.`);
     if (p.ghost) steps.push('With ghost notes.');
   } else {
-    // 2026-10-31-1140 (M16a): the Recipe is to be READ BACK, so it says the share and the threshold EXACTLY (the same text as before for a whole percent and a threshold of two decimals: 70 % and 0.50)
+    // 2026-10-31-1140 (M16a): the Recipe says the share and the threshold EXACTLY (the same text as before for a whole percent and a threshold of two decimals: 70 % and 0.50)
     const share = percentOf(p.weight);
     const threshold = Number(p.threshold.toFixed(2)) === p.threshold ? p.threshold.toFixed(2) : plain(p.threshold);
     steps.push(`Take ${link(p.a)} and ${link(p.b)}.`,
@@ -200,11 +200,11 @@ export const DESCRIPTION_EDITED_BY_HAND = 'the Description was edited by hand; p
 /** That sentence as a refusal: `Not saved: the Description was ...` for the phrase strip's write (every refusal there starts so), `The Description was ...` elsewhere (the arrangement notice, the refresh command: they add their own lead). */
 export const handEditRefusal = (notSavedLead: boolean): string => (notSavedLead ? `Not saved: ${DESCRIPTION_EDITED_BY_HAND}.` : `The ${DESCRIPTION_EDITED_BY_HAND.slice('the '.length)}.`);
 
-/** The one stamp only a RECIPE-sourced note carries (2026-10-31-1140, M16a): the Description is derived from the Recipe, and this is the hash of the Recipe it was derived from. A Description-sourced render never writes it (withSourceChainStamps drops it). */
+/** The one stamp only a RECIPE-sourced note carries (written by builds before 2026-11-26-1047): the Description is derived from the Recipe, and this is the hash of the Recipe it was derived from. A Description-sourced render never writes it (withSourceChainStamps drops it). */
 export const RECIPE_SOURCE_KEY = 'description_derived_from_recipe_hash';
-/** 2026-11-02-1155 (M16b): the stamps only a PYTHON-sourced note carries: the Description and the Recipe are derived from the Python, and each is the hash of the Python it was derived from. */
+/** 2026-11-02-1155 (M16b): the stamps a CUSTOM note carries (and a note an older build left Python-sourced): the Description and the Recipe are derived from the Python, and each is the hash of the Python it was derived from. */
 export const PYTHON_SOURCE_KEYS = ['description_derived_from_python_hash', 'recipe_derived_from_python_hash'] as const;
-/** `python_custom: true`: the note's Python is not one of the known shapes, so the Python IS the note (its json cache is what the grammar last understood, kept for Revert to generated). */
+/** `python_custom: true`: the note was detached, so the Python IS the note (its json cache keeps what the grammar last understood). */
 export const CUSTOM_KEY = 'python_custom';
 /** Every key a Description-sourced render takes away (the note it writes is the grammar's own again). */
 const SOURCE_ONLY_KEYS: readonly string[] = [RECIPE_SOURCE_KEY, ...PYTHON_SOURCE_KEYS, CUSTOM_KEY];
@@ -243,7 +243,7 @@ export function withSourceChainStamps(lines: string[], stamps: Record<(typeof SO
   const out: string[] = [];
   for (const line of lines) {
     const key = /^([A-Za-z0-9_-]+):/.exec(line)?.[1];
-    if (key !== undefined && SOURCE_ONLY_KEYS.includes(key)) continue;   // a Description-sourced note never carries them (asRecipeSourced and asPythonSourced put them back for a Recipe- or Python-sourced one)
+    if (key !== undefined && SOURCE_ONLY_KEYS.includes(key)) continue;   // a Description-sourced note never carries them
     if (key !== undefined && (SOURCE_CHAIN_KEYS as readonly string[]).includes(key)) {
       if (placed.has(key)) continue;
       placed.add(key);
@@ -272,10 +272,6 @@ export function descriptionEditedByHand(text: string): boolean {
   return typeof stored === 'string' && stored !== '' && stored !== facetHashSync(extractDescription(text));
 }
 
-/** What a Recipe the person changed is called in the sentences below (M16a): the Recipe is a SOURCE, exactly as the Description is, and a write that would replace it says so before it does. */
-export const RECIPE_EDITED_BY_HAND = 'the Recipe was edited by hand; press Update from Recipe first or revert it';
-export const recipeEditRefusal = (notSavedLead: boolean): string => (notSavedLead ? `Not saved: ${RECIPE_EDITED_BY_HAND}.` : `The ${RECIPE_EDITED_BY_HAND.slice('the '.length)}.`);
-
 /** Was the Recipe of this note changed by hand since the note was written? Only a note that carries `recipe_hash` can say so. */
 export function recipeEditedByHand(text: string): boolean {
   const stored = parseFrontmatter(text)?.fields.recipe_hash;
@@ -298,48 +294,28 @@ export function pythonTextOf(text: string): string | null {
   return close ? body.slice(0, close.index).replace(/\r?\n$/, '') : extractPythonSection(text);
 }
 
-/** What a Python the person changed is called in the sentences (M16b): the Python is a SOURCE too, and a write that would replace it says so before it does. */
-export const PYTHON_EDITED_BY_HAND = 'the Python was edited by hand; press Update from Python first or revert it';
-export const pythonEditRefusal = (notSavedLead: boolean): string => (notSavedLead ? `Not saved: ${PYTHON_EDITED_BY_HAND}.` : `The ${PYTHON_EDITED_BY_HAND.slice('the '.length)}.`);
 /** Was the Python of this note changed by hand since the note was written? Only a note that carries `python_hash` can say so. */
 export function pythonEditedByHand(text: string): boolean {
   const stored = parseFrontmatter(text)?.fields.python_hash;
   return typeof stored === 'string' && stored !== '' && stored !== facetHashSync(pythonTextOf(text) ?? '');
 }
-/** Is this a CUSTOM note (its Python is the source and is not a shape the grammar knows)? */
+/** 2026-11-26-1047: the Recipe and the Python are GENERATED from the Description and read only in effect: a hand edit of either is never read back, and the next write of the list makes them again. These two hash checks stay so that a control does
+ *  not silently replace what a person typed: it is answered with this one line (the strip offers `Detach` and `OK` beside it). */
+export const GENERATED_EDITED = 'This Recipe/Python is generated. Edit the Description, or Detach.';
+/** Was the Recipe or the Python changed by hand since the note was written? */
+export const generatedEditedByHand = (text: string): boolean => recipeEditedByHand(text) || pythonEditedByHand(text);
+/** Is this a CUSTOM note (its Python is the note: detached from the Description)? */
 export const isCustomNote = (text: string): boolean => parseFrontmatter(text)?.fields[CUSTOM_KEY] === 'true';
 /** The banner of a custom note, and the refusal every control answers with on it. */
 export const CUSTOM_BANNER = 'Custom Python: the controls are off for this note.';
 export const customRefusal = (notSavedLead: boolean): string => (notSavedLead ? `Not saved: ${CUSTOM_BANNER}` : CUSTOM_BANNER);
 
-/** The refusal a write that would REPLACE the derived parts answers with when it would lose something a person typed or a custom note's Python: a custom note's first (the controls are off), then the Description's, the Recipe's and the Python's. `null` = nothing to protect. */
+/** The refusal a CONTROL's write answers with when it would replace something a person typed or a custom note's Python: a custom note's first (the controls are off), then the Description's, then the one line of a hand-edited Recipe or Python. `null` = nothing to protect. */
 export function handEditRefusalOf(text: string, notSavedLead: boolean): string | null {
   if (isCustomNote(text)) return customRefusal(notSavedLead);
   if (descriptionEditedByHand(text)) return handEditRefusal(notSavedLead);
-  if (recipeEditedByHand(text)) return recipeEditRefusal(notSavedLead);
-  if (pythonEditedByHand(text)) return pythonEditRefusal(notSavedLead);
+  if (generatedEditedByHand(text)) return GENERATED_EDITED;
   return null;
-}
-
-/** The stored `source_facet` of a note (null = none). */
-export const sourceFacetOf = (text: string): string | null => { const v = parseFrontmatter(text)?.fields.source_facet; return typeof v === 'string' && v !== '' ? v : null; };
-
-/** The note as a RECIPE-sourced one (M16a): `source_facet: recipe`, and the Description stamped as derived from the Recipe it was made from (the stamp `computeFacetStates` reads to draw "derived from Recipe"). Idempotent; every other line is kept. */
-export function asRecipeSourced(text: string): string {
-  const m = /^---(\r?\n)([\s\S]*?)\r?\n---/.exec(text);
-  if (!m) return text;
-  const hash = facetHashSync(extractRecipeSection(text) ?? '');
-  const lines: string[] = [];
-  let haveSource = false, haveKey = false;
-  for (const line of m[2].split(/\r?\n/)) {
-    const key = /^([A-Za-z0-9_-]+):/.exec(line)?.[1];
-    if (key === 'source_facet') { if (!haveSource) { lines.push('source_facet: recipe'); haveSource = true; } }
-    else if (key === RECIPE_SOURCE_KEY) { if (!haveKey) { lines.push(`${RECIPE_SOURCE_KEY}: ${hash}`); haveKey = true; } }
-    else lines.push(line);
-  }
-  if (!haveSource) lines.push('source_facet: recipe');
-  if (!haveKey) lines.push(`${RECIPE_SOURCE_KEY}: ${hash}`);
-  return `---${m[1]}${lines.join(m[1])}${m[1]}---${text.slice(m[0].length)}`;
 }
 
 /** 2026-11-03-1160 (d): the note with its `links:` property made again from `links` (note names, written as "[[name]]" exactly as a generated note's are), straight after `description:` where the note has one; an EMPTY list takes the property away, as for a generated note
@@ -380,11 +356,6 @@ function setLines(lines: string[], set: Array<[string, string]>, drop: readonly 
   return out;
 }
 
-/** The note as a PYTHON-sourced one (M16b): `source_facet: python`, the Description and the Recipe stamped as derived from the Python they were made from (the stamps `computeFacetStates` reads to draw "derived from Python"), the `python_hash` the current Python's, no custom mark. Idempotent; every other line is kept. */
-export function asPythonSourced(text: string): string {
-  const hash = facetHashSync(pythonTextOf(text) ?? '');
-  return withFrontLines(text, (lines) => setLines(lines, [['source_facet', 'python'], ['python_hash', hash], [PYTHON_SOURCE_KEYS[0], hash], [PYTHON_SOURCE_KEYS[1], hash]], [RECIPE_SOURCE_KEY, CUSTOM_KEY]));
-}
 /** The note as a CUSTOM one (M16b): Python-sourced, marked, with the Python as it stands now taken as the note (its `python_hash` is its hash, so it is not "edited" any more). The Description and the Recipe keep the stamps they had (the hash of the Python of the grammar's last reading): they read "derived from Python, out of date", which is true. */
 export function asCustom(text: string): string {
   const hash = facetHashSync(pythonTextOf(text) ?? '');
@@ -393,8 +364,6 @@ export function asCustom(text: string): string {
   return withFrontLines(text, (lines) => setLines(lines, [['source_facet', 'python'], ['python_hash', hash], [CUSTOM_KEY, 'true'], [PYTHON_SOURCE_KEYS[0], keep(PYTHON_SOURCE_KEYS[0])], [PYTHON_SOURCE_KEYS[1], keep(PYTHON_SOURCE_KEYS[1])]], [RECIPE_SOURCE_KEY]));
 }
 
-/** "Refresh note links" makes the derived parts again from the json; a note whose SOURCE is its Recipe stays so (the person's Recipe is not put back to a Description-sourced note by a refresh), and so does one whose source is its Python. */
-export const keepRecipeSource = (before: string, after: string): string => (sourceFacetOf(before) === 'recipe' ? asRecipeSourced(after) : sourceFacetOf(before) === 'python' && !isCustomNote(before) ? asPythonSourced(after) : after);
 
 /** The parts of a phrase note: the `# Description` is the grammar's sentence for `p` (`describe`), the frontmatter `description` stays the words with wikilinks for the graph, Recipe and Python derive from `p` as they always did. */
 /** 2026-11-19-0980: `sentence` is the `# Description` body when it is not the grammar's single paragraph (a phrase's LIST, written by sentence-list-note-core.ts). */

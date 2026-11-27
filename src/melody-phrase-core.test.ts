@@ -1,4 +1,4 @@
-// 2026-11-24-1031 (pitch in bars, Stage 1b) - the CORES of a melody phrase: its json (`style: "repeat"`, tempo 0), the note a phrase writes (Description, Recipe, Python, the front matter mark `melody: true`), what the Recipe and the Python read back, and the Score
+// 2026-11-24-1031 (pitch in bars, Stage 1b) - the CORES of a melody phrase: its json (`style: "repeat"`, tempo 0), the note a phrase writes (Description, Recipe, Python, the front matter mark `melody: true`), what the Recipe and the Python say, and the Score
 // of the phrase with the engine stood in for (what is read, what is asked, what is refused and in which words). The REAL engine is melody-phrase-acceptance.test.ts. A rhythm phrase is what it was (the pins at the bottom).
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -6,8 +6,6 @@ import { test } from 'node:test';
 import { PHRASE_STYLES, producePhrase, readPhraseNote, refreshPhraseNoteText, validatePhrase, type ExtendPhrase, type PhraseParams } from './phrase-core.ts';
 import { newPhraseNote, phraseDescription, phraseLinks, phrasePython, phraseRecipeSteps, renderPhraseNote } from './phrase-notes-core.ts';
 import { describe, canonical } from './phrase-grammar-core.ts';
-import { parseRecipe, renderRecipe } from './recipe-grammar-core.ts';
-import { parsePython, renderPython } from './python-grammar-core.ts';
 import { formatPhraseJson } from './phrase-core.ts';
 import { melodyNoteTemplate } from './melody-bar-core.ts';
 import { makeNotePreflight } from './note-preflight-core.ts';
@@ -59,14 +57,9 @@ test('the mark follows the params: a note that stops being a melody phrase loses
   }
 });
 
-test('the Recipe reads back: "Take [[bar]]. Repeat it for N bars." is the same phrase; the Python reads back too; the Description says what the params say', () => {
-  const steps = renderRecipe(REPEAT);
-  assert.equal(steps, 'Take [[bar_101]].\nRepeat it for 10 bars.');
-  const r = parseRecipe(steps, V); assert.equal(r.ok, true); if (r.ok) assert.deepEqual(r.params, canonical(REPEAT));
+test('the Recipe and the Python say the plain repeat ("Take [[bar]]. Repeat it for N bars.") and its forks; the Description says what the params say', () => {          // 2026-11-26-1047 (deliberate): neither is read back any more
   const withForks: ExtendPhrase = { ...REPEAT, overrides: { 2: 'bars/bar_102' } };
-  const r2 = parseRecipe(renderRecipe(withForks), V); assert.equal(r2.ok, true); if (r2.ok) assert.deepEqual(r2.params, canonical(withForks));
-  const py = parsePython(renderPython(REPEAT)); assert.equal(py.ok, true); if (py.ok) assert.deepEqual(py.params, canonical(REPEAT));
-  const py2 = parsePython(renderPython(withForks)); assert.equal(py2.ok, true); if (py2.ok) assert.deepEqual(py2.params, canonical(withForks));
+  assert.equal(phraseRecipeSteps(REPEAT).join('\n'), 'Take [[bar_101]].\nRepeat it for 10 bars.');
   assert.equal(describe(REPEAT), 'Repeat [[bar_101]] for 10 bars.');
   assert.deepEqual(phraseRecipeSteps(withForks), ['Take [[bar_101]].', 'Repeat it for 10 bars.', 'Bar 2 is replaced by [[bar_102]].']);
   assert.match(phrasePython(withForks), /bars\[1\] = bar_102\(\)/);

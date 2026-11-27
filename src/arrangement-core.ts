@@ -5,7 +5,7 @@
 //   * Python: `def compute(context):` reading each kit and phrase by calling its name (the way a Forge note reads a data note) and returning combine_tracks(...), the BAR LIST (the contract of a phrase's compute since 2026-10-29-0810).
 // The Score is drawn from the json by the code that draws every phrase (produceArrangement -> the engine glue's `arrangement` branch -> rhythm_bars_to_stream); the Python text is never run to draw it (P4).
 import { barsOfPayload, producePhrase, readPhraseNote, type PhraseScoreDeps } from './phrase-core.ts';
-import { callNote, extractPhraseJsonBlock, handEditRefusalOf, isCustomNote, keepRecipeSource, pyStr, renderSourceChainNote, type SourceChainParts } from './phrase-notes-core.ts';
+import { callNote, extractPhraseJsonBlock, handEditRefusalOf, isCustomNote, pyStr, renderSourceChainNote, type SourceChainParts } from './phrase-notes-core.ts';
 import { produceCustomScore, type CustomDeps } from './custom-note-core.ts';
 import { describe } from './phrase-describe-core.ts';
 import { extractDescription } from './v2-note-core.ts';
@@ -129,7 +129,7 @@ export function refreshArrangementNoteText(text: string, name: string): { ok: tr
   if (block.ok === false) return { ok: false, message: block.message };
   const lost = handEditRefusalOf(text, false);
   if (lost !== null) return { ok: false, message: lost };
-  const next = keepRecipeSource(text, renderArrangementNote(text, name, read.value, block.fenceStart, listDescriptionOf(text)));
+  const next = renderArrangementNote(text, name, read.value, block.fenceStart, listDescriptionOf(text));
   return { ok: true, text: next, changed: next !== text };
 }
 

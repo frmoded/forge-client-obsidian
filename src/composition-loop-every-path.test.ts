@@ -1,7 +1,7 @@
 // 2026-11-19-0910 - BUG (CCQA weekly 2026-11-18, screenshot 07-C6): a composition LOOP was applied, not refused. comp_002 plays comp_001 (applied); in comp_001 the sentence `Play [[comp_002]]` showed "The grammar read your sentence. This is what would be
 // written" and was applied, and the Score then said the composition could not be drawn. The 1206 contract: the loop is refused BEFORE any preview, naming both notes. The check (compositionLoopRefusal) was asked on ONE path only, the SERVICE's answer
 // (askNewKind); every other path that can write a composition recipe skipped it. This file pins that EVERY path runs the same check once, before any preview and before any write:
-//   (2026-11-19-0945 adds a sixth: "Revert to generated", `revertGenerated`)
+// 2026-11-26-1047 (deliberate): paths 3 and 4 (a Recipe or a Python edited by hand) are never applied now, looping or not; the sixth path ("Revert to generated", 2026-11-19-0945) is gone.
 //   1. a sentence typed in the box and read by the GRAMMAR (the screenshot's path)      2. the Description edited in the note (the debounced auto-apply: "Update from Description")
 //   3. the RECIPE edited by hand ("Update from Recipe")                                 4. the PYTHON edited by hand (a known shape maps back)       5. the SERVICE's plan (already checked: pinned so it stays)
 // plus the deep chain (more than 6), P3 (a composition that does not loop, and a vault without compositions, are unchanged on every path), and the wording that names both notes. The draw-time message of composition-core.ts stays as the second guard.
@@ -13,7 +13,7 @@ import { dialogButtons, dialogEntries, dialogLast } from './test-support/dialog-
 import { createDescriptionController, type DescriptionPorts } from './description-apply.ts';
 import { newCompositionNote, readCompositionNote, type CompositionParams } from './composition-core.ts';
 import { formatPhraseJson, type PhraseParams } from './phrase-core.ts';
-import { asCustom, newPhraseNote } from './phrase-notes-core.ts';
+import { newPhraseNote } from './phrase-notes-core.ts';
 import { compositionLoopRefusal } from './sentence-plan-families-core.ts';
 import { replaceDescriptionSection } from './prompt-box-core.ts';
 
@@ -97,33 +97,15 @@ test('the same pure check, once per path: a three-note loop (song_1 plays song_2
   assert.match(deep.strip(), /^Refused: The composition song_\d is nested more than 6 deep: song_1 → song_2 → .*\.$/); assert.deepEqual(deep.writes, []);
 });
 
-// 2026-11-19-0945: the tenth path, the one left unguarded by 0910: "Revert to generated" (the grammar's Python from the json cache, after a confirm). The cache's composition may loop NOW (song_2 changed since): the same check, before the write.
-test('PATH 6, "Revert to generated" (the Python the json cache would give back): refused when the cache\'s composition loops now, naming both notes; nothing is written; the hand-edited Python is kept', async () => {
-  const own = song('song_1', 'compositions/song_2');                                                                         // the json cache says: song_1 plays song_2 ...
-  const r = rig({ extra: song2PlaysSong1, own }); await r.ready();                                                            // ... and song_2 plays song_1 (it changed after song_1 was written)
-  const custom = asCustom(own.replace(/(# Python\n\n```python\n)/, '$1# my own line, written by hand\n')); assert.notEqual(custom, own, 'the fixture has a Python to edit');
-  r.store.set(COMP, custom); r.ctl.modified(COMP); await r.runTimers();                                                       // the note is now a custom one: the bar offers Revert to generated
-  assert.ok(r.ctl.canRevertGenerated(COMP), 'precondition: the bar offers the revert');
-  await r.ctl.revertGenerated(COMP); await r.flush();
-  assert.deepEqual(r.writes, [], 'no write at all'); assert.equal(r.own(), custom, 'the hand-edited Python is untouched');
-  const bar = r.el.querySelector('.forge-description-message')?.textContent ?? ''; assert.match(bar, /^Revert to generated: The composition song_2 loops back to this composition: song_1 → song_2 → song_1\.$/); assert.match(bar, LOOPS_BACK); assert.ok(r.ctl.canRevertGenerated(COMP), 'the revert is still offered (nothing changed)');
-});
-test('PATH 6, P3: "Revert to generated" of a composition that does NOT loop still writes the generated Python back', async () => {
-  const own = song('song_1', 'phrases/phrase_003'); const r = rig({ extra: {}, own }); await r.ready();
-  const custom = asCustom(own.replace(/(# Python\n\n```python\n)/, '$1# my own line, written by hand\n')); r.store.set(COMP, custom); r.ctl.modified(COMP); await r.runTimers();
-  await r.ctl.revertGenerated(COMP); await r.flush();
-  assert.equal(r.writes.length, 1, 'one write'); assert.ok(!r.own().includes('my own line'), 'the generated Python is back'); assert.equal(r.ctl.canRevertGenerated(COMP), false, 'the note is not custom any more');
-});
-
 // ---- P3: nothing changes for what does not loop ---------------------------------------------------------------------------------------------------------------------------------------
-test('P3: a composition that does NOT loop (song_1 plays song_2, song_2 plays a phrase) is unchanged on every path: the grammar previews and applies, the Description, Recipe and Python edits apply', async () => {
+test('P3: a composition that does NOT loop (song_1 plays song_2, song_2 plays a phrase) is unchanged on every path: the grammar previews and applies, the Description edit applies (a Recipe or Python edit is not read back)', async () => {          // 2026-11-26-1047 (deliberate)
   const fine = { 'compositions/song_2.md': song('song_2', 'phrases/phrase_001') };
   const box = rig({ extra: fine }); await box.ready(); box.type('Play [[song_2]].'); await box.enter();
   assert.match(box.strip(), /The grammar read your sentence\. This is what would be written\./); assert.deepEqual(box.buttons(), ['apply-preview', 'cancel-preview']); assert.deepEqual(box.writes, []);
   await box.enter(); assert.deepEqual(sectionsOf(box.own()), ['phrases/phrase_003', 'compositions/song_2'], 'the second Enter writes it (2026-11-19-0970: APPENDED to the list: the note played phrase_003 before)');
   const desc = rig({ extra: fine }); await desc.ready(); desc.store.set(COMP, replaceDescriptionSection(desc.own(), 'Play [[song_2]].')!); desc.ctl.modified(COMP); await desc.runTimers(); assert.deepEqual(sectionsOf(desc.own()), ['compositions/song_2']);
-  const rec = rig({ extra: fine }); await rec.ready(); rec.store.set(COMP, replaceSection(rec.own(), 'Recipe', 'Play [[song_2]].')); rec.ctl.modified(COMP); await rec.runTimers(); await rec.ctl.update(COMP); await rec.flush(); assert.deepEqual(sectionsOf(rec.own()), ['compositions/song_2']);          // 2026-11-22-1016 (deliberate): a Recipe that reads is held until the rewrite is asked for (`update`), the loop check is the same
-  const py = rig({ extra: fine }); await py.ready(); py.store.set(COMP, py.own().replace("sections.append({'source': 'phrase_003', 'bars': phrase_003()})", "sections.append({'source': 'song_2', 'bars': song_2()})")); py.ctl.modified(COMP); await py.runTimers(); assert.deepEqual(sectionsOf(py.own()), ['compositions/song_2']);
+  const rec = rig({ extra: fine }); await rec.ready(); rec.store.set(COMP, replaceSection(rec.own(), 'Recipe', 'Play [[song_2]].')); rec.ctl.modified(COMP); await rec.runTimers(); await rec.ctl.update(COMP); await rec.flush(); assert.deepEqual(sectionsOf(rec.own()), ['phrases/phrase_003']); assert.deepEqual(rec.writes, []);
+  const py = rig({ extra: fine }); await py.ready(); py.store.set(COMP, py.own().replace("sections.append({'source': 'phrase_003', 'bars': phrase_003()})", "sections.append({'source': 'song_2', 'bars': song_2()})")); py.ctl.modified(COMP); await py.runTimers(); assert.deepEqual(sectionsOf(py.own()), ['phrases/phrase_003']); assert.deepEqual(py.writes, []);
 });
 
 test('P3: a vault without compositions and a PHRASE note are unaffected (no composition is read, a phrase sentence still previews and applies)', async () => {

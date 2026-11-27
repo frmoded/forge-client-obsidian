@@ -196,7 +196,7 @@ for (const edition of ['lean', 'music'] as const) {
 
   test(`[${edition}] "Open composition as Score" switches a composition note to the composition tab; "Refresh note links" reaches compositions (stale derived text regenerated, current notes not written)`, async () => {
     const note = newCompositionNote('comp_001', P('phrases/phrase_003'));
-    const stale = { ...PHRASES, 'compositions/comp_001.md': staleDerived(note) };       // 2026-10-31-1140 (M16a): the PYTHON is the derived text a refresh regenerates; a typed Recipe is a source now (recipe-apply-core.test.ts)
+    const stale = { ...PHRASES, 'compositions/comp_001.md': staleDerived(note) };       // 2026-10-31-1140 (M16a): the PYTHON is the derived text a refresh regenerates; a typed Recipe is left alone by a refresh (generated-facets-1047.test.ts)
     const w = await world(SCORE_FIRST_TOML, stale, 'compositions/comp_001.md');
     try {
       await w.run(OPEN_COMP);

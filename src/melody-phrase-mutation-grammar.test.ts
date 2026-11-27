@@ -3,7 +3,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { parse, type GrammarVault } from './phrase-grammar-core.ts';
-import { parseRecipe } from './recipe-grammar-core.ts';
 import { VAULT } from './test-support/sentence-list-fixtures.ts';
 
 const MELODY_BARS = ['bar_101', 'bar_102', 'bar_103'];
@@ -52,11 +51,3 @@ test('a composition that plays beats and notes is refused in the whole sentence,
   assert.equal(say('Play [[phrase_101]] for 2 bars. Then play [[phrase_101]] for 2 bars.').ok, true, 'notes and notes are one kind');
 });
 
-test('in the recipe a melody bar is repeated as it is: "with" after its bars is refused in the words about beats, with a capital W as with a small one', () => {
-  const WORDS = 'That works on beats, not on notes. A melody bar is repeated as it is: "Repeat it for N bars."';
-  for (const w of ['with fills', 'With fills', 'WITH FILLS']) {
-    const r = parseRecipe(`Take [[bar_101]]. Repeat it for 4 bars ${w}.`, V);
-    assert.equal(r.ok, false, w); if (!r.ok) assert.equal(r.error.message, WORDS, w);
-  }
-  assert.equal(parseRecipe('Take [[bar_101]]. Repeat it for 4 bars.', V).ok, true, 'a plain repeat of a melody bar is read');
-});

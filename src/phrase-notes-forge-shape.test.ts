@@ -223,13 +223,12 @@ test('a note the 1020 plugin wrote (compute returns the Score) still reads, and 
   assert.ok(again.ok && !again.changed && again.text === r.text, 'a second run changes nothing');
 });
 
-test('a hand edit of the Python or the Recipe is a source (2026-11-02-1155 M16b and 2026-10-31-1140 M16a, deliberate) and is refused by a refresh, not overwritten; the json is never touched', () => {
+test('a hand edit of the generated Python or Recipe is refused by a refresh, not overwritten, with the one line; the json is never touched', () => {          // 2026-11-26-1047 (deliberate): neither is a source any more
   const text = newPhraseNote('phrase_001', EXTEND, formatPhraseJson(EXTEND));
   const edited = text.replace("style='repeat_with_fills'", "style='building'");
-  // 2026-11-02-1155 (M16b, deliberate): the Python is a source too: a refresh refuses a hand-edited one and leaves the note as written
-  assert.deepEqual(refreshPhraseNoteText(edited, 'phrase_001'), { ok: false, message: 'The Python was edited by hand; press Update from Python first or revert it.' });
+  assert.deepEqual(refreshPhraseNoteText(edited, 'phrase_001'), { ok: false, message: 'This Recipe/Python is generated. Edit the Description, or Detach.' });
   const typed = text.replace('Take [[bar_005]].', 'Take my own thing.');
-  assert.deepEqual(refreshPhraseNoteText(typed, 'phrase_001'), { ok: false, message: 'The Recipe was edited by hand; press Update from Recipe first or revert it.' });
+  assert.deepEqual(refreshPhraseNoteText(typed, 'phrase_001'), { ok: false, message: 'This Recipe/Python is generated. Edit the Description, or Detach.' });
 });
 
 // ---- P3 and the bars ----------------------------------------------------------------------------------------------------------------------------------------------------------

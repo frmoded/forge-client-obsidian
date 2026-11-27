@@ -1,6 +1,6 @@
 // 2026-11-19-0990 (BUG, driver 2026-11-19, testing 0960/0970 in the sandbox) - a composition reopened from the file list opened ONLY as a plain note, and its "Open as Score" refused with "...exactly one fenced json block". The driver's steps, on the REAL
 // wiring (music-tabs-world.ts: the real ForgePlugin.onload, real leaves that build the real views, the host's own events): (1) New composition (an empty note, named by the plugin), renamed by hand to A; (2) its Recipe edited BY HAND (and, the other
-// route, sentences through the composer); (3) a second composition B; (4) A reopened by the file list / a link / a tab restored after a reload. The cause (investigation, see the DIAGNOSIS test): nothing routed a composition or an arrangement note to
+// route, sentences through the composer). 2026-11-26-1047 (deliberate): a Recipe is not read back any more, so the BY HAND route edits the DESCRIPTION (a line added to the list) and clicks Forge; (3) a second composition B; (4) A reopened by the file list / a link / a tab restored after a reload. The cause (investigation, see the DIAGNOSIS test): nothing routed a composition or an arrangement note to
 // its Score as a phrase's is (phrase-default-view-core.ts knew phrases only), and the Beat Box's "Open as Score" button (a BAR's: rhythm-edit-core.ts extractJsonBlock wants the body to be exactly one json fence) was offered on every `type: data,
 // content_type: json` note, which a composition is. The empty note HAS its `# Cache` fence (hypothesis a), the Recipe edit leaves ONE fence and a cache that says the new sections (b), the rename keeps the note (c: but the tab's title went stale),
 // and no fence is counted twice (d). Every route opens the Score; the text tab's Open as Score is the family's own; a note with no or two fences says so in plain words. A DOM element is never an assert operand (a failure would format the tree).
@@ -23,10 +23,8 @@ const FENCE_WORDS = /fenced|exactly one|json block/i;
 const fences = (t: string): number => (t.match(/^```json/gm) ?? []).length;
 const shown = (w: MusicTabsWorld, leaf: any): string => String(leaf.view.contentEl?.textContent ?? '');
 const titles = (leaf: any): string[] => (leaf.view.actions ?? []).map((a: any) => a.title);
-const recipeOf = (t: string): string => /# Recipe\n+([\s\S]*?)\n+# Python/.exec(t)?.[1]?.trim() ?? '';
-const withRecipe = (t: string, recipe: string): string => t.replace(/(# Recipe\n+)[\s\S]*?(\n+# Python)/, (_m, a, c) => `${a}${recipe}\n${c}`);
-/** the person types a line of their own into the Recipe (an arrangement's Recipe ends with `Together.`: the line goes before it) */
-const addLine = (recipe: string, line: string): string => (/\nTogether\.$/.test(recipe) ? recipe.replace(/\nTogether\.$/, `\n${line}\nTogether.`) : `${recipe}\n${line}`);
+/** the person types a line of their own at the end of the Description's list */
+const addLine = (t: string, line: string): string => t.replace(/(# Description\n+)([\s\S]*?)(\n+# Recipe)/, (_m, a: string, list: string, c: string) => `${a}${list}\n${list.split('\n').length + 1}. ${line}${c}`);
 const closeAll = (w: MusicTabsWorld, p: string): void => { for (const l of [...w.leaves]) if (l.view.file?.path === p) l.detach(); };
 
 interface Family { name: string; type: string; newId: string; made: string; a: string; b: string; first: string; second: string; asked: (w: MusicTabsWorld, n: number) => boolean }
@@ -37,14 +35,14 @@ const FAMILIES: Family[] = [
     asked: (w, n) => w.asked.some((a) => a.params.kind === 'arrangement' && (a.data.tracks ?? []).length === n) },
 ];
 
-/** 2026-11-22-1016 (deliberate): a hand-edited Recipe that reads is HELD, not applied by itself (11i): the strip says the Description no longer matches the Recipe, and the driver asks for `Rewrite the description from the recipe`. The rest of each test is what it always was. */          // 2026-11-23-1022 (deliberate): the Description and Recipe wording
-async function askRewrite(w: MusicTabsWorld, tab: any): Promise<void> {
-  const button = tab.view.contentEl.querySelector('[data-action="update-recipe"]') as HTMLElement | null;
-  assert.ok(button, 'the strip offers the rewrite of the list from the script');
+/** The hand-edited Description of a music list note waits for the Forge button (2026-11-23-1018): the person clicks it. */
+async function askForge(w: MusicTabsWorld, tab: any): Promise<void> {
+  const button = tab.view.contentEl.querySelector('[data-action="update"]') as HTMLElement | null;
+  assert.ok(button, 'the strip offers Forge for the edited Description');
   button.click(); await w.settle(800);
 }
 
-/** steps 1 to 3: New <family> (an empty note, opened by the plugin), renamed to A in the file list, its content written (by hand in the Recipe, or through the composer), a second note B made and renamed. */
+/** steps 1 to 3: New <family> (an empty note, opened by the plugin), renamed to A in the file list, its content written (by hand in the Description, or through the composer), a second note B made and renamed. */
 async function driverSteps(w: MusicTabsWorld, f: Family, how: 'hand' | 'composer'): Promise<{ aText: string }> {
   await w.newNote(f.newId);                                                      // 2026-11-19-0991 (deliberate): the command asks for the NAME first; the person presses Enter on the default (what it chose before: comp_001 / arr_001)
   assert.ok(w.store.has(f.made), `New ${f.name} made ${f.made}`);
@@ -53,9 +51,9 @@ async function driverSteps(w: MusicTabsWorld, f: Family, how: 'hand' | 'composer
   if (how === 'composer') {
     await w.say(tab.view, f.first); await w.say(tab.view, f.second);
   } else {
-    await w.say(tab.view, f.first);                                              // the Recipe the controls wrote, then the person types a line of their own into it
-    await w.handEdit(f.a, (t) => withRecipe(t, addLine(recipeOf(t), f.second)));
-    await askRewrite(w, tab);
+    await w.say(tab.view, f.first);                                              // the list the composer wrote, then the person types a line of their own into it
+    await w.handEdit(f.a, (t) => addLine(t, f.second));
+    await askForge(w, tab);
   }
   const aText = w.store.get(f.a)!;
   await w.newNote(f.newId);                                                      // B
@@ -64,7 +62,7 @@ async function driverSteps(w: MusicTabsWorld, f: Family, how: 'hand' | 'composer
 }
 
 for (const f of FAMILIES) {
-  test(`[music] DIAGNOSIS (${f.name}): the empty note has its Cache fence, the hand edit of the Recipe leaves ONE fence and a cache that says the new content, and the Description list is made again from the Recipe (what the person sees)`, async () => {
+  test(`[music] DIAGNOSIS (${f.name}): the empty note has its Cache fence, the hand edit of the Description leaves ONE fence and a cache that says the new content, and the Recipe is made again from the list`, async () => {          // 2026-11-26-1047 (deliberate): the Recipe is no longer a source
     const w = await musicTabsWorld(real);
     try {
       await w.newNote(f.newId);                                                  // 2026-11-19-0991 (deliberate): through the name dialog, Enter on the default
@@ -72,19 +70,20 @@ for (const f of FAMILIES) {
       await w.rename(f.made, f.a);
       const tab = w.leaves.find((l) => w.typeOf(l) === f.type)!;
       await w.say(tab.view, f.first);
-      await w.handEdit(f.a, (t) => withRecipe(t, addLine(recipeOf(t), f.second)));
-      await askRewrite(w, tab);
+      await w.handEdit(f.a, (t) => addLine(t, f.second));
+      await askForge(w, tab);
       const text = w.store.get(f.a)!;
       assert.equal(fences(text), 1, 'hypothesis (b)/(d): after the hand edit there is still exactly one json fence');
-      assert.match(text, /source_facet: recipe/, 'the Recipe is the source facet now');
+      assert.match(text, /source_facet: description/, 'the Description is the source');
       assert.ok(f.asked(w, 2), 'the cache says the two parts: the engine was asked for them');
       const list = /# Description\n+([\s\S]*?)\n+# Recipe/.exec(text)![1];
-      assert.match(list, /^1\. .*\n2\. /, `the Description is still a numbered list (made again from the Recipe): ${JSON.stringify(list)}`);
+      assert.match(list, /^1\. .*\n2\. /, `the Description is still a numbered list: ${JSON.stringify(list)}`);
+      assert.match(/# Recipe\n+([\s\S]*?)\n+# Python/.exec(text)![1], /phrase_002/, 'the Recipe is made again from the list');
     } finally { w.done(); }
   });
 
   for (const how of ['hand', 'composer'] as const) {
-    test(`[music] (${f.name}, ${how}) the driver's steps: New, renamed to A, written (${how === 'hand' ? 'Recipe by hand' : 'composer'}), B made in between; A reopened from the FILE LIST opens as its Score (not as a plain note), nothing in A or B changes, no fence-count sentence`, async () => {
+    test(`[music] (${f.name}, ${how}) the driver's steps: New, renamed to A, written (${how === 'hand' ? 'Description by hand' : 'composer'}), B made in between; A reopened from the FILE LIST opens as its Score (not as a plain note), nothing in A or B changes, no fence-count sentence`, async () => {
       const w = await musicTabsWorld(real);
       try {
         const { aText } = await driverSteps(w, f, how);

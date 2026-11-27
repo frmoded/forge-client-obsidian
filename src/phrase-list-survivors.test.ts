@@ -6,7 +6,6 @@ import { test } from 'node:test';
 import { parse, type GrammarParams } from './phrase-grammar-core.ts';
 import * as L from './sentence-list-core.ts';
 import { phraseDescription, phrasePython, phraseRecipeSteps } from './phrase-notes-core.ts';
-import { parseRecipe, renderRecipe } from './recipe-grammar-core.ts';
 import { barCount } from './structure-strip-core.ts';
 import type { PhraseParams } from './phrase-core.ts';
 import { PHRASE_VAULT } from './test-support/phrase-list-fixtures.ts';
@@ -171,18 +170,6 @@ test('phrase-notes-core 118 and 122: a mix with a step has a Python that makes t
   // and a mix with NO step is the Python it always had
   const plain = phrasePython({ ...MIXV, ops: undefined } as PhraseParams); assert.ok(plain.includes('  return [mixed]') && !plain.includes('bars = [mixed]'), plain);
   const plainPath = phrasePython({ ...MIXP, ops: undefined } as PhraseParams); assert.ok(plainPath.includes('  return [bar]') && !plainPath.includes('bars = [bar]'), plainPath);
-});
-
-// ---- recipe-grammar-core.ts (163, 237, 238) -----------------------------------------------------------------------------------------------------------------------------------------------------------------------
-test('recipe-grammar-core 163, 237, 238: a Recipe of a mix (vote, and path) with structure steps reads back to the same params, steps kept', () => {
-  for (const p of [MIXV, MIXP, { ...MIXV, ops: [{ op: 'keep', runs: [[1, 1]] }, { op: 'copy', runs: [[1, 1]] }] } as PhraseParams, { ...MIXP, threshold: 0.3, ghost: true } as PhraseParams]) {
-    const r = parseRecipe(renderRecipe(p as GrammarParams), V);
-    assert.ok(r.ok, `${renderRecipe(p as GrammarParams)}\n${r.ok ? '' : JSON.stringify(r.error)}`);
-    assert.deepEqual((r as { ok: true; params: GrammarParams }).params, p);
-  }
-  // a step the Recipe grammar does not know after the vote step is refused by name
-  const e = parseRecipe(`${renderRecipe({ ...MIXV, ops: undefined } as PhraseParams as GrammarParams)}\nSprinkle bar 1.`, V);
-  assert.ok(!e.ok);
 });
 
 // ---- structure-strip-core.ts (30, 32) ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

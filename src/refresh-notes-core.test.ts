@@ -81,7 +81,7 @@ test('kits and arrangements: stale derived text is regenerated, current notes ar
     'kits/rock.md': newKitNote(ROCK).replace('Add the kick.', 'Somebody typed here.'),
     'kits/latin.md': newKitNote({ kind: 'kit', name: 'latin', channels: ['claves'] }),
     'kits/broken.md': '---\ntype: data\ncontent_type: json\n---\n\n```json\n{"kind": "kit"}\n```\n',
-    'arrangements/arr_001.md': newArrangementNote('arr_001', { kind: 'arrangement', tracks: [{ kit: 'rock', phrase: 'phrase_001' }] }).replace('# Recipe\n\nPlay', '# Recipe\n\nSomebody typed here.\nPlay'),     // 2026-10-31-1140 (M16a, deliberate): the Recipe is a SOURCE now, so a hand edit of it is NO LONGER overwritten: it is left as written and the line says why (it was overwritten when the Recipe was derived text; the Description was never overwritten: see the M15b test)
+    'arrangements/arr_001.md': newArrangementNote('arr_001', { kind: 'arrangement', tracks: [{ kit: 'rock', phrase: 'phrase_001' }] }).replace('# Recipe\n\nPlay', '# Recipe\n\nSomebody typed here.\nPlay'),     // 2026-10-31-1140 (M16a, deliberate) and 2026-11-26-1047 (deliberate): a hand edit of the Recipe is not overwritten by a refresh: it is left as written and the line says why (the Description was never overwritten: see the M15b test)
   };
   const v = vault(files);
   const named = (re: RegExp) => () => [...v.store.keys()].filter((p) => re.test(p)).map((path) => ({ path, name: path.replace(/^.*\//, '').replace(/\.md$/, '') }));
@@ -89,7 +89,7 @@ test('kits and arrangements: stale derived text is regenerated, current notes ar
   const s = await refreshNoteLinks(ports);
   assert.deepEqual([s.kits!.total, s.kits!.updated, s.kits!.current, s.kits!.skipped.length], [3, 1, 1, 1]);
   assert.deepEqual([s.arrangements!.total, s.arrangements!.updated, s.arrangements!.current, s.arrangements!.skipped.length], [1, 0, 0, 1]);
-  assert.match(s.arrangements!.skipped[0], /^arrangements\/arr_001\.md: The Recipe was edited by hand; press Update from Recipe first or revert it\.$/);
+  assert.match(s.arrangements!.skipped[0], /^arrangements\/arr_001\.md: This Recipe\/Python is generated\. Edit the Description, or Detach\.$/);          // 2026-11-26-1047 (deliberate)
   assert.ok(!v.store.get('kits/rock.md')!.includes('Somebody typed here.'), 'a kit has no source but its json: its typed text is derived and overwritten');
   assert.ok(v.store.get('arrangements/arr_001.md')!.includes('Somebody typed here.'), 'the person\'s Recipe is left as written');
   assert.deepEqual(v.writes.sort(), ['kits/rock.md'], 'only the stale kit was written');
@@ -132,24 +132,22 @@ test('compositions: stale derived text is regenerated, current notes are NOT wri
   assert.match(refreshNotice(none), /every note was already up to date/);
 });
 
-// ---- 2026-10-31-1140 (M16a): the Recipe is a source: "Refresh note links" keeps it ------------------------------------------------------------------------------------------------------------------------------------------
-test('Refresh note links and the Recipe: a Recipe a person typed (not applied yet) is left as written and the line says why; a Recipe-SOURCED note (its Recipe applied) is current - no write, no byte - and stays Recipe-sourced even when a derived part has drifted', async () => {
+// ---- 2026-11-26-1047 (deliberate): a typed Recipe is left alone; a note an older build left Recipe-sourced is brought back to a Description-sourced one ----------------------------------------------------------------
+test('Refresh note links and the Recipe: a Recipe a person typed is left as written and the line says why; a note an older build left Recipe-sourced is written Description-sourced (its music and its Recipe unchanged), once', async () => {
   const { noteContentFor, PHRASE_DEFAULTS } = await import('./phrase-core.ts');
-  const { asRecipeSourced } = await import('./phrase-notes-core.ts');
+  const { oldRecipeSourced } = await import('./test-support/old-source-notes.ts');
   const { extractRecipeSection } = await import('./v2-note-core.ts');
   const p = { kind: 'extend' as const, source: 'bar_007', ...PHRASE_DEFAULTS, bars: 6 };
-  const sourced = asRecipeSourced(noteContentFor('phrase_002', p));
+  const generated = noteContentFor('phrase_002', p);
+  const sourced = oldRecipeSourced(generated);
   const typedText = noteContentFor('phrase_001', { ...p, bars: 8 });
   const typed = typedText.replace(extractRecipeSection(typedText) ?? '', (extractRecipeSection(typedText) ?? '').replace('8 bars', '3 bars'));
-  const drifted = sourced.replace(/^description: ".*"$/m, 'description: "stale"');
-  const v = vault({ 'phrases/phrase_001.md': typed, 'phrases/phrase_002.md': sourced, 'phrases/phrase_003.md': drifted.replace('phrase_002', 'phrase_003'), 'bars/bar_007.md': bar('bar_007', 'x') });
+  const v = vault({ 'phrases/phrase_001.md': typed, 'phrases/phrase_002.md': sourced, 'bars/bar_007.md': bar('bar_007', 'x') });
   const sum = await refreshNoteLinks(v.ports);
   assert.equal(sum.phrases.skipped.length, 1);
-  assert.match(sum.phrases.skipped[0], /^phrases\/phrase_001\.md: The Recipe was edited by hand; press Update from Recipe first or revert it\.$/);
+  assert.match(sum.phrases.skipped[0], /^phrases\/phrase_001\.md: This Recipe\/Python is generated\. Edit the Description, or Detach\.$/);
   assert.equal(v.store.get('phrases/phrase_001.md'), typed, 'the person\'s Recipe is untouched');
-  assert.ok(!v.writes.includes('phrases/phrase_002.md'), 'a Recipe-sourced note that is current is not written');
-  assert.ok(v.writes.includes('phrases/phrase_003.md'), 'a drifted derived part is repaired');
-  assert.match(v.store.get('phrases/phrase_003.md')!, /^source_facet: recipe$/m, 'and the note stays Recipe-sourced');
+  assert.equal(v.store.get('phrases/phrase_002.md'), generated, 'byte for byte the note the controls make: source_facet description, the Recipe-only stamp gone');
   assert.ok(v.writes.includes('bars/bar_007.md'), 'the bar gets its provenance sections once (M17a)');
   const written = [...v.writes];
   const again = await refreshNoteLinks(v.ports);

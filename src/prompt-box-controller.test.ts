@@ -9,7 +9,7 @@ import { Window } from 'happy-dom';
 
 import { createDescriptionController, type DescriptionPorts } from './description-apply.ts';
 import { PHRASE_DEFAULTS, noteContentFor, type PhraseParams } from './phrase-core.ts';
-import { isCustomNote } from './phrase-notes-core.ts';
+import { asCustom, isCustomNote } from './phrase-notes-core.ts';
 import { dialogEntries, dialogLast } from './test-support/dialog-view.ts';
 import { asListNote } from './test-support/phrase-list-fixtures.ts';
 import { extractDescription } from './v2-note-core.ts';
@@ -71,9 +71,9 @@ test('P3: no box on a pane that is not a score tab (the notes pane, the text vie
   assert.ok(r.box(tab), 'the same note on a score tab has one');
   assert.equal(r.box(text), null, 'a text view or notes pane');
   assert.equal(r.box(other), null, 'not a note of ours');
-  // the Python is edited to something the grammar does not know: the note becomes CUSTOM (its Python is the source), and its box goes
+  // the note is detached (its Python is the note), and its box goes          // 2026-11-26-1047 (deliberate): an edited Python no longer takes the note over by itself
   const py = (r.store.get(PATH)!.match(/```python\n([\s\S]*?)\n```/) as RegExpMatchArray)[1];
-  r.store.set(PATH, r.store.get(PATH)!.replace(py, 'def compute(context):\n  return [3, 1, 4]'));
+  r.store.set(PATH, asCustom(r.store.get(PATH)!.replace(py, 'def compute(context):\n  return [3, 1, 4]')));
   r.ctl.modified(PATH); await r.fire();
   assert.equal(isCustomNote(r.store.get(PATH)!), true, 'the premise: the note is custom now');
   r.ctl.syncBars(); await r.flush();

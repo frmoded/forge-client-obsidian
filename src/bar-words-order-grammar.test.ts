@@ -11,7 +11,6 @@ import { parse, describe, canonical, type GrammarParams } from './phrase-grammar
 import { formatPhraseJson, readPhraseNote, validatePhrase, type PhraseParams } from './phrase-core.ts';
 import { applyStructure } from './bar-structure-core.ts';
 import { phrasePython, phraseRecipeSteps } from './phrase-notes-core.ts';
-import { parseRecipe } from './recipe-grammar-core.ts';
 import { PHRASE_VAULT } from './test-support/phrase-list-fixtures.ts';
 
 const V = PHRASE_VAULT;
@@ -163,17 +162,11 @@ test('the json cache holds the SORTED form; the validator is as strict as before
   assert.equal(v([[5, 5], [3, 3]]).ok, false); assert.match((v([[5, 5], [3, 3]]) as { message: string }).message, /in order and apart/);
   assert.equal(v([[3, 3], [4, 4]]).ok, false);
 });
-test('the Recipe says the sorted form, and a Recipe written by hand out of order is read to the same params (the Recipe reads through the same step reader)', () => {
+test('the Recipe says the sorted form', () => {          // 2026-11-26-1047 (deliberate): a Recipe is no longer read back
   const p = ok(`${TAKE} Keep bar 8 and bar 2 and bars 4 to 5. Delete bar 5 and bar 3.`) as PhraseParams;
   const steps = phraseRecipeSteps(p);
   assert.ok(steps.some((s) => s === 'Keep bar 2, bars 4 to 5 and bar 8.'), steps.join(' | '));
   assert.ok(steps.some((s) => s === 'Delete bar 3 and bar 5.'), steps.join(' | '));
-  const back = parseRecipe(steps.join('\n'), V);
-  assert.ok(back.ok, back.ok ? '' : back.error.message);
-  assert.deepEqual(back.ok && canonical(back.params as GrammarParams), canonical(p));
-  const hand = parseRecipe(['Take [[phrase_003]].', 'Delete bar 5 and bar 3.'].join('\n'), V);
-  assert.ok(hand.ok, hand.ok ? '' : hand.error.message);
-  assert.deepEqual(hand.ok && (hand.params as { ops: unknown[] }).ops, [{ op: 'delete', runs: [[3, 3], [5, 5]] }]);
 });
 test('the Python says the sorted form: the same text as the ascending sentence\'s Python, for every verb', () => {
   for (const v of VERBS) {

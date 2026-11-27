@@ -84,7 +84,7 @@ test('repairForOpen: a note that has its fence is returned byte for byte (an ope
   for (const t of [emptyCompositionNote('x'), emptyArrangementNote('x'), `${FRONT}\n\`\`\`json\n{}\n\`\`\`\n\n\`\`\`json\n{}\n\`\`\`\n`, '# plain\n', '']) assert.equal(repairForOpen(t, 'x', 'composition', VAULT), t);
 });
 
-test('repairForOpen: no fence and nothing to read = an empty cache only; a Description list is the source; else a readable Recipe; an unreadable one is kept and nothing is guessed', () => {
+test('repairForOpen: no fence and nothing to read = an empty cache only; a Description list is the source; a Recipe is never read back; what cannot be read is kept and nothing is guessed', () => {          // 2026-11-26-1047 (deliberate)
   const sections = (desc: string, recipe: string) => `${FRONT}\n# Description\n\n${desc}\n\n# Recipe\n\n${recipe}\n\n# Python\n\n\`\`\`python\n\`\`\`\n`;
   const bare = repairForOpen(`${FRONT}\n# Description\n\n`, 'bare', 'composition', VAULT);
   assert.equal(isEmptyNote(bare), true);
@@ -94,18 +94,13 @@ test('repairForOpen: no fence and nothing to read = an empty cache only; a Descr
   assert.deepEqual((r1 as { value: { sections: unknown[] } }).value.sections, [{ source: 'phrases/phrase_001' }, { source: 'phrases/phrase_002', length: 4 }]);
   assert.equal(jsonFenceCount(fromList), 1);
   assert.match(fromList, /^1\. Play \[\[phrase_001\]\]\.$/m, 'the list is what the person sees');
-  const fromRecipe = repairForOpen(sections('', 'Play [[phrase_001]].\nThen play [[phrase_002]] for 4 bars.'), 'x', 'composition', VAULT);
-  const r2 = readCompositionNote(fromRecipe);
-  assert.ok(r2.ok, JSON.stringify(r2));
-  assert.equal((r2 as { value: { sections: unknown[] } }).value.sections.length, 2);
-  assert.match(fromRecipe, /source_facet: recipe/, 'a Recipe-sourced note: the Recipe is what it says');
-  assert.match(fromRecipe, /^2\. Then play \[\[phrase_002\]\] for 4 bars\.$/m, 'and the Description list is made from it');
+  const onlyRecipe = repairForOpen(sections('', 'Play [[phrase_001]].\nThen play [[phrase_002]] for 4 bars.'), 'x', 'composition', VAULT);
+  assert.equal(isEmptyNote(onlyRecipe), true, 'a note with only a Recipe gets its empty cache and nothing else');
+  assert.ok(onlyRecipe.includes('Then play [[phrase_002]] for 4 bars.') && !/source_facet/.test(onlyRecipe), 'the Recipe is kept as typed, not made a source');
   const garbage = sections('1. Sing a song.', 'Sprinkle glitter.');
   const kept = repairForOpen(garbage, 'x', 'composition', VAULT);
   assert.equal(isEmptyNote(kept), true, 'nothing readable: an empty cache, nothing guessed');
   assert.ok(kept.includes('1. Sing a song.') && kept.includes('Sprinkle glitter.'), 'what the person wrote is kept');
-  const wrongKind = repairForOpen(sections('', 'Play [[phrase_001]] on the [[rock]] kit.\nTogether.'), 'x', 'composition', VAULT);
-  assert.equal(isEmptyNote(wrongKind), true, 'an arrangement\'s Recipe in a composition is not applied');
   const arr = repairForOpen(sections('1. Play [[phrase_001]] on the [[rock]] kit.', ''), 'x', 'arrangement', VAULT);
   assert.ok(readArrangementNote(arr).ok);
   assert.equal(repairForOpen(arr, 'x', 'arrangement', VAULT), arr, 'idempotent: the repaired note has its fence, a second open writes nothing');

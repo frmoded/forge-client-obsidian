@@ -1,20 +1,14 @@
 // 2026-11-06-1190 (CCQA smokes 14 to 16): three small wording fixes, tests first.
 //  (a) a notebook refusal the service wrote that names the engine's operations (`thin_out`, `double_up`) says them in the op picker's words ("thin out", "double up"), mapped in ONE pure function;
 //  (b) [removed 2026-11-19-0960 with the dialog] the New composition dialog's Name placeholder;
-//  (c) a note that already IS a custom note is told "this note stays a custom note", not "the note becomes a custom note".
-// The three wiring tests at the end pin the MECHANISM (X calls Y); if the design moves they SHOULD go red - reassess, don't just rewrite.
+//  (c) [removed 2026-11-26-1047 (deliberate) with the Python read-back].
+// The wiring test of (a) pins the MECHANISM (X calls Y); if the design moves it SHOULD go red - reassess, don't just rewrite.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { Window } from 'happy-dom';
 
 import { interpretTransformResponse, opWordsIn } from './notebook-request-core.ts';
-import { pythonCustomBarMessage } from './description-apply-core.ts';
-import { createDescriptionController, type DescriptionPorts } from './description-apply.ts';
-import { DESCRIPTION_DEBOUNCE_MS } from './description-apply-core.ts';
-import { PHRASE_DEFAULTS, noteContentFor, type PhraseParams } from './phrase-core.ts';
-import { isCustomNote } from './phrase-notes-core.ts';
 
 const SRC = path.resolve(import.meta.dirname);
 const read = (f: string): string => fs.readFileSync(path.join(SRC, f), 'utf8');
@@ -49,59 +43,4 @@ test('(a) MECHANISM PIN: the mapping lives in notebook-request-core.ts only and 
 
 // ---- (b) removed 2026-11-19-0960: the New composition dialog (and its Name placeholder) is gone; "New composition" makes an empty note, new-notes-start-empty.test.ts -------------------------------------------------
 
-const win: any = new Window({ url: 'http://localhost/' });
-
-// ---- (c) -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-test('(c) pythonCustomBarMessage: a note that is not custom yet becomes one; one that already is stays one (and neither says the other\'s words)', () => {
-  assert.equal(pythonCustomBarMessage(false), 'The Python is not a shape the controls know: the note becomes a custom note.');
-  assert.equal(pythonCustomBarMessage(true), 'The Python is not a shape the controls know: this note stays a custom note.');
-  assert.doesNotMatch(pythonCustomBarMessage(true), /becomes/);
-  assert.doesNotMatch(pythonCustomBarMessage(false), /stays/);
-});
-
-const PATH = 'phrases/phrase_001.md';
-const EXTEND: PhraseParams = { kind: 'extend', source: 'bar_007', ...PHRASE_DEFAULTS, bars: 8 };
-const THIN = "  bars[1] = thin_out_bars(bars=[bars[1]], first=1, last=1, amount=0.5)[0]\n  return bars";
-const withPython = (text: string, edit: (py: string) => string): string => { const py = (text.match(/```python\n([\s\S]*?)\n```/) as RegExpMatchArray)[1]; return text.replace(py, edit(py)); };
-const msg = (el: HTMLElement): string => el.querySelector('.forge-description-message')?.textContent ?? '';
-
-/** A small stand-in vault (the ports of description-apply.test.ts): one note, a clock the test moves. */
-function rig(start: string) {
-  const store = new Map<string, string>([[PATH, start]]);
-  const doc = win.document;
-  const panes: Array<{ path: string; contentEl: HTMLElement }> = [];
-  let now = 0, ids = 0; const timers: Array<{ id: number; at: number; fn: () => void }> = [];
-  const ports: DescriptionPorts = {
-    read: async (p) => { const t = store.get(p); if (t === undefined) throw new Error('gone'); return t; },
-    process: async (p, fn) => { await Promise.resolve(); const cur = store.get(p)!; const next = fn(cur); if (next !== cur) store.set(p, next); },
-    vault: () => ({ bars: ['bar_007', 'bar_008'], phrases: ['phrase_001', 'phrase_003'], arrangements: [], compositions: [], kits: [] }),
-    barNames: () => ['bar_007', 'bar_008'], phraseNames: () => ['phrase_001'],
-    setTimer: (fn, ms) => { const id = ++ids; timers.push({ id, at: now + ms, fn }); return id; },
-    clearTimer: (h) => { const i = timers.findIndex((t) => t.id === h); if (i >= 0) timers.splice(i, 1); },
-    trace: () => {}, panes: () => panes,
-  };
-  const ctl = createDescriptionController(ports);
-  const pane = (): HTMLElement => { const el = doc.createElement('div'); doc.body.appendChild(el); panes.push({ path: PATH, contentEl: el }); return el as HTMLElement; };
-  const advance = async (ms: number): Promise<void> => { now += ms; for (;;) { const due = timers.filter((t) => t.at <= now).sort((x, y) => x.at - y.at)[0]; if (!due) break; timers.splice(timers.indexOf(due), 1); due.fn(); } for (let i = 0; i < 30; i++) await Promise.resolve(); };
-  return { store, ctl, pane, advance };
-}
-
-test('(c) the bar of a note that is ALREADY custom, whose Python was edited again to another shape the grammar does not know, says "this note stays a custom note"; a note that is not custom yet keeps "becomes"', async () => {
-  const original = noteContentFor('phrase_001', EXTEND);
-  const first = rig(original);
-  first.store.set(PATH, withPython(original, (py) => py.replace('  return bars', THIN)));
-  first.ctl.modified(PATH); await first.advance(DESCRIPTION_DEBOUNCE_MS);
-  const custom = first.store.get(PATH)!;
-  assert.equal(isCustomNote(custom), true, 'setup: the note is custom');
-  // the person edits the custom Python again (not applied yet: opened with inspect)
-  const again = rig(withPython(custom, (py) => py.replace('amount=0.5', 'amount=0.25')));
-  const a = again.pane();
-  await again.ctl.inspect(PATH);
-  assert.match(msg(a), /this note stays a custom note/, `bar says: ${msg(a)}`);
-  assert.doesNotMatch(msg(a), /becomes/);
-});
-
-test('(c) MECHANISM PIN: the bar\'s sentence for the python-custom state comes from pythonCustomBarMessage(st.already), the flag the state already carried', () => {
-  assert.match(read('description-apply.ts'), /st\.kind === 'python-custom'\) return \{ message: u\.message \?\? pythonCustomBarMessage\(st\.already\)/);
-});
+// ---- (c) removed 2026-11-26-1047 (deliberate): the sentence "the note becomes / stays a custom note" belonged to the Python read-back, which is gone (a note becomes custom by Detach only) ----------------------------------------

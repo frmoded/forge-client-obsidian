@@ -4,12 +4,13 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { PHRASE_DEFAULTS, noteContentFor, refreshPhraseNoteText, type PhraseParams } from './phrase-core.ts';
-import { CACHE_NOTE, asPythonSourced, asRecipeSourced } from './phrase-notes-core.ts';
+import { CACHE_NOTE } from './phrase-notes-core.ts';
+import { oldPythonSourced, oldRecipeSourced } from './test-support/old-source-notes.ts';          // 2026-11-26-1047 (deliberate): no build writes such a note any more; old ones are still read
 
 const EXTEND: PhraseParams = { kind: 'extend', source: 'bar_007', ...PHRASE_DEFAULTS, bars: 8 };
 const OLD = '<!-- derived from the Description above; edit the Description, not this -->';
 const description = noteContentFor('phrase_001', EXTEND);
-const sources: Array<[string, string]> = [['description', description], ['recipe', asRecipeSourced(description)], ['python', asPythonSourced(description)]];
+const sources: Array<[string, string]> = [['description', description], ['recipe', oldRecipeSourced(description)], ['python', oldPythonSourced(description)]];
 const commentOf = (t: string): string => (/# Cache\n\n(<!--[^\n]*-->)\n/.exec(t) ?? [])[1] ?? '';
 
 test('the cache comment names no single facet as the source: it is the same, true sentence in a Description-, a Recipe- and a Python-sourced note', () => {
@@ -29,7 +30,9 @@ test('an older note that carries the old sentence is brought to the new one by "
     assert.notEqual(old, text, `${label}: the fixture really carries the old sentence`);
     const r = refreshPhraseNoteText(old, 'phrase_001');
     assert.ok(r.ok && r.changed, `${label}: rewritten`);
-    assert.equal((r as { text: string }).text, text, `${label}: byte for byte the note a new write makes`);
+    const now = refreshPhraseNoteText(text, 'phrase_001'); assert.ok(now.ok);
+    assert.equal((r as { text: string }).text, (now as { text: string }).text, `${label}: byte for byte the note a new write makes`);          // 2026-11-26-1047 (deliberate): an old Recipe- or Python-sourced note is written Description-sourced by a refresh
+    if (label === 'description') assert.equal((now as { text: string }).text, text);
     const again = refreshPhraseNoteText((r as { text: string }).text, 'phrase_001');
     assert.ok(again.ok && !again.changed, `${label}: idempotent`);
   }
