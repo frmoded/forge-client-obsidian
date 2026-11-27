@@ -17,11 +17,13 @@ const BEGIN = '/* 1030z begin */', END = '/* 1030z end */';
 const block = (): string => { const a = CSS_TEXT.indexOf(BEGIN), b = CSS_TEXT.indexOf(END); assert.ok(a >= 0 && b > a, 'the 1030z block is delimited in styles.css'); return CSS_TEXT.slice(a, b + END.length); };
 const rulesOf = (css: string): { selectors: string[]; body: string }[] => [...css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => ({ selectors: m[1].split(',').map((x) => x.trim()).filter(Boolean), body: m[2] }));
 
-test('1030z: the block holds exactly two rules (Reading view, Live Preview), every selector is keyed on the wheel file name and nothing else', () => {
-  const rules = rulesOf(block());
+// 2026-11-25-1043 (deliberate): the same two rules now also name the drawing fifths_on_a_line.svg (added selector-list entries), so a selector is keyed on ONE of the two file names; its own pins are in fifths-flat-arrows-1043.test.ts.
+test('1030z: the block holds exactly two rules (Reading view, Live Preview), every selector is keyed on the wheel file name (or, since 1043, the drawing\'s) and nothing else', () => {
+  const rules = rulesOf(block()), keys = [KEY, '[src$="fifths_on_a_line.svg"]'];
   assert.equal(rules.length, 2, 'one rule for Reading view, one for Live Preview');
-  for (const r of rules) for (const s of r.selectors) { assert.ok(s.includes(KEY), `${s} is keyed on ${KEY}`); assert.match(s, /\.internal-embed\.image-embed/, `${s} names the embed`); }
-  assert.equal(CSS_TEXT.split(KEY).length - 1, rules.flatMap((r) => r.selectors).length, 'the key appears in no selector outside the block');
+  for (const r of rules) for (const s of r.selectors) { assert.equal(keys.filter((k) => s.includes(k)).length, 1, `${s} is keyed on one of ${keys.join(' or ')}`); assert.match(s, /\.internal-embed\.image-embed/, `${s} names the embed`); }
+  for (const k of keys) assert.equal(CSS_TEXT.split(k).length - 1, rules.flatMap((r) => r.selectors).filter((s) => s.includes(k)).length, `${k} appears in no selector outside the block`);
+  assert.equal(rules.flatMap((r) => r.selectors).filter((s) => s.includes(KEY)).length, 2, 'the wheel keeps its two selectors');
 });
 
 test('1030z: the declarations centre a shrink-wrapped block (display, width: fit-content, auto side margins), and the Live Preview margin out-ranks Obsidian\'s `.cm-content > * { margin: 0 !important }`', () => {

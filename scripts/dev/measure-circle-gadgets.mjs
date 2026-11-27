@@ -212,6 +212,30 @@ if (!only || only.split(',').some((o) => 'fifths_on_a_line'.includes(o) || o.inc
       await page.shot(path.join(OUT, `fifths_on_a_line-${label}-${width}.png`), { x: 0, y: 0, width, height: Math.ceil(box.h) });
       page.close();
     }
+    // 2026-11-25-1043: the geometry as Chrome lays the text out, the captioned svg inline in the column: the rendered size of every caption row (the line is 11 px in a 360 px column), the rows inside the picture, the two arrow labels apart from
+    // each other and clear of the curves (gapUnderLabels: from the bottom of `C to G` / `B to F♯` to the top of its arch, in viewBox units; the stroke takes 1.75 of it)
+    numbers.svgText = {};
+    for (const width of [800, 360]) {
+      const page = await openPage({ dir: VAULT, width: width + 20, height: 700, pageHtml: `<!doctype html><meta charset="utf-8"><body style="margin:0;background:#fff"><style>svg{display:block;max-width:100%;height:auto}</style><div style="width:${width}px">${withCap}</div>` }); await sleep(500);
+      const t = await page.ev(`(function () {
+        var s = document.querySelector('svg'), vb = s.viewBox.baseVal, scale = s.getBoundingClientRect().width / vb.width;
+        var box = function (e) { var b = e.getBBox(); return { x: b.x, y: b.y, r: b.x + b.width, b: b.y + b.height }; };
+        var all = function (sel) { return Array.prototype.map.call(s.querySelectorAll(sel), box); };
+        var apart = function (a, c) { return a.r <= c.x || c.r <= a.x || a.b <= c.y || c.b <= a.y; };
+        var inside = function (b) { return b.x >= 0 && b.y >= 0 && b.r <= vb.width && b.b <= vb.height; };
+        var mark = Array.prototype.filter.call(s.childNodes, function (n) { return n.nodeType === 8 && /^ caption-box /.test(n.nodeValue); })[0];
+        var rows = Array.prototype.map.call(mark.nextElementSibling.querySelectorAll('text'), function (e) { var b = box(e); b.px = parseFloat(e.getAttribute('font-size')) * scale; return b; });
+        var labels = all('text.arrowlabel'), where = all('text.arrowwhere'), arrows = all('path.arrow');
+        var round = function (n) { return Math.round(n * 100) / 100; };
+        return { scale: round(scale), captionPx: rows.map(function (r) { return round(r.px); }), captionRowRight: rows.map(function (r) { return round(r.r); }), rowsInside: rows.every(inside), labelsInside: labels.concat(where).every(inside),
+          labelsApart: apart(labels[0], labels[1]) && apart(where[0], where[1]), labelGap: round(labels[1].x - labels[0].r), gapUnderLabels: where.map(function (w, i) { return round(arrows[i].y - w.b); }), arches: arrows.map(function (a) { return [round(a.r - a.x), round(a.b - a.y)]; }),
+          labelPx: Array.prototype.map.call(s.querySelectorAll('text.arrowlabel, text.arrowwhere'), function (e) { return round(parseFloat(e.getAttribute('font-size')) * scale); }) };
+      })()`);
+      numbers.svgText[width] = t;
+      verdict[`svg_text${width}_captionRowsInside`] = t.rowsInside && t.captionPx.length >= 2; verdict[`svg_text${width}_labelsInsideAndApart`] = t.labelsInside && t.labelsApart; verdict[`svg_text${width}_labelsClearOfTheArches`] = t.gapUnderLabels.every((v) => v >= 4);
+      if (width === 360) verdict.svg_text360_captionLineIsElevenPx = t.captionPx.slice(1).every((p) => p >= 10.9 && p <= 11.2);
+      page.close();
+    }
   }
 }
 console.log(JSON.stringify(numbers));

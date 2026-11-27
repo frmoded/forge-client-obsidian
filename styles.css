@@ -2912,6 +2912,9 @@ button.forge-chat-copy:focus-visible { color: var(--text-normal); outline: 2px s
    Reading view = `span.internal-embed.image-embed[src]` (a lone inline span in a `p`; `src` is the link text as written) so it becomes a shrink-wrapped block with auto side margins; Live Preview = `div.internal-embed.image-embed[src]`, inline-flex inside a `.cm-line` or, as a
    widget, a direct child of `.cm-content` whose margin Obsidian zeroes with `!important` (`.cm-content > * { margin: 0 !important }`), so the Live Preview rule is scoped to the editor, stays a block-level flex box and out-ranks that margin with its own `!important`.
    No `|alias` in the note (on the site it becomes alt text); no other note, embed or selector is touched. */
+/* 2026-11-25-1043: the same two rules centre the chapter's other drawing, the notes on a line (600 px natural: it shrinks with a narrower column), by one more selector each. */
+.internal-embed.image-embed[src$="fifths_on_a_line.svg"],
 .internal-embed.image-embed[src$="circle_of_fifths_wheel.svg"] { display: block; width: fit-content; margin-inline: auto; }
+.markdown-source-view.mod-cm6 .cm-content .internal-embed.image-embed[src$="fifths_on_a_line.svg"],
 .markdown-source-view.mod-cm6 .cm-content .internal-embed.image-embed[src$="circle_of_fifths_wheel.svg"] { display: flex; width: fit-content; margin-inline: auto !important; }
 /* 1030z end */

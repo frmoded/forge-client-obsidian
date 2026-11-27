@@ -93,22 +93,34 @@ export function pxPerUnit(svg) {
   return (w.n * PX_PER[w.u]) / vb[2];
 }
 
-/** The picture's own caption-less viewBox and size, the caption text rows, and the new box: used by applySvgCaption and by the tests. */
+// 2026-11-25-1043: an .svg shown as an image shrinks with the column, and its caption with it (fifths_on_a_line.svg: 600 px wide, so on a 360 px phone column a 12 px line is about 7 px). A figure that must stay readable there SAYS the column on its
+// own <svg> element, data-caption-column="360": its caption is then sized so that the line is NARROW_LINE_PX when the picture is that wide (the title, the gaps and the panel inset in the same proportion; the one size at every width, so it is
+// bigger than other captions on a wide screen). The attribute never makes a caption smaller, and a figure without it is laid out exactly as before.
+export const NARROW_LINE_PX = 11;
+/** The column, in CSS px, a figure says its caption must be readable in; null when it says none. */
+export function captionColumnOf(svg) { const m = /\sdata-caption-column="(\d+)"/.exec(parseSvgBox(svg).head); return m && Number(m[1]) > 0 ? Number(m[1]) : null; }
+
+/** The picture's own caption-less viewBox and size, the caption text rows, and the new box: used by applySvgCaption and by the tests. `k` is the scale the CAPTION is sized with (caption px per viewBox unit): the picture's own, unless it names a column. */
 export function svgCaptionLayout(svg, cap, { minWidthPx = 360 } = {}) {
   const bare = stripSvgCaption(svg);
   const { vb, width, height } = parseSvgBox(bare);
-  const k = pxPerUnit(bare);
-  const wUnits = Math.max(vb[2], minWidthPx / k);
-  const maxChars = Math.max(12, Math.floor((wUnits * k) / (LINE_PX * CHAR_EM)));
+  const own = pxPerUnit(bare);
+  const wUnits = Math.max(vb[2], minWidthPx / own);
+  const column = captionColumnOf(bare);
+  const k = column === null ? own : Math.min(own, (column / wUnits) * (LINE_PX / NARROW_LINE_PX));
+  const insets = k < own && hasPanel(bare, vb) ? 2 * PANEL_INSET_PX : 0;          // an enlarged caption wraps inside both insets of a panel (the others wrap as they always did)
+  const maxChars = Math.max(12, Math.floor((wUnits * k - insets) / (LINE_PX * CHAR_EM)));
   const rows = wrapWords(cap.line, maxChars);
   const titleY = vb[1] + vb[3] + (GAP_PX + 14) / k;           // 12 px gap + ~14 px: the title's baseline (as the loudness graphs)
   const lineY = [...rows.keys()].map((i) => titleY + (19 + 17 * i) / k);
   const bottom = lineY[lineY.length - 1] + 12 / k;
-  return { bare, vb, width, height, k, wUnits, rows, titleY, lineY, newVb: [vb[0], vb[1], wUnits, bottom - vb[1]] };
+  const x = vb[0] + (hasPanel(bare, vb) ? PANEL_INSET_PX / k : 0);          // 2026-11-23-1021: 12 px in from a panel's edge
+  return { bare, vb, width, height, k, own, x, wUnits, rows, titleY, lineY, newVb: [vb[0], vb[1], wUnits, bottom - vb[1]] };
 }
 // 2026-11-23-1021: a figure may carry its own PANEL, a solid <rect x="0" y="0" width height ...> behind the drawing (the wheel: a light panel so the ink reads in Obsidian's dark mode). The caption makes the canvas bigger, so the panel grows with it
 // (no transparent strip under the caption) and strip gives it its own size back; a caption on a panel is inset 12 px from the panel's edge.
 const PANEL = /<rect x="0" y="0" width="[\d.]+" height="[\d.]+"/;
+const PANEL_INSET_PX = 12;
 const hasPanel = (svg, vb) => vb[0] === 0 && vb[1] === 0 && PANEL.test(svg);
 const sizePanel = (svg, w, h) => svg.replace(PANEL, (m) => m.replace(/width="[\d.]+"/, `width="${num(w)}"`).replace(/height="[\d.]+"/, `height="${num(h)}"`));
 const scaleLen = (len, factor) => { const u = unitOf(len); return u ? `${num(u.n * factor)}${u.u === 'px' ? '' : u.u}` : len; };
@@ -140,7 +152,7 @@ export function applySvgCaption(svg, cap, opts) {
   let nh = head.replace(/viewBox="[^"]*"/, `viewBox="${newVb.map(num).join(' ')}"`);
   if (width) nh = nh.replace(/\swidth="[^"]*"/, ` width="${scaleLen(width, fW)}"`);
   if (height) nh = nh.replace(/\sheight="[^"]*"/, ` height="${scaleLen(height, fH)}"`);
-  const x = num(vb[0] + (hasPanel(bare, vb) ? 12 / L.k : 0));          // 2026-11-23-1021: 12 px in from a panel's edge
+  const x = num(L.x);
   const ts = (n) => num(n * 1), sz = (px) => num(px / L.k);
   const lines = [
     `${SVG_BEGIN}`,

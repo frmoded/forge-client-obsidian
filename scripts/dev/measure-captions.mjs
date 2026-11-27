@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { openPage, sleep } from './cdp.mjs';
+import { svgCaptionLayout } from './caption-core.mjs';
 
 const arg = (name, dflt) => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : dflt; };
 const VAULT = arg('--vault', path.join(os.homedir(), 'projects/music-theory')).replace(/^~/, os.homedir());
@@ -77,7 +78,8 @@ const scoreFigures = [...new Set([...svgs, ...imageDirs.flatMap((d) => (fs.exist
     const svg = fs.readFileSync(path.join(VAULT, f), 'utf8'); const tag = path.basename(f, '.svg');
     const r = await page.ev(`(function () {
       var box = document.getElementById('box'); box.innerHTML = ${JSON.stringify(svg)}; var s = box.querySelector('svg'); var vb = s.viewBox.baseVal;
-      var cap = Array.prototype.slice.call(s.querySelectorAll('text')).filter(function (t) { var g = t.closest('g[font-family]'); return g && g.parentNode === s; });
+      var mark = Array.prototype.filter.call(s.childNodes, function (n) { return n.nodeType === 8 && /^ caption-box /.test(n.nodeValue); })[0];          // 2026-11-25-1043: the rows of the caption BLOCK only (a drawing with its own text groups, the wheel and the line of notes, counted them as rows)
+      var cap = mark ? Array.prototype.slice.call(mark.nextElementSibling.querySelectorAll('text')) : [];
       var rows = cap.map(function (t) { var b = t.getBBox(); return { x: b.x, right: b.x + b.width, top: b.y, bottom: b.y + b.height, text: t.textContent, size: t.getAttribute('font-size') }; });
       var ink = null; Array.prototype.forEach.call(s.children, function (e) { if (e.tagName === 'style' || e.tagName === 'text' || (e.tagName === 'g' && e.hasAttribute('font-family'))) return; var b; try { b = e.getBBox(); } catch (x) { return; } if (b.width === 0 && b.height === 0) return; var m = e.transform && e.transform.baseVal.consolidate(); var tx = m ? m.matrix.e : 0; var x0 = b.x + tx; ink = ink === null ? x0 : Math.min(ink, x0); });
       var pxw = s.getBoundingClientRect().width, pxh = s.getBoundingClientRect().height;
@@ -87,8 +89,9 @@ const scoreFigures = [...new Set([...svgs, ...imageDirs.flatMap((d) => (fs.exist
     if (svgs.includes(f)) {
       verdict[`${tag}_captionRows`] = r.rows.length >= 2;
       verdict[`${tag}_noRowCropped`] = r.rows.every((w) => w.x >= r.vb[0] - 0.01 && w.right <= r.vb[0] + r.vb[2] + 0.01 && w.top >= r.vb[1] - 0.01 && w.bottom <= r.vb[1] + r.vb[3] + 0.01);
-      verdict[`${tag}_leftAlignedAtTheViewBox`] = r.rows.every((w) => Math.abs(w.x - r.vb[0]) < 0.2);
-      verdict[`${tag}_typeSizes`] = Math.abs(parseFloat(r.rows[0].size) * r.scale - 15) < 0.05 && r.rows.slice(1).every((w) => Math.abs(parseFloat(w.size) * r.scale - 12) < 0.05);
+      const L = svgCaptionLayout(svg, captions[f]), grow = L.own / L.k;                  // 2026-11-25-1043: a panelled figure's caption is 12 px in from the edge; a figure that names a column (data-caption-column) has a bigger caption at its natural size
+      verdict[`${tag}_leftAlignedAtTheViewBox`] = r.rows.every((w) => Math.abs(w.x - L.x) < 0.2);
+      verdict[`${tag}_typeSizes`] = Math.abs(parseFloat(r.rows[0].size) * r.scale - 15 * grow) < 0.05 && r.rows.slice(1).every((w) => Math.abs(parseFloat(w.size) * r.scale - 12 * grow) < 0.05);
       numbers.svg[tag].rowRightPx = Math.round(Math.max(...r.rows.map((w) => w.right)) * r.scale - r.vb[0] * r.scale);
     }
   }

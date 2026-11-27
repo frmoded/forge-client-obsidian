@@ -98,7 +98,8 @@ test('1041 A: for a screen reader: role img and an aria-label in words that says
 test('1041 A (2026-11-25-1042 (deliberate): the captions landed once the wizard embedded both pieces): the captions.json entry exists (a title and one line, like the wheel\'s) and the file is exactly what the caption script writes for it; strip then apply is exact', { skip }, () => {
   const caps = JSON.parse(file(LIVE, 'captions.json')); const cap = caps[REL]; assert.deepEqual(cap, { title: 'Fifths on a line', line: 'Seven half steps from C to G, and from B to F♯ in the next octave' }); assert.ok(caps[WHEEL], 'the wheel\'s entry is the model');
   const svg = file(LIVE); assert.deepEqual(C.svgCaptionOf(svg), cap, 'the two text rows in the file are the entry'); assert.equal(C.applySvgCaption(svg, cap), svg, 'the file is what the script writes'); assert.equal(C.applySvgCaption(C.stripSvgCaption(svg), cap), svg);
-  const box = (s: string): number[] => /viewBox="([^"]+)"/.exec(s)![1].split(' ').map(Number); assert.deepEqual(box(C.stripSvgCaption(svg)), [0, 0, 600, 400], 'the bare drawing'); assert.equal(box(svg)[2], 600, 'the caption did not widen the drawing'); assert.ok(box(svg)[3] > 400, 'it only adds height');
+  // 2026-11-25-1043 (deliberate): the flat arrows made the bare drawing shorter (336, was 400); the caption's own size is pinned in fifths-flat-arrows-1043.test.ts.
+  const box = (s: string): number[] => /viewBox="([^"]+)"/.exec(s)![1].split(' ').map(Number); assert.deepEqual(box(C.stripSvgCaption(svg)), [0, 0, 600, 336], 'the bare drawing'); assert.equal(box(svg)[2], 600, 'the caption did not widen the drawing'); assert.ok(box(svg)[3] > 336, 'it only adds height');
 });
 
 test('1041 A: once the vault is synced, the bundle\'s copy of the drawing and of captions.json are the live vault\'s (nothing yet to compare before the sync)', { skip }, () => {
