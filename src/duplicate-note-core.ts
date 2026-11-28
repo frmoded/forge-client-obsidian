@@ -18,6 +18,7 @@ import { handEditRefusalOf } from './phrase-notes-core.ts';
 import { isEmptyNote } from './empty-note-core.ts';
 import { replayGrammar, stopNotice, type ReplayCtx } from './sentence-list-core.ts';
 import { listOfNote, writeListNote } from './sentence-list-note-core.ts';
+import { carryGroups } from './group-note-core.ts';
 import type { DuplicateFamily, ResolvedDuplicate } from './duplicate-sentence-core.ts';
 /** 2026-11-19-0997: this core is the LIST MODEL's (music-composer code, reached only through src/list-model-selected.ts); the music edition's list-model.full.ts lists this string in `cores`, scripts/build-main.test.mjs greps the lean bundle for it. */
 export const LIST_MODEL_SENTINEL_DUPLICATE_NOTE_CORE = 'forge-list-model-core:duplicate-note-core';
@@ -65,7 +66,7 @@ export function copyListNote(source: string, newName: string, family: 'phrase' |
   const rp = replayGrammar(list, family, { vault });
   if (rp.stop !== null || rp.params === null) return { ok: false, message: `[[${sourceName}]] was not copied: ${rp.stop !== null ? stopNotice(rp.stop, rp.applied) : 'no line of it can be read.'}` };
   const written = writeListNote(withRoot(source, false), newName, family, rp);
-  return written.ok === true ? written : { ok: false, message: `[[${sourceName}]] was not copied: ${written.message}` };
+  return written.ok === true ? { ok: true, text: carryGroups(written.text, family) } : { ok: false, message: `[[${sourceName}]] was not copied: ${written.message}` };          // 2026-11-27-1050: a copy has the source's prompt stack, as far as the copy's list matches it
 }
 
 /** The copy of a note's text for `newName`, by kind. Also the DRY RUN the preview asks (with a placeholder name): ok, or why not. */

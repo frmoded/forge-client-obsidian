@@ -57,6 +57,7 @@ function rig(opts: RigOpts = {}) {
       composerMenu: () => ({ items: [{ id: 'new_phrase', label: 'New phrase' }], run: () => {} }),
     }),
     drawSeed: () => { const n = (opts.drawn ?? [])[seed++] ?? 99; return n; },
+    now: () => 1000,          // 2026-11-27-1050 (deliberate): a push records its time in `groups:`; two rigs compared byte for byte share one clock
   };
   const ctl = createDescriptionController(ports);
   const el = win.document.createElement('div'); win.document.body.appendChild(el);
@@ -418,7 +419,7 @@ const atMostWaiting = (w: readonly unknown[]): boolean => w.length <= 1;
 test('the REAL phrase tab (mountPhrase): a click on a Score bar while the composer says Delete, then ONE Enter, writes the note the two Enters write, byte for byte; the Score redraws from it', async () => {
   const HEAD = 'Extend [[bar_005]] to 6 bars, repeating with fills.';
   const run = async (instant: boolean) => {
-    const r = await tabRig([HEAD], { composerAutoApply: () => instant });
+    const r = await tabRig([HEAD], { composerAutoApply: () => instant }, { now: () => 1000 });          // 2026-11-27-1050 (deliberate): one clock for the two runs
     try {
       r.type('Delete'); r.click(r.bars()[1]); await r.flush();
       assert.equal(r.field().value, 'Delete bar 2');

@@ -45,6 +45,7 @@ function rig(start: string = START(), opts: { confirm?: boolean | ((message: str
     setTimer: (fn, ms) => { const id = ++ids; timers.push({ id, at: now + ms, fn }); return id; },
     clearTimer: (h) => { const i = timers.findIndex((t) => t.id === h); if (i >= 0) timers.splice(i, 1); },
     trace: (l) => lines.push(l), panes: () => panes,
+    now: () => 1,          // 2026-11-27-1050 (deliberate): a push records its time in `groups:`; two rigs compared byte for byte share one clock
     askPlan: async (payload: unknown) => { asked.push(payload); return { status: 500, json: {} }; }, configured: () => true,
     ...(opts.confirm !== undefined ? { confirm: async (m: string) => { confirms.push(m); return typeof opts.confirm === 'function' ? opts.confirm(m) : opts.confirm as boolean; } } : {}),
   };

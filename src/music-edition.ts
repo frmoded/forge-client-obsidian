@@ -125,6 +125,15 @@ export interface ListModel {
   };
   /** 2026-11-23-1023: the Forge button's replay (script-edit-core.ts). `on` is false in lean: no Forge button, a hand-edited Description is applied by itself. */
   script: { on: boolean; forge: typeof import('./script-edit-core.ts').forgeText };
+  /** 2026-11-27-1050 (the prompt stack): group-note-core.ts (`carry`: every write of a list drops the groups it no longer matches; `drop`: Detach; `write`: the stack of the controller's list write) and group-controller.ts (`create`: pop, the
+   *  bar-order line, the Prompts block; `command`: `Pop the last prompt`). Lean: it mounts no composer, so nothing is pushed or popped: no key is read or written (a key a note has is left as it is) and there is no command. */
+  groups: {
+    carry: typeof import('./group-note-core.ts').carryGroups;
+    drop: typeof import('./group-note-core.ts').dropGroups;
+    write: typeof import('./group-note-core.ts').writeNoteGroups;
+    create: typeof import('./group-controller.ts').createGroups;
+    command: typeof import('./group-controller.ts').popCommand;
+  };
   dialogs: {
     renamed: typeof import('./dialog-follow-core.ts').dialogRenamed; deleted: typeof import('./dialog-follow-core.ts').dialogDeleted; ctime: typeof import('./dialog-follow-core.ts').noteCtimeOf;
     fresh: typeof import('./dialog-follow-core.ts').dialogFresh; stamp: typeof import('./dialog-follow-core.ts').dialogStamp; prune: typeof import('./dialog-follow-core.ts').dialogPrune;

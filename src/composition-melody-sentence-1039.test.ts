@@ -9,6 +9,7 @@ import { test } from 'node:test';
 
 import { COMPOSITION_VIEW_TYPE } from './composition-core.ts';
 import { emptyCompositionNote, emptyPhraseNote } from './empty-note-core.ts';
+import { extractDescription } from './v2-note-core.ts';
 import { dialogEntries } from './test-support/dialog-view.ts';
 import { musicTabsWorld, realMusicPlugin } from './test-support/music-tabs-world.ts';
 
@@ -69,7 +70,7 @@ test('[real plugin] the driver\'s ENTRY: `Play [[phrase_101]]. then Then play [[
 });
 test('[real plugin] the same entry with two BEATS phrases is two lines, written canonically (the connective is not part of either)', async () => {
   const r = await run('comp_f2', ['Play [[phrase_001]]. then Then play [[phrase_002]] for 2 bars']);
-  assert.deepEqual(r.list, ['Play [[phrase_001]].', 'Then play [[phrase_002]] for 2 bars.']); noService(r); assert.doesNotMatch(r.note, /Waiting:|then Then/);
+  assert.deepEqual(r.list, ['Play [[phrase_001]].', 'Then play [[phrase_002]] for 2 bars.']); noService(r); assert.doesNotMatch(extractDescription(r.note), /Waiting:|then Then/);          // 2026-11-27-1050 (deliberate): the front matter keeps the typed words of the push (`groups:`), so the claim is about the Description (it was the whole note)
   assert.deepEqual(r.dialog.map((l) => l.split(':')[0]), ['you', 'applied']);
 });
 

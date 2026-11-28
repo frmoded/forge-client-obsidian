@@ -128,7 +128,7 @@ export function mountChatPanel(host: HTMLElement, ports: ChatPanelPorts, initial
   const said = (t: string): void => { if (disposed) return; copy.textContent = t; if (copyTimer !== null) disarm(copyTimer); copyTimer = arm(() => { copyTimer = null; if (!disposed) copy.textContent = 'Copy'; }, 2000); };
   copy.addEventListener('click', () => {
     const under = (panel.querySelector('.forge-composer-error')?.textContent ?? '').trim();
-    const lines = shown.flatMap((e) => [`${LABEL[e.kind]}: ${e.text}`, ...(e.suggestion ? [e.suggestion.description, ...(e.suggestion.recipe === '' ? [] : [e.suggestion.recipe])] : [])]);
+    const lines = shown.flatMap((e) => [`${LABEL[e.kind]}: ${e.text}`, ...(e.suggestion ? [...(e.suggestion.bars ? [e.suggestion.bars] : []), e.suggestion.description, ...(e.suggestion.recipe === '' ? [] : [e.suggestion.recipe])] : [])]);
     if (under !== '' && !shown.some((e) => e.text === under || (e.text.endsWith('…') && under.startsWith(e.text.slice(0, -1))))) lines.push(`Under the box: ${under}`);
     const clip = (doc.defaultView as unknown as { navigator?: { clipboard?: { writeText?(t: string): Promise<void> } } } | null)?.navigator?.clipboard;
     if (clip?.writeText === undefined) { said('Could not copy'); return; }
@@ -157,6 +157,7 @@ export function mountChatPanel(host: HTMLElement, ports: ChatPanelPorts, initial
       m.append(line);
       if (e.suggestion) {
         const s = e.suggestion;
+        if (s.bars !== undefined) m.append(Object.assign(doc.createElement('div'), { className: 'forge-chat-suggestion-bars', textContent: s.bars }));          // 2026-11-27-1050: the bar order, above the lines
         const d = doc.createElement('div'); d.className = 'forge-chat-suggestion-description'; d.textContent = s.description;
         m.append(d);
         if (s.recipe !== '') { const r = doc.createElement('pre'); r.className = 'forge-chat-suggestion-recipe'; r.textContent = s.recipe; m.append(r); }

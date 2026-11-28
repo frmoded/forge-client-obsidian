@@ -8,6 +8,7 @@ import { hasNoCacheFence, withCacheFence } from './cache-fence-core.ts';
 import { extractDescription } from './v2-note-core.ts';
 import { parseList, replayGrammar } from './sentence-list-core.ts';
 import { writeListNote } from './sentence-list-note-core.ts';
+import { listModel } from './list-model-selected.ts';
 import type { Family } from './note-family-core.ts';
 
 /** The text a note should have once it is opened as a Score: `text` itself when there is nothing to repair. */
@@ -17,7 +18,7 @@ export function repairForOpen(text: string, name: string, family: Family, vault:
   const listed = parseList(extractDescription(withFence), family, vault);
   if (listed.list.length > 0) {
     const rp = replayGrammar(listed.list, family, { vault });
-    if (rp.params !== null) { const w = writeListNote(withFence, name, family, rp); if (w.ok) return w.text; }
+    if (rp.params !== null) { const w = writeListNote(withFence, name, family, rp); if (w.ok) return listModel.groups.carry(w.text, family); }          // 2026-11-27-1050: the prompt stack goes with the list
   }
   return withFence;
 }

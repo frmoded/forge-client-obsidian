@@ -29,6 +29,7 @@ import { formatPhraseJson, type PhraseParams } from './phrase-core.ts';
 import { phrasePython, phraseRecipeSteps } from './phrase-notes-core.ts';
 import { compositionLoopRefusal } from './sentence-plan-families-core.ts';
 import type { CopyMark } from './duplicate-undo-core.ts';
+import type { Group } from './group-core.ts';
 
 export type ListKind = Family;
 export type SentenceList = readonly string[];
@@ -51,11 +52,11 @@ export function splitSaid(line: string): { line: string; said: string | null } {
   const s = String(line ?? ''); const m = SAID_TAIL.exec(s);
   return m === null ? { line: s, said: null } : { line: s.slice(0, m.index).trimEnd(), said: m[1].trim() };
 }
-/** The words as the marker may carry them: one line, no brackets or parentheses, no URL, path, file name or token-like run, at most SAID_MAX characters. '' = nothing worth keeping. */
-export function saidText(raw: string): string {
+/** The words as the marker may carry them: one line, no brackets or parentheses, no URL, path, file name or token-like run, at most SAID_MAX characters (`max`: 2026-11-27-1050, a prompt group keeps more). '' = nothing worth keeping. */
+export function saidText(raw: string, max = SAID_MAX): string {
   const words = String(raw ?? '').replace(/https?:\/\/\S+/gi, ' ').replace(/[\[\]()]/g, ' ').split(/\s+/).filter((w) => w !== '' && !/[\/\\]/.test(w) && !/\.(?:md|json|py|mp3|wav|png|svg|jpg|toml)\b/i.test(w) && !/^[A-Za-z0-9_-]{32,}$/.test(w));
   let out = words.join(' ');
-  if (out.length > SAID_MAX) { out = out.slice(0, SAID_MAX); const cut = out.lastIndexOf(' '); if (cut > 40) out = out.slice(0, cut); }
+  if (out.length > max) { out = out.slice(0, max); const cut = out.lastIndexOf(' '); if (cut > 40) out = out.slice(0, cut); }
   return out.trim();
 }
 /** `line` with the marker that says what the driver typed (nothing when there is nothing worth keeping). */
@@ -422,9 +423,12 @@ export function listAfterParams(list: SentenceList, params: GrammarParams, kind:
 /** `copy` (2026-11-19-0992a): the entry of a COPY made by `Duplicate [[bar_007]].`: it changes no line (`before` and `after` are the same list); undoing it hands the copy back (the caller moves it to the trash) and leaves the list as it is. It is never put on the redo side. */
 /** `snapshot` (2026-11-22-1016): the entry of a Forge write: the whole note before and after, because the Recipe and the Python are not in the list; undo and redo write these texts back (ONE write). */
 export interface NoteSnapshot { before: string; after: string }
-export interface UndoEntry { before: string[]; after: string[]; added: string[]; replaced: Replaced[]; copy?: CopyMark; snapshot?: NoteSnapshot }
-export interface Undone { list: string[]; removed: string[]; restored: string[]; copy?: CopyMark; snapshot?: NoteSnapshot }
-export interface Redone { list: string[]; added: string[]; snapshot?: NoteSnapshot }
+/** 2026-11-27-1050: `groups` = the prompt stack before and after the entry's write (undo and redo put it back with the lines); `pop` = the entry of a POP: the prompts that went, in words. */
+export interface UndoEntry { before: string[]; after: string[]; added: string[]; replaced: Replaced[]; copy?: CopyMark; snapshot?: NoteSnapshot; groups?: { before: Group[]; after: Group[] }; pop?: string }
+export interface Stacked { groups?: Group[]; pop?: string }
+/** `held` (2026-11-27-1050): the newest entry is a pop and the list is not what it left: nothing is taken back (never the "last item" of the list). */
+export interface Undone extends Stacked { list: string[]; removed: string[]; restored: string[]; copy?: CopyMark; snapshot?: NoteSnapshot; held?: true }
+export interface Redone extends Stacked { list: string[]; added: string[]; snapshot?: NoteSnapshot }
 export interface UndoStack {
   /** An apply made `after` out of `before` (a new sentence: redo is gone). */
   push(entry: UndoEntry): void;
@@ -444,18 +448,20 @@ export const UNDO_CAP = 100;
 export function createUndoStack(opts: { protects?: (line: string) => boolean } = {}): UndoStack {
   let undos: UndoEntry[] = [], redos: UndoEntry[] = [];
   const takes = (current: SentenceList): boolean => current.length > 0 && !(opts.protects?.(current[current.length - 1]) ?? false);
+  const stacked = (e: UndoEntry, side: 'before' | 'after'): Stacked => ({ ...(e.groups !== undefined ? { groups: e.groups[side] } : {}), ...(e.pop !== undefined ? { pop: e.pop } : {}) });
   return {
     push(entry) { undos = [...undos, { ...entry }].slice(-UNDO_CAP); redos = []; },
     replaceTop(entry) { undos = undos.length === 0 ? [{ ...entry }] : [...undos.slice(0, -1), { ...entry }]; redos = []; },
-    canUndo: (current) => (undos.length > 0 && same(undos[undos.length - 1].after, current) && (current.length > 0 || undos[undos.length - 1].copy !== undefined)) || (current.length > 0 && takes(current)),     // 2026-11-19-0992a: a copy entry can be undone with no line at all (a fresh phrase)
+    canUndo: (current) => (undos.length > 0 && same(undos[undos.length - 1].after, current) && (current.length > 0 || (undos[undos.length - 1].copy ?? undos[undos.length - 1].pop) !== undefined)) || (current.length > 0 && takes(current)),     // 2026-11-19-0992a: a copy entry can be undone with no line at all (a fresh phrase); 2026-11-27-1050: so can a pop that emptied the list
     canRedo: (current) => redos.length > 0 && same(redos[redos.length - 1].before, current),
     undo(current) {
       const top = undos[undos.length - 1];
       if (top !== undefined && top.copy !== undefined && same(top.after, current)) { undos = undos.slice(0, -1); return { list: [...top.before], removed: [], restored: [], copy: top.copy }; }      // 2026-11-19-0992a: a copy is spent, never redone
-      if (current.length === 0) return null;
+      if (top?.pop !== undefined && !same(top.after, current)) return { list: [...current], removed: [], restored: [], held: true };          // 2026-11-27-1050
+      if (current.length === 0 && top?.pop === undefined) return null;
       if (top !== undefined && same(top.after, current)) {
         undos = undos.slice(0, -1); redos = [...redos, top];
-        return { list: [...top.before], removed: [...top.added], restored: top.replaced.map((r) => r.sentence), ...(top.snapshot !== undefined ? { snapshot: top.snapshot } : {}) };
+        return { list: [...top.before], removed: [...top.added], restored: top.replaced.map((r) => r.sentence), ...(top.snapshot !== undefined ? { snapshot: top.snapshot } : {}), ...stacked(top, 'before') };
       }
       if (!takes(current)) return null;
       const last = current[current.length - 1], rest = current.slice(0, -1);
@@ -466,7 +472,7 @@ export function createUndoStack(opts: { protects?: (line: string) => boolean } =
       const top = redos[redos.length - 1];
       if (top === undefined || !same(top.before, current)) return null;
       redos = redos.slice(0, -1); undos = [...undos, top].slice(-UNDO_CAP);
-      return { list: [...top.after], added: [...top.added], ...(top.snapshot !== undefined ? { snapshot: top.snapshot } : {}) };
+      return { list: [...top.after], added: [...top.added], ...(top.snapshot !== undefined ? { snapshot: top.snapshot } : {}), ...stacked(top, 'after') };
     },
     clear() { undos = []; redos = []; },
   };

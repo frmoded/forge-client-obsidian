@@ -2,6 +2,7 @@
 // the Description is the only source, the Recipe and the Python are made from it. Nothing here calls a model.
 import { parseList, replayGrammar } from './sentence-list-core.ts';
 import { writeListNote } from './sentence-list-note-core.ts';
+import { carryGroups } from './group-note-core.ts';
 import { extractDescription } from './v2-note-core.ts';
 import type { Family } from './note-family-core.ts';
 import type { GrammarVault } from './phrase-grammar-core.ts';
@@ -17,6 +18,8 @@ export function forgeText(text: string, name: string, family: Family, vault: Gra
   const rp = replayGrammar(parsed.list, family, { vault });
   if (rp.params === null) return { ok: false, message: 'No line of the Description can be read.' };
   const w = writeListNote(text, name, family, rp);
-  return w.ok === false ? { ok: false, message: w.message } : { ok: true, text: w.text, same: w.text === text };
+  if (w.ok === false) return { ok: false, message: w.message };
+  const made = carryGroups(w.text, family);          // 2026-11-27-1050: the prompt stack goes with the list
+  return { ok: true, text: made, same: made === text };
 }
 

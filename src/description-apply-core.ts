@@ -10,6 +10,7 @@ import { editabilityProblem, parseFrontmatter } from './rhythm-edit-core.ts';
 import { readPhraseNote } from './phrase-core.ts';
 import { linesOfParams, parseList, replayGrammar, type ListStop } from './sentence-list-core.ts';
 import { writeListNote } from './sentence-list-note-core.ts';
+import { listModel } from './list-model-selected.ts';
 import { readArrangementNote } from './arrangement-core.ts';
 import { readCompositionNote } from './composition-core.ts';
 import { wrongKindSentence, type Family } from './note-family-core.ts';
@@ -95,9 +96,11 @@ function listState(text: string, sentence: string, family: Family, vault: Gramma
 }
 
 type Written = { ok: true; text: string } | { ok: false; message: string };
+/** 2026-11-27-1050: the prompt stack goes with a list write: the groups the written list no longer matches are dropped (lean: the text as it is). */
+const carried = (w: Written, family: Family): Written => (w.ok === false ? w : { ok: true, text: listModel.groups.carry(w.text, family) });
 /** The note with `params` as its json and every derived part made again, by the SAME writers the controls use (the hand-edit refusal lifted: the Description is the input). */
 export function writeFromParams(text: string, name: string, family: Family, params: GrammarParams): Written {
-  return writeListNote(text, name, family, { params, list: linesOfParams(params, family) });     // 2026-11-19-0970: the Description of an arrangement and a composition is the list of canonical sentences, whoever writes it; 2026-11-19-0980: a phrase's too
+  return carried(writeListNote(text, name, family, { params, list: linesOfParams(params, family) }), family);     // 2026-11-19-0970: the Description of an arrangement and a composition is the list of canonical sentences, whoever writes it; 2026-11-19-0980: a phrase's too
 }
 
 /** "Update from Description": the new text, or why not. Decided on the text it is GIVEN (inside the atomic write), against the sentence that was planned: a Description that changed since is not written (the newer edit is evaluated by its own turn). */
@@ -108,7 +111,7 @@ export function applyDescriptionText(text: string, name: string, family: Family,
   if (st.list !== undefined) {                                                  // 2026-11-19-0970: the whole list is written in ONE go; `limit` (the loop check cut the list there) lines at most are applied, every line is kept
     const rp = replayGrammar(st.list, family, { vault, ...(limit !== undefined ? { maxApplied: limit } : {}) });
     if (rp.params === null) return { ok: false, message: 'There is nothing to update: no line of the Description can be read.', stale: false };
-    const w = writeListNote(text, name, family, rp);
+    const w = carried(writeListNote(text, name, family, rp), family);
     return w.ok === false ? { ok: false, message: w.message, stale: false } : { ok: true, text: w.text, change: st.change };
   }
   const w = writeFromParams(text, name, family, st.params);
@@ -118,7 +121,7 @@ export function applyDescriptionText(text: string, name: string, family: Family,
 /**
 /**
 /** A CUSTOM note's text with its Python as it stands taken as the note: its `python_hash` is the Python's, `links:` follows the Python's calls (2026-11-03-1160 (d)). The one writer of a custom note: a hand edit of an existing one, and Detach. */
-export const customNoteText = (text: string, name: string): string => withLinks(asCustom(text), customCallNotes(name, pythonTextOf(text) ?? ''));
+export const customNoteText = (text: string, name: string): string => withLinks(asCustom(listModel.groups.drop(text)), customCallNotes(name, pythonTextOf(text) ?? ''));          // 2026-11-27-1050: a custom note has no prompt stack
 export const customFollowedLine = (name: string): string => `[forge-custom] ${name}: the links and the stamp follow its edited Python`;
 
 /** 2026-11-26-1047 (DETACH, one way): what the person is asked before the note becomes custom Python. */

@@ -19,7 +19,7 @@ Now fold that line onto a clock face. C sits at twelve o'clock, G at one, D at t
 
 ## Build the outer ring
 
-You know the rule now, so build the ring yourself. Start from C and tap each key a fifth apart, going clockwise.
+You know the rule now, so build the ring yourself. Start from C. From the key you just tapped, count seven half steps up and tap that key. Keep going clockwise until you're back home.
 
 ```html-embed
 circle_of_fifths/resources/html/circle_exercise_outer_ring.html

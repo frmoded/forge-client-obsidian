@@ -33,6 +33,11 @@ import { LIST_MODEL_SENTINEL_FAILED_PROMPT_STORE } from './failed-prompt-store.t
 import { LIST_MODEL_SENTINEL_FAILED_PROMPT_TAB_DOM } from './failed-prompt-tab-dom.ts';
 import { LIST_MODEL_SENTINEL_FAILED_PROMPT_SETUP_CORE, createReview, createTracker } from './failed-prompt-setup-core.ts';
 import { LIST_MODEL_SENTINEL_SERVICE_LINES_CORE, LINES_SERVICE_VERSION, askLinesBar, askLinesNote, linesRequestFields, readLinesAnswer } from './service-lines-core.ts';
+import { LIST_MODEL_SENTINEL_GROUP_CORE } from './group-core.ts';
+import { LIST_MODEL_SENTINEL_GROUP_NOTE_CORE, carryGroups, dropGroups, writeNoteGroups } from './group-note-core.ts';
+import { LIST_MODEL_SENTINEL_GROUP_CONTROLLER, createGroups, popCommand } from './group-controller.ts';
+import { LIST_MODEL_SENTINEL_GROUP_PROMPTS_DOM } from './group-prompts-dom.ts';
+import { LIST_MODEL_SENTINEL_BAR_ORDER_CORE } from './bar-order-core.ts';
 
 export const listModel: ListModel = {
   present: true,
@@ -41,6 +46,7 @@ export const listModel: ListModel = {
     LIST_MODEL_SENTINEL_BAR_LIST_CONTROLLER, LIST_MODEL_SENTINEL_BAR_LIST_CORE, LIST_MODEL_SENTINEL_BAR_GRAMMAR_CORE, LIST_MODEL_SENTINEL_BAR_BOX_HOST_CORE, LIST_MODEL_SENTINEL_BAR_LIST_NOTE_CORE,
     LIST_MODEL_SENTINEL_DUPLICATE_SENTENCE_CORE, LIST_MODEL_SENTINEL_DUPLICATE_NOTE_CORE, LIST_MODEL_SENTINEL_DUPLICATE_UNDO_CORE,
     LIST_MODEL_SENTINEL_PHRASE_STEPS_LINEAGE_CORE, LIST_MODEL_SENTINEL_DID_YOU_MEAN_CORE, LIST_MODEL_SENTINEL_TYPED_STEP_CORE, LIST_MODEL_SENTINEL_SERVICE_LINES_CORE, LIST_MODEL_SENTINEL_UNDO_TRACE_CORE, LIST_MODEL_SENTINEL_RENAME_FOLLOW_CORE, LIST_MODEL_SENTINEL_DIALOG_FOLLOW_CORE, LIST_MODEL_SENTINEL_WAITING_LINE_CORE, LIST_MODEL_SENTINEL_SCRIPT_EDIT_CORE, LIST_MODEL_SENTINEL_RENAME_DESCRIPTION_CORE, LIST_MODEL_SENTINEL_FAILED_PROMPT_CORE, LIST_MODEL_SENTINEL_FAILED_PROMPT_STORE, LIST_MODEL_SENTINEL_FAILED_PROMPT_TAB_DOM, LIST_MODEL_SENTINEL_FAILED_PROMPT_SETUP_CORE,
+    LIST_MODEL_SENTINEL_GROUP_CORE, LIST_MODEL_SENTINEL_GROUP_NOTE_CORE, LIST_MODEL_SENTINEL_GROUP_CONTROLLER, LIST_MODEL_SENTINEL_GROUP_PROMPTS_DOM, LIST_MODEL_SENTINEL_BAR_ORDER_CORE,          // 2026-11-27-1050 (the prompt stack)
   ],
   createBarList: createBarListWithMelody,          // 2026-11-23-1030: the rhythm bar's controller, untouched, and the melody bar's, each call sent to the kind the note is
   createBarBoxHost,
@@ -54,6 +60,7 @@ export const listModel: ListModel = {
   renamed: { follow: followRenamedDescription },          // 2026-11-20-1005 (F9)
   waiting: { line: waitingLine, words: waitingWords, translate: translateRequest, kept: keptMessage, is: isWaitingLine, already: alreadyWaiting, blocked: blockedMessage, tail: blockedTail },          // 2026-11-21-1015 (Part C)
   script: { on: true, forge: forgeText },          // 2026-11-23-1023: the Forge button
+  groups: { carry: carryGroups, drop: dropGroups, write: writeNoteGroups, create: createGroups, command: popCommand },          // 2026-11-27-1050 (the prompt stack)
   dialogs: { renamed: dialogRenamed, deleted: dialogDeleted, ctime: noteCtimeOf, fresh: dialogFresh, stamp: dialogStamp, prune: dialogPrune },          // 2026-11-21-1011
   review: { create: createReview, track: createTracker },          // 2026-11-20-1004
   service: { fields: linesRequestFields, read: readLinesAnswer, version: LINES_SERVICE_VERSION, ask: askLinesNote, askBar: askLinesBar },          // 2026-11-20-1003

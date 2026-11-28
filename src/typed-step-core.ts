@@ -3,12 +3,16 @@
 // Any other text that opens a sentence with the word is refused in plain words (neither the grammar nor the service knows it).
 /** 2026-11-19-0997: this core is the LIST MODEL's (music-composer code, reached only through src/list-model-selected.ts); the music edition's list-model.full.ts lists this string in `cores`, scripts/build-main.test.mjs greps the lean bundle for it. */
 export const LIST_MODEL_SENTINEL_TYPED_STEP_CORE = 'forge-list-model-core:typed-step-core';
+import type { Proposal } from './composer-core.ts';
+type Preview = { ok: true; proposal: Proposal } | { ok: false; message: string };
 
 /** The undo stack keeps 100 entries (sentence-list-core UNDO_CAP): more than that cannot be asked for. */
 export const MAX_STEPS = 100;
 export type StepRead =
   | { kind: 'none' }
   | { kind: 'undo' | 'redo'; count: number }
+  /** 2026-11-27-1050 (the prompt stack): `Pop` (`to` null) or `Pop to N` (`to` = N). */
+  | { kind: 'pop'; to: number | null }
   /** `step: true` marks a refusal of THIS reader (the composers of an arrangement, a composition and a bar refuse it too; a refused Duplicate they ignore, as ever). */
   | { kind: 'refused'; message: string; step: true };
 
@@ -17,18 +21,30 @@ const NUMBER_WORDS = ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'ei
 export const stepForms = (word: 'Undo' | 'Redo'): string => `${word}, ${word} that, ${word} 3 or ${word} three`;
 const ALONE = 'Undo and Redo have to be on their own: empty the box, then write Undo (or Redo) by itself.';
 const refuse = (message: string): StepRead => ({ kind: 'refused', message, step: true });
+/** 2026-11-27-1050: the number a figure or a word up to ten says; NaN for anything else. */
+const numberOf = (word: string): number => (/^\d+$/.test(word) ? parseInt(word, 10) : NUMBER_WORDS.indexOf(word as (typeof NUMBER_WORDS)[number]) + 1 || NaN);
+/** `Pop` and `Pop to N`, exactly (any case, a closing mark or none). Any other sentence that merely opens with the word ("pop the snare out", "Pop to the chorus") is a sentence like every other. */
+const POP = /^pop(?:\s+to\s+([a-z0-9]+))?\s*[.!?]*$/i;
+const ALONE_POP = 'Pop has to be on its own: empty the box, then write Pop. or Pop to N. by itself.';
+function popIn(sentence: string): { to: number | null } | null {
+  const m = POP.exec(sentence);
+  if (m === null) return null;
+  const to = m[1] === undefined ? null : numberOf(m[1].toLowerCase());
+  return to !== null && Number.isNaN(to) ? null : { to };
+}
 
 /** What a typed text says: "none" = not a step sentence (the grammar's, as ever); a step with how many; or a refusal in words. */
 export function readStepText(text: string): StepRead {
   const t = String(text ?? '').trim();
   const sentences = t.split(/(?<=[.!?])\s+|\n+/).map((x) => x.trim()).filter((x) => x !== '');
+  if (sentences.some((x) => popIn(x) !== null)) return sentences.length > 1 ? refuse(ALONE_POP) : { kind: 'pop', to: popIn(sentences[0])!.to };
   if (!sentences.some((x) => /^(?:undo|redo)(?![A-Za-z0-9_])/i.test(x))) return { kind: 'none' };
   if (sentences.length > 1) return refuse(ALONE);
   const m = /^(undo|redo)\s*(.*?)\s*[.!?]*$/is.exec(t);
   if (m === null) return refuse(ALONE);
   const kind = m[1].toLowerCase() as 'undo' | 'redo', word = kind === 'undo' ? 'Undo' : 'Redo', rest = m[2].toLowerCase();
   if (rest === '' || rest === 'that' || rest === 'it' || /^(?:the )?last sentence$/.test(rest)) return { kind, count: 1 };
-  const n = /^\d+$/.test(rest) ? parseInt(rest, 10) : NUMBER_WORDS.indexOf(rest as (typeof NUMBER_WORDS)[number]) + 1;
+  const n = numberOf(rest);
   if (!(n >= 1)) return refuse(`${word} takes only a number: write ${stepForms(word)}.`);
   if (n > MAX_STEPS) return refuse(`${word} takes up to ${MAX_STEPS} at a time.`);
   return { kind, count: n };
@@ -44,13 +60,18 @@ export interface StepPorts {
   say(path: string, kind: 'notice' | 'refused', message: string): void;
   note(path: string, message: string | null): void;
   pb(line: string): void;
+  /** 2026-11-27-1050: the prompt stack's pop (group-controller.ts): the first Enter's answer, and the apply. */
+  pop: {
+    preview(path: string, to: number | null): Preview | Promise<Preview>;
+    apply(path: string, to: number | null): Promise<{ ok: boolean; disk?: string; message?: string }>;
+  };
 }
 const refused = (path: string, message: string, p: StepPorts): { ok: false; message: string } => { p.pb(`step refused: ${message}`); p.say(path, 'refused', message); p.note(path, `Refused: ${message}`); return { ok: false, message: `Refused: ${message}` }; };
 
 /** The first Enter on a text: null = not a step sentence (the caller goes on as ever); a refusal in words (never sent to the grammar or the service); or the proposal, applied at once whatever the setting says (a typed Undo IS the take-back, and Redo undoes it). */
-export function previewTyped(path: string, text: string, p: StepPorts): { ok: false; message: string } | { ok: true; proposal: { description: string; via: 'grammar'; now: true } } | null {
+export function previewTyped(path: string, text: string, p: StepPorts): { ok: false; message: string } | { ok: true; proposal: { description: string; via: 'grammar'; now: true } } | Preview | Promise<Preview> | null {
   const st = readStepText(text);
-  return st.kind === 'none' ? null : st.kind === 'refused' ? refused(path, st.message, p) : { ok: true, proposal: { description: st.kind === 'undo' ? 'Undo' : 'Redo', via: 'grammar', now: true } };
+  return st.kind === 'pop' ? p.pop.preview(path, st.to) : st.kind === 'none' ? null : st.kind === 'refused' ? refused(path, st.message, p) : { ok: true, proposal: { description: st.kind === 'undo' ? 'Undo' : 'Redo', via: 'grammar', now: true } };
 }
 /** The apply of such a text (`said`: the typed text is in the dialog already): Undo (or Redo) up to `count` applies, one after the other, with the stack's own words for each; several are summed up in one line; none is said in words. A step that fails ends it (its words were said).
  *  null = not a step sentence (synchronously: no tick is spent on an ordinary sentence). */
@@ -61,6 +82,7 @@ export function applyTyped(path: string, text: string, said: boolean, p: StepPor
 async function runTyped(path: string, text: string, said: boolean, st: Exclude<StepRead, { kind: 'none' }>, p: StepPorts): Promise<{ ok: boolean; disk?: string; message?: string }> {
   if (!said) p.you(path, text);
   if (st.kind === 'refused') return refused(path, st.message, p);
+  if (st.kind === 'pop') return p.pop.apply(path, st.to);
   const which = st.kind; let done = 0;
   while (done < st.count && p.canStep(path, which)) {
     const r = await p.step(path, which);

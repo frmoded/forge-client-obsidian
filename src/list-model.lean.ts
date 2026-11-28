@@ -4,6 +4,7 @@
 import type { ListModel } from './music-edition.ts';
 
 const NOT_IN_LEAN = 'The list model is part of the music edition of the plugin.';
+const NO_POP = { ok: false as const, message: NOT_IN_LEAN };
 
 export const listModel: ListModel = {
   present: false,
@@ -43,6 +44,8 @@ export const listModel: ListModel = {
   renamed: { follow: async () => {} },          // 2026-11-20-1005: lean has none of these notes
   waiting: { line: () => null, words: () => null, translate: () => null, kept: () => '', is: () => false, already: () => '', blocked: () => '', tail: () => '' },          // 2026-11-21-1015: lean makes and reads no waiting line
   script: { on: false, forge: () => ({ ok: false, message: '' }) },          // 2026-11-23-1023: lean has no Forge button
+  groups: { carry: (text) => text, drop: (text) => text, write: (_cur, text) => ({ text }), command() {},          // 2026-11-27-1050: lean mounts no composer: nothing is pushed or popped, a `groups:` key is left as it is
+    create: () => ({ preview: async () => NO_POP, apply: async () => NO_POP, discard() {}, bars: () => ({}), draw() {} }) },
   dialogs: { renamed() {}, deleted() {}, ctime: () => undefined, fresh: () => true, stamp() {}, prune() {} },          // 2026-11-21-1011: lean keeps no per-note history to move, drop or date
   review: { create: () => null, track: () => null },          // 2026-11-20-1004: lean keeps nothing and has no review tab
   service: { fields: () => null, read: async () => ({ kind: 'legacy' }), version: '', ask: async (io) => io.legacy(await io.askPlan(io.payload)), askBar: async () => null },          // 2026-11-20-1003: lean adds nothing to a request and reads every answer as it always did

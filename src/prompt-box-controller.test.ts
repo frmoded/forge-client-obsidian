@@ -13,6 +13,7 @@ import { asCustom, isCustomNote } from './phrase-notes-core.ts';
 import { dialogEntries, dialogLast } from './test-support/dialog-view.ts';
 import { asListNote } from './test-support/phrase-list-fixtures.ts';
 import { extractDescription } from './v2-note-core.ts';
+import { dropGroups, readGroups } from './group-note-core.ts';
 
 const win: any = new Window({ url: 'http://localhost/' });
 const PATH = 'phrases/phrase_001.md';
@@ -90,7 +91,8 @@ test('typing a new sentence and applying (Enter) updates the note by ONE write t
   assert.ok(el.querySelector('.forge-prompt-box.is-previewing'));
   await r.enter(el);
   assert.deepEqual(r.writes, [PATH], 'one write');
-  assert.equal(r.store.get(PATH), asListNote(noteContentFor('phrase_001', { ...MIX, weight: 0.35 }), 'phrase_001')); // 2026-11-19-0980 (deliberate): a phrase's Description is a list; the composer shows nothing of it: the note a write leaves is the list note
+  assert.equal(readGroups(r.store.get(PATH)!).groups.length, 1);          // 2026-11-27-1050 (deliberate): the push is a group in front matter; everything else is the note the controls would have made
+  assert.equal(dropGroups(r.store.get(PATH)!), asListNote(noteContentFor('phrase_001', { ...MIX, weight: 0.35 }), 'phrase_001')); // 2026-11-19-0980 (deliberate): a phrase's Description is a list; the composer shows nothing of it: the note a write leaves is the list note
   assert.equal(r.field(el).value, '', 'the composer is empty after an apply (it showed the canonical sentence)');
   assert.equal(el.querySelector('.forge-prompt-box.is-edited'), null);
   assert.deepEqual(r.lines.filter((l: string) => !l.startsWith('[forge-promptbox]')), ['[forge-description] applied phrase_001 (weight 0.5 -> 0.35)']);
@@ -114,7 +116,7 @@ test('a sentence that does not parse writes NOTHING: the strip at the top says t
   assert.deepEqual(r.asked, []);
   r.type(el, VOTE_35); await r.send(el);
   const sansWaiting = (s: string) => s.replace(/^\d+\. Waiting:.*\n/m, '').replace(/_hash: [0-9a-f]{64}/g, '_hash: H'); // 2026-11-21-1015 (deliberate): the failed sentence left a waiting line; it and the hashes over it are not what this pin is about
-  assert.equal(sansWaiting(r.store.get(PATH)!), sansWaiting(asListNote(noteContentFor('phrase_001', { ...MIX, weight: 0.35 }), 'phrase_001')), 'the fixed sentence applies'); // 2026-11-19-0980 (deliberate): a phrase's Description is a list; the composer shows nothing of it
+  assert.equal(sansWaiting(dropGroups(r.store.get(PATH)!)), sansWaiting(asListNote(noteContentFor('phrase_001', { ...MIX, weight: 0.35 }), 'phrase_001')), 'the fixed sentence applies'); // 2026-11-27-1050 (deliberate): without the pushes' groups // 2026-11-19-0980 (deliberate): a phrase's Description is a list; the composer shows nothing of it
   assert.equal(r.strip(el), '', 'and the strip clears');
 });
 

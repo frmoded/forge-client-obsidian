@@ -696,6 +696,7 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
           return true;
         },
       });
+      listModel.groups.command(plugin, app, descriptions);          // 2026-11-27-1050: `Pop the last prompt` (music edition; lean: no command)
       // 2026-11-12-1203: the docked prompt box (the Description of the note, at the bottom of its tab): a command puts the cursor in it, so it can be reached without the mouse
       plugin.addCommand({
         id: 'focus-prompt-box',

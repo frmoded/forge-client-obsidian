@@ -14,6 +14,7 @@ import { computeArrangementScoreViaEngine, computeCompositionScoreViaEngine, com
 import { PHRASE_VIEW_TYPE, type PhraseParams, phraseWriteRefusal, isBarPath, mixTraceEngine, mixTraceRead, mixTraceWritten, morphTraceEngine, morphTraceWritten } from './phrase-core.ts';
 import { handEditRefused } from './hand-edit-refusal-core.ts';
 import { writePhraseStrip } from './sentence-list-note-core.ts';
+import { listModel } from './list-model-selected.ts';
 import { mountPhrase, type PhraseHandle } from './phrase-dom.ts';
 import { phraseTabTitle } from './phrase-tab-title-core.ts';
 import type { PinnedNote } from './linked-panes-core.ts';
@@ -121,7 +122,7 @@ export class PhraseView extends EditableFileView {
           await this.app.vault.process(file, (text) => {
             const w = writePhraseStrip(text, file.basename, params, this.vaultNames());       // 2026-10-26-1260: the derived description, links and sections follow the json; 2026-11-19-0980: the Description is the LIST, edited in the smallest way that says these params (a slider writes or replaces a modifier line or the head)
             if (w.ok === false) { refusal = w.message; return text; }
-            return w.text;
+            return listModel.groups.carry(w.text, 'phrase');          // 2026-11-27-1050: the prompt stack goes with the list
           });
         } catch (e) {
           console.error('PhraseView: could not write the phrase', e);

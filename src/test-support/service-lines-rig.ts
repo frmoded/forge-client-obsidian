@@ -19,7 +19,7 @@ export const OWN_KEY = 'sk-ant-OWNKEY-0123456789abcdef0123456789abcdef';
 
 export type Req = Record<string, unknown>;
 export type Svc = (req: Req) => { status: number; json: unknown } | Promise<{ status: number; json: unknown }>;
-export function rig(opts: { path?: string; note?: string; service: Svc; drawn?: number; configured?: boolean; names?: Array<string | null> }) {          // 2026-11-24-1033: `names` = the note name the Score gives each drawn bar (the phrase tab paints it on the measure); null = that bar has none; absent = the Score gives none (as before)
+export function rig(opts: { path?: string; note?: string; service: Svc; drawn?: number; configured?: boolean; names?: Array<string | null>; /** 2026-11-27-1050: `false` = the setting `Preview before applying` */ autoApply?: boolean }) {          // 2026-11-24-1033: `names` = the note name the Score gives each drawn bar (the phrase tab paints it on the measure); null = that bar has none; absent = the Score gives none (as before)
   const path = opts.path ?? PH;
   const store = new Map<string, string>();
   for (const b of PHRASE_VAULT.bars) store.set(`bars/${b}.md`, PLAYGROUND_BARS[b] ?? PLAYGROUND_BARS['bar_001']);
@@ -37,7 +37,7 @@ export function rig(opts: { path?: string; note?: string; service: Svc; drawn?: 
     }, {
       askPlan: async (payload: unknown) => { requests.push(JSON.parse(JSON.stringify(payload))); return opts.service(payload as Req); },
       planConfigured: () => opts.configured !== false,
-      composerAutoApply: () => true,
+      composerAutoApply: () => opts.autoApply !== false,
       ownKey: () => OWN_KEY,
     } as never),
     drawSeed: () => 7,
@@ -55,7 +55,7 @@ export function rig(opts: { path?: string; note?: string; service: Svc; drawn?: 
   const texts = () => dialogEntries(el).map((e) => e.text);
   const kinds = () => dialogEntries(el).map((e) => e.kind);
   const suggestion = () => [...el.querySelectorAll('.forge-chat-suggestion-description')].pop()?.textContent ?? '';
-  return { ctl, el, store, requests, traces, type, enter, press, list, texts, kinds, suggestion, ready: async () => { await ctl.inspect(path); await flush(); }, writes: () => [...store.entries()].filter(([k]) => k === path).length,
+  return { ctl, el, store, ports, panes, requests, traces, type, enter, press, list, texts, kinds, suggestion, ready: async () => { await ctl.inspect(path); await flush(); }, writes: () => [...store.entries()].filter(([k]) => k === path).length,          // 2026-11-27-1050 (mutation pass): `ports` and `panes`, for a test that changes the vault mid-write or opens a second note
     say: async (s: string) => { type(s); await enter(); } };
 }
 export type Rig = ReturnType<typeof rig>;

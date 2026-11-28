@@ -3,7 +3,7 @@ import { Window } from 'happy-dom';
 
 import { mountPhrase, type PhraseMountPorts } from '../phrase-dom.ts';
 import { registerBarSelectionHost } from '../bar-selection-bus.ts';
-import { createDescriptionController } from '../description-apply.ts';
+import { createDescriptionController, type DescriptionPorts } from '../description-apply.ts';
 import { descriptionPortsFor, type DescriptionHooks } from '../description-wiring.ts';
 import { installHostClock } from './host-workspace.ts';
 import { noteFor, rigDeps, stubCompute } from './phrase-steps-rig.ts';
@@ -11,7 +11,7 @@ import { noteFor, rigDeps, stubCompute } from './phrase-steps-rig.ts';
 const win: any = new Window({ url: 'http://localhost/' });
 
 /** 2026-11-20-1002: `hooks` are the plugin's hooks of the controller (the one-Enter test hands it `composerAutoApply`); `files` is the vault of the rig (the notes as they are on disk). */
-export async function rig(list: string[], hooks: DescriptionHooks = {}) {
+export async function rig(list: string[], hooks: DescriptionHooks = {}, over: Partial<DescriptionPorts> = {}) {          // 2026-11-27-1050: `over` replaces a port the plugin's mapping does not take from the hooks (the clock)
   const clock = installHostClock(win);
   const notePath = 'phrases/phrase_020.md';
   const parent = win.document.createElement('div'); win.document.body.appendChild(parent);
@@ -20,12 +20,12 @@ export async function rig(list: string[], hooks: DescriptionHooks = {}) {
   const files = new Map<string, string>([[notePath, text]]);
   const readNote = async (p: string): Promise<string> => { const t = files.get(p); return t !== undefined ? t : base.readNote(p); };
   const panes: Array<{ path: string; contentEl: HTMLElement; tab?: boolean }> = []; const timers: Array<() => void> = []; const pins: unknown[] = [];
-  const ctl = createDescriptionController(descriptionPortsFor({
+  const ctl = createDescriptionController({ ...descriptionPortsFor({
     read: readNote, process: async (p, fn) => { const cur = files.get(p)!; const next = fn(cur); if (next !== cur) files.set(p, next); },
     basenamesIn: (folder) => (folder === 'bars' ? ['bar_005', 'bar_006', 'bar_009'] : folder === 'phrases' ? ['phrase_014'] : []),
     panes: () => panes, setTimer: (fn) => { timers.push(fn); return timers.length; }, clearTimer: () => {}, trace: () => {}, warn: () => {},
     create: async () => {}, exists: () => true, isAlreadyExists: () => false,
-  }, hooks));
+  }, hooks), ...over });
   const off = registerBarSelectionHost({ appendLine: (p, s) => ctl.appendLine(p, s), makePhrase: async () => ({ ok: true as const, path: 'phrases/phrase_099.md' }), duplicateArmed: (p) => ctl.duplicateArmed(p), duplicateClick: (p, id, bar) => ctl.duplicateClick(p, id, bar) });
   const ports: PhraseMountPorts = {
     path: notePath, title: 'phrase_020', plan: 'score', readNote,

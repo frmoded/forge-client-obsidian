@@ -20,6 +20,8 @@ export type ActionRead =
   | { kind: 'duplicate'; target: string }
   /** 2026-11-20-1002: a typed Undo or Redo (typed-step-core.ts): `count` steps. Read by the same reader, for EVERY composer (the controller routes it; Duplicate stays a phrase's). */
   | { kind: 'undo' | 'redo'; count: number }
+  /** 2026-11-27-1050: a typed `Pop.` (`to` null) or `Pop to N.` (typed-step-core.ts): the prompt stack's, in every composer. */
+  | { kind: 'pop'; to: number | null }
   /** `step: true` = the refusal is the typed Undo/Redo reader's (every composer says it); a refused Duplicate has no mark (only a phrase's composer says it). */
   | { kind: 'refused'; message: string; step?: true };
 
